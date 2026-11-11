@@ -1,0 +1,17 @@
+# build output
+/target
+
+# game data and anything derived from it - never committed
+/externals
+/data
+/out
+*.nds
+*.srl
+*.glb
+*.gltf
+
+# editor / OS noise
+.idea/
+.vscode/
+*.swp
+Thumbs.db
