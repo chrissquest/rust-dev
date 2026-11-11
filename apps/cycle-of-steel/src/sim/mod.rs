@@ -82,7 +82,7 @@ mod tests {
 
         let left_edge = world.player.position.x - player::HALF_SIZE.x;
         // The test room's outer wall is one cell thick.
-        assert!((left_edge - room::CELL).abs() < 1e-3, "left edge at {left_edge}");
+        assert!((left_edge - world.room.cell).abs() < 1e-3, "left edge at {left_edge}");
         assert!(!world.room.box_hits_solid(world.player.position, player::HALF_SIZE));
     }
 }

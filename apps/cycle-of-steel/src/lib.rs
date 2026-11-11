@@ -6,7 +6,7 @@
 //!   about winit, wgpu or wall-clock time, so tests can step it directly.
 //! - `input` turns keys and gamepads into the `sim::Input` a step consumes.
 //! - `view` turns world state into sprites and owns the camera.
-//! - `assets` finds and loads the files under `assets/`.
+//! - `assets` finds and reads the files under `assets/`; `data` is their formats.
 //! - `app` is the window, the frame loop and the screenshot mode.
 //!
 //! On desktop `main.rs` starts the game. On Android there is no `main`: the system
@@ -14,6 +14,7 @@
 
 pub mod app;
 pub mod assets;
+pub mod data;
 pub mod input;
 pub mod sim;
 pub mod view;
@@ -39,6 +40,7 @@ fn android_main(android_app: winit::platform::android::activity::AndroidApp) {
             app::run(
                 app::Launch {
                     assets: assets::AssetSource::Apk(android_app),
+                    room: app::DEFAULT_ROOM.to_string(),
                     backends: wgpu::Backends::all(),
                     frames: None,
                 },

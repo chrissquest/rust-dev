@@ -25,6 +25,7 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::assets::AssetSource;
+use crate::data::RoomFile;
 use crate::input::{Action, Bindings, Gamepads, InputState, TouchStick};
 use crate::sim::room::Room;
 use crate::sim::{self, World};
@@ -35,9 +36,14 @@ use crate::view::View;
 /// of steps to catch up.
 const MAX_FRAME_SECONDS: f32 = 0.25;
 
+/// The room the game starts in when none is asked for.
+pub const DEFAULT_ROOM: &str = "hub_room";
+
 /// How to start the game.
 pub struct Launch {
     pub assets: AssetSource,
+    /// The room to start in: a file name under `rooms/`, without `.json`.
+    pub room: String,
     pub backends: wgpu::Backends,
     /// Draw this many frames, then exit. A smoke test.
     pub frames: Option<u32>,
@@ -49,6 +55,7 @@ pub struct Launch {
 /// passes to `android_main`; on desktop it is a plain `EventLoop::new()`.
 pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
+    let room = Room::from_file(RoomFile::load(&launch.assets, &launch.room)?);
 
     let mut app = App {
         assets: launch.assets,
@@ -58,7 +65,7 @@ pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
         input: InputState::default(),
         gamepads: Gamepads::new(),
         touch_stick: TouchStick::default(),
-        world: World::new(Room::test_room()),
+        world: World::new(room),
         accumulator: 0.0,
         last_frame: None,
         graphics: None,
@@ -117,7 +124,7 @@ impl App {
 
         let mut renderer = Renderer2d::new(surface.device(), surface.queue(), surface.format());
         let mut view = View::new(&mut renderer, &self.assets)?;
-        view.set_room(&mut renderer, &self.world.room);
+        view.set_room(&mut renderer, &self.world.room)?;
 
         Ok(Graphics {
             window,
@@ -286,6 +293,8 @@ impl ApplicationHandler for App {
 pub struct Screenshot {
     pub path: PathBuf,
     pub assets: AssetSource,
+    /// The room to draw: a file name under `rooms/`, without `.json`.
+    pub room: String,
     pub backends: wgpu::Backends,
     pub width: u32,
     pub height: u32,
@@ -297,6 +306,8 @@ pub struct Screenshot {
     /// where it was dragged to, in pixels from the top-left. Drives the on-screen
     /// stick exactly as a real touch would.
     pub touch: Option<(Vec2, Vec2)>,
+    /// Frame the whole room instead of following the player.
+    pub whole_room: bool,
 }
 
 /// Runs the game for a while with no window, draws one frame off-screen and saves
@@ -314,7 +325,7 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
     input.set_touch_movement(touch_stick.movement(screen));
     let sim_input = input.sim_input();
 
-    let mut world = World::new(Room::test_room());
+    let mut world = World::new(Room::from_file(RoomFile::load(&options.assets, &options.room)?));
     for _ in 0..options.ticks {
         world.step(&sim_input);
     }
@@ -322,7 +333,8 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
     let (device, queue) = pollster::block_on(render2d::headless_device(options.backends))?;
     let mut renderer = Renderer2d::new(&device, &queue, render2d::OFFSCREEN_FORMAT);
     let mut view = View::new(&mut renderer, &options.assets)?;
-    view.set_room(&mut renderer, &world.room);
+    view.set_room(&mut renderer, &world.room)?;
+    view.set_overview(options.whole_room);
 
     let offscreen = Offscreen::new(&device, options.width, options.height);
     let mut encoder =

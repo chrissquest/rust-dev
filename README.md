@@ -13,6 +13,7 @@ All of them share one Cargo workspace, one lockfile and one `target/`.
 
 | App | Package | What it is |
 | --- | --- | --- |
+| [`apps/cos-convert`](apps/cos-convert) | `cos-convert` | One-off converter from the Cycle of Steel Unity project to the port's asset files |
 | [`apps/cycle-of-steel`](apps/cycle-of-steel) | `cycle-of-steel` | Cycle of Steel, a top-down roguelike shooter, being ported from Unity onto `crystal-engine` |
 | [`apps/ff-export`](apps/ff-export) | `ff-export` | Fossil Fighters (NDS) -> glTF/GLB asset exporter (CLI and library) |
 | [`apps/ff-export-gui`](apps/ff-export-gui) | `ff-export-gui` | Slint window for `ff-export`: pick a ROM, export everything |

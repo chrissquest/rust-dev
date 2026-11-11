@@ -6,16 +6,20 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Step 1 of the port, the 2D foundation, is in: a room drawn from tiles, the player
-walking in it with their run animations, collision against walls, a camera that
-follows inside the room, and keyboard and gamepad input. It also builds for
-Android, with an on-screen stick for movement.
+Steps 1 and 2 of the port are in:
 
-The room is a stand-in built in code (`sim::room::Room::test_room`) from the real
-tileset. Real rooms, guns, enemies, the dungeon, lighting, audio and menus come in
-later steps.
+- **Foundation.** A fixed 60 Hz simulation, the player walking with their run
+  animations, collision, a camera that follows inside the room, keyboard and
+  gamepad input, and an Android build with an on-screen stick.
+- **Real rooms.** All 34 rooms of the Unity project, converted by
+  [`cos-convert`](../cos-convert) into `assets/rooms`, load and draw: tile layers,
+  decorations, walls and ledges. The game starts in the hub.
 
-![The stand-in room with the player in the middle](docs/step1-room.png)
+The rooms are not lit yet, so they look flatter and brighter than in Unity. Enemies,
+chests, lights and triggers are in the room files but not used yet. Guns, enemies,
+the dungeon, lighting, audio and menus come in later steps.
+
+![The hub, drawn from its converted room file](docs/step2-hub.png)
 
 ## Run
 
@@ -33,7 +37,11 @@ off-screen and saves it. It needs a GPU or a software rasteriser but no display:
 
 ```powershell
 cargo run -p cycle-of-steel -- --screenshot room.png --ticks 120 --move 1,0
+cargo run -p cycle-of-steel -- --screenshot ns1.png --room ns1 --whole-room
 ```
+
+`--room` picks any file under `assets/rooms`; `--whole-room` frames all of it, for
+checking a room against its Unity original.
 
 On Linux, building needs libudev's headers for gamepad support
 (`apt-get install libudev-dev`).
@@ -91,12 +99,15 @@ src/
   input.rs       keys, gamepads and the touch stick -> sim::Input
   view.rs        world state -> sprites; the camera
   assets.rs      loads assets from a folder, or from inside the APK on Android
+  data.rs        the room and sprite catalogue file formats
   sim/           the game itself: no window, GPU or clock
     mod.rs       World, Input, the 60 Hz step
-    room.rs      tile layers and the solid grid
+    room.rs      a room's grid of free, ledge and wall cells
     collide.rs   moving a box through solid cells
     player.rs    movement, facing, animation
 assets/
+  rooms/         one JSON file per room (format: see apps/cos-convert/README.md)
+  sprites.json   every sprite by name: texture, rectangle, pivot
   sprites/       PNGs copied from the Unity project
 android/
   test-signing.keystore   signs test APKs; not a secret, see "Android"

@@ -1,0 +1,11 @@
+[package]
+name = "cos-convert"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "One-off converter from the Cycle of Steel Unity project to the Rust port's asset files"
+publish = false
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"

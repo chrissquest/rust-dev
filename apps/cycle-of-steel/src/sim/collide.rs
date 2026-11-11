@@ -8,7 +8,7 @@
 
 use crystal_engine::glam::Vec2;
 
-use super::room::{CELL, Room, cell_range};
+use super::room::Room;
 
 /// The result of [`move_box`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -21,7 +21,10 @@ pub struct Moved {
 
 /// Moves a box (centre `position`, half-size `half`) by `delta`, stopping at walls.
 pub fn move_box(room: &Room, position: Vec2, half: Vec2, delta: Vec2) -> Moved {
-    debug_assert!(delta.x.abs() <= CELL && delta.y.abs() <= CELL, "delta {delta} exceeds one cell");
+    debug_assert!(
+        delta.x.abs() <= room.cell && delta.y.abs() <= room.cell,
+        "delta {delta} exceeds one cell"
+    );
 
     let mut position = position;
     let hit_x = move_axis(room, &mut position, half, delta.x, Axis::X);
@@ -50,20 +53,21 @@ fn move_axis(room: &Room, position: &mut Vec2, half: Vec2, amount: f32, axis: Ax
         Axis::Y => target.y += amount,
     }
 
-    let ((min_x, min_y), (max_x, max_y)) = cell_range(target, half);
+    let cell = room.cell;
+    let ((min_x, min_y), (max_x, max_y)) = room.cell_range(target, half);
     let mut hit = false;
     for y in min_y..=max_y {
         for x in min_x..=max_x {
-            if !room.is_solid(x, y) {
+            if !room.blocks_walker(x, y) {
                 continue;
             }
             hit = true;
             // Pull back to rest against the near face of this cell.
             match axis {
-                Axis::X if amount > 0.0 => target.x = target.x.min(x as f32 * CELL - half.x),
-                Axis::X => target.x = target.x.max((x + 1) as f32 * CELL + half.x),
-                Axis::Y if amount > 0.0 => target.y = target.y.min(y as f32 * CELL - half.y),
-                Axis::Y => target.y = target.y.max((y + 1) as f32 * CELL + half.y),
+                Axis::X if amount > 0.0 => target.x = target.x.min(x as f32 * cell - half.x),
+                Axis::X => target.x = target.x.max((x + 1) as f32 * cell + half.x),
+                Axis::Y if amount > 0.0 => target.y = target.y.min(y as f32 * cell - half.y),
+                Axis::Y => target.y = target.y.max((y + 1) as f32 * cell + half.y),
             }
         }
     }
@@ -75,6 +79,7 @@ fn move_axis(room: &Room, position: &mut Vec2, half: Vec2, amount: f32, axis: Ax
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sim::room::CELL;
 
     const HALF: Vec2 = Vec2::new(0.1, 0.2);
 
@@ -100,7 +105,7 @@ mod tests {
     #[test]
     fn stops_under_a_ceiling() {
         let room = Room::test_room();
-        let top_inner = super::super::room::HEIGHT - CELL;
+        let top_inner = room.size().y - CELL;
         let start = Vec2::new(8.0, top_inner - HALF.y - 0.01);
         let moved = move_box(&room, start, HALF, Vec2::new(0.0, 0.3));
         assert!(moved.hit_y);

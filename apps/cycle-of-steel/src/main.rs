@@ -17,12 +17,16 @@ USAGE:
 OPTIONS:
     --assets <folder>       use this assets folder (default: beside the executable,
                             or the COS_ASSETS environment variable)
+    --room <name>           start in this room: a file under assets/rooms, without
+                            .json (default: hub_room)
     --backend <name>        gl | vulkan | dx12 | metal | all (default: all)
     --frames <n>            draw n frames, then exit (smoke test)
     --screenshot <file.png> run without a window, save one frame, and exit
     --size <WxH>            screenshot size in pixels (default: 1280x720)
     --ticks <n>             simulation steps to run before the screenshot (default: 0)
     --move <x,y>            direction held during those steps (default: 0,0)
+    --whole-room            frame the whole room in the screenshot instead of
+                            following the player
     --touch <x0,y0,x1,y1>   a finger held during those steps: down at x0,y0 and
                             dragged to x1,y1, in pixels from the top-left
     -h, --help              show this text
@@ -50,16 +54,19 @@ fn main() -> Result<()> {
         Some(path) => app::screenshot(Screenshot {
             path,
             assets,
+            room: options.room,
             backends: options.backends,
             width: options.size.0,
             height: options.size.1,
             ticks: options.ticks,
             movement: options.movement,
             touch: options.touch,
+            whole_room: options.whole_room,
         }),
         None => app::run(
             Launch {
                 assets,
+                room: options.room,
                 backends: options.backends,
                 frames: options.frames,
             },
@@ -70,6 +77,7 @@ fn main() -> Result<()> {
 
 struct Options {
     assets: Option<PathBuf>,
+    room: String,
     backends: wgpu::Backends,
     frames: Option<u32>,
     screenshot: Option<PathBuf>,
@@ -77,11 +85,13 @@ struct Options {
     ticks: u32,
     movement: Vec2,
     touch: Option<(Vec2, Vec2)>,
+    whole_room: bool,
 }
 
 fn parse_args() -> Result<Option<Options>> {
     let mut options = Options {
         assets: None,
+        room: app::DEFAULT_ROOM.to_string(),
         backends: wgpu::Backends::all(),
         frames: None,
         screenshot: None,
@@ -89,6 +99,7 @@ fn parse_args() -> Result<Option<Options>> {
         ticks: 0,
         movement: Vec2::ZERO,
         touch: None,
+        whole_room: false,
     };
 
     let mut args = std::env::args().skip(1);
@@ -97,6 +108,7 @@ fn parse_args() -> Result<Option<Options>> {
         match argument.as_str() {
             "-h" | "--help" => return Ok(None),
             "--assets" => options.assets = Some(PathBuf::from(value("a folder")?)),
+            "--room" => options.room = value("a room name")?,
             "--backend" => options.backends = parse_backends(&value("a name")?)?,
             "--frames" => {
                 let count = parse_number::<u32>(&value("a count")?, "a frame count")?;
@@ -106,6 +118,7 @@ fn parse_args() -> Result<Option<Options>> {
             "--size" => options.size = parse_size(&value("WxH")?)?,
             "--ticks" => options.ticks = parse_number(&value("a count")?, "a step count")?,
             "--move" => options.movement = parse_direction(&value("x,y")?)?,
+            "--whole-room" => options.whole_room = true,
             "--touch" => options.touch = Some(parse_touch(&value("x0,y0,x1,y1")?)?),
             other => bail!("unknown option `{other}`\n\n{USAGE}"),
         }

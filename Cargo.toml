@@ -5,6 +5,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "apps/cos-convert",
     "apps/cycle-of-steel",
     "apps/ff-export",
     "apps/ff-export-gui",
@@ -14,6 +15,7 @@ members = [
 # A plain `cargo build` skips the Slint GUI, as building ff-export's CLI always has.
 # Build it with `cargo build -p ff-export-gui`.
 default-members = [
+    "apps/cos-convert",
     "apps/cycle-of-steel",
     "apps/ff-export",
     "apps/ff-view",

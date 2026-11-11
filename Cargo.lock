@@ -987,6 +987,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cos-convert"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+]
+
+[[package]]
 name = "countme"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1104,6 +1112,8 @@ dependencies = [
  "log",
  "png 0.17.16",
  "pollster 1.0.1",
+ "serde",
+ "serde_json",
  "wgpu",
  "winit",
 ]

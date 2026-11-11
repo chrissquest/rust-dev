@@ -1,0 +1,1021 @@
+{
+  "barriers": [
+    {
+      "center": [8.0, 8.75],
+      "name": "Barrier Top",
+      "size": [1.0, 0.5]
+    },
+    {
+      "center": [15.75, 4.75],
+      "name": "Barrier Right",
+      "size": [0.5, 1.5]
+    },
+    {
+      "center": [8.0, 0.25],
+      "name": "Barrier Bot",
+      "size": [1.0, 0.5]
+    },
+    {
+      "center": [0.25, 4.75],
+      "name": "Barrier Left",
+      "size": [0.5, 1.5]
+    }
+  ],
+  "cell": 0.5,
+  "decorations": [
+    {
+      "name": "horizontalDeadRobot",
+      "order": 0,
+      "position": [7.3503, 7.29],
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot"
+    },
+    {
+      "name": "sadHeadlessEnemy",
+      "order": 0,
+      "position": [14.438, 1.99],
+      "rotation": -11.3354,
+      "sorting_layer": "Entities",
+      "sprite": "sadHeadlessEnemy"
+    },
+    {
+      "name": "horizontalDeadRobot-export (2)",
+      "order": 0,
+      "position": [14.49, 0.97],
+      "rotation": 216.5755,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot-export"
+    },
+    {
+      "name": "horizontalDeadRobot (1)",
+      "order": 0,
+      "position": [11.12, 7.13],
+      "rotation": 54.9996,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot"
+    },
+    {
+      "name": "horizontalDeadRobot",
+      "order": 0,
+      "position": [9.63, 7.1],
+      "rotation": 108.9407,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot"
+    },
+    {
+      "name": "horizontalDeadRobot",
+      "order": 0,
+      "position": [6.0653, 0.73],
+      "rotation": 50.4361,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot"
+    },
+    {
+      "name": "horizontalDeadRobot-export",
+      "order": 0,
+      "position": [1.2148, 1.3],
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot-export"
+    },
+    {
+      "name": "horizontalDeadRobot (2)",
+      "order": 0,
+      "position": [4.07, 0.76],
+      "rotation": -94.5571,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot"
+    },
+    {
+      "name": "horizontalDeadRobot",
+      "order": 0,
+      "position": [9.5715, 0.76],
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot"
+    },
+    {
+      "name": "horizontalDeadRobot",
+      "order": 0,
+      "position": [5.53, 7.13],
+      "rotation": 134.0102,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot"
+    },
+    {
+      "name": "shotUpEnemy (1)",
+      "order": 0,
+      "position": [14.27, 2.1],
+      "sorting_layer": "Entities",
+      "sprite": "shotUpEnemy"
+    },
+    {
+      "name": "shotUpEnemy",
+      "order": 0,
+      "position": [1.67, 6.15],
+      "sorting_layer": "Entities",
+      "sprite": "shotUpEnemy"
+    },
+    {
+      "name": "horizontalDeadRobot-export (1)",
+      "order": 0,
+      "position": [14.49, 5.88],
+      "rotation": 111.4275,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot-export"
+    },
+    {
+      "name": "horizontalDeadRobot-export (3)",
+      "order": 0,
+      "position": [13.28, 2.49],
+      "rotation": 276.3404,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot-export"
+    },
+    {
+      "name": "horizontalDeadRobot-export (5)",
+      "order": 0,
+      "position": [1.91, 0.914],
+      "rotation": 57.4515,
+      "sorting_layer": "Entities",
+      "sprite": "horizontalDeadRobot-export"
+    },
+    {
+      "name": "fullyFormedOnRack (5)",
+      "order": 0,
+      "position": [11.752, 4.15],
+      "sorting_layer": "Foreground",
+      "sprite": "fullyFormedOnRack"
+    },
+    {
+      "name": "fullyFormedOnRack",
+      "order": 0,
+      "position": [5.756, 4.15],
+      "sorting_layer": "Foreground",
+      "sprite": "fullyFormedOnRack"
+    },
+    {
+      "name": "fullyFormedOnRack (4)",
+      "order": 0,
+      "position": [10.268, 4.15],
+      "sorting_layer": "Foreground",
+      "sprite": "fullyFormedOnRack"
+    },
+    {
+      "name": "fullyFormedOnRack (1)",
+      "order": 0,
+      "position": [4.26, 4.15],
+      "sorting_layer": "Foreground",
+      "sprite": "fullyFormedOnRack"
+    }
+  ],
+  "doors": {
+    "bottom": false,
+    "left": true,
+    "right": true,
+    "top": true
+  },
+  "layers": [
+    {
+      "enabled": true,
+      "name": "Background",
+      "order": 0,
+      "sorting_layer": "Background",
+      "tiles": [
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 224, 224, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 224, 224, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, 224, 224, 224, 224, 224, 224, 224, 224, 232, 232, 232, 232, 232, 232, 224, 224, 232, 232, 232, 232, 232, 232, 224, 224, 224, 224, 224, 224, 224, 224, -1],
+        [-1, 224, 224, 288, 224, 224, 224, 224, 224, 232, 232, 232, 232, 232, 232, 224, 224, 232, 232, 232, 232, 232, 232, 224, 224, 224, 224, 224, 224, 224, 224, -1],
+        [-1, 224, 280, -1, 272, 224, 224, 224, 224, 232, 232, 232, 232, 232, 232, 224, 224, 232, 232, 232, 232, 232, 232, 224, 224, 224, 224, 224, -1, 224, 224, -1],
+        [-1, 224, 280, -1, 272, 224, 224, 224, 224, 248, 248, 248, 248, 248, 248, 264, 264, 248, 248, 248, 248, 248, 248, 224, 224, 224, 224, 224, -1, 224, 224, -1],
+        [-1, 224, 224, 240, 224, 224, 224, 224, 224, 248, 248, 248, 248, 248, 248, 264, 264, 248, 248, 248, 248, 248, 248, 224, 224, 224, 224, 224, 224, 224, 224, -1],
+        [48, 224, 224, 224, 224, 224, 224, 248, 248, 248, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 248, 248, 248, 224, 224, 224, 224, 224, 224, 48],
+        [224, 224, 224, 224, 224, 224, 248, 248, 248, 248, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 248, 248, 248, 248, 224, 224, 224, 224, 224, 224],
+        [224, 224, 224, 224, 224, 224, 248, 264, 264, 264, 264, 264, 264, -1, 264, 264, 264, 264, -1, 264, 264, 264, 264, 264, 264, 248, 224, 224, 224, 224, 224, 224],
+        [-1, 232, 232, 232, 232, 232, 248, 264, 264, 264, 264, 264, 264, -1, 264, 264, 264, 264, -1, 264, 264, 264, 264, 264, 264, 248, 232, 232, 232, 232, 232, -1],
+        [-1, 232, 232, 232, 232, 232, 248, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 264, 248, 232, 232, 232, 232, 232, -1],
+        [-1, 232, 232, -1, 232, 232, 248, 256, 264, 264, 264, 264, 264, 264, -1, -1, -1, -1, 264, 264, 264, 264, 256, 256, 256, 248, 272, 280, -1, 272, 280, -1],
+        [-1, 224, 224, -1, 224, 224, 248, 224, 256, 256, 256, 256, 256, -1, -1, -1, -1, -1, -1, 256, 256, 256, 256, 256, 224, 248, 224, 224, -1, 224, 224, -1],
+        [-1, 224, 224, 224, 224, 224, 224, 232, 232, 232, 232, 232, 232, -1, -1, -1, -1, -1, -1, 232, 232, 232, 232, 232, 232, 224, 224, 224, 240, 224, 224, -1],
+        [-1, 224, 224, 224, 224, 224, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 224, 224, 224, 224, 224, -1],
+        [-1, 224, 224, 224, 224, 224, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 232, 224, 224, 224, 224, 224, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+      ]
+    },
+    {
+      "enabled": true,
+      "name": "Background2",
+      "order": 1,
+      "sorting_layer": "Background",
+      "tiles": [
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, 347, 360, 353, 352, 360, 345, -1, -1, 347, 360, 353, 352, 360, 345, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, 347, 360, 376, 376, 360, 345, -1, -1, 347, 360, 376, 376, 360, 345, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, 347, 360, 354, 355, 360, 345, -1, -1, 347, 360, 354, 355, 360, 345, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, 346, 346, 346, 346, 346, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 346, 346, 346, 346, 346, -1],
+        [-1, 360, 360, 360, 360, 360, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 360, 360, 360, 360, 360, -1],
+        [-1, 344, 344, -1, 344, 344, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 344, 344, 344, 344, 344, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, 368, 346, 346, 346, 346, 346, 346, -1, -1, -1, -1, -1, -1, 346, 346, 346, 346, 346, 346, 371, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, 347, 353, 352, 360, 360, 360, 360, 353, 352, 353, 352, 353, 352, 360, 360, 360, 360, 353, 352, 345, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, 347, 354, 355, 360, 360, 360, 360, 354, 355, 354, 355, 354, 355, 360, 360, 360, 360, 354, 355, 345, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+      ]
+    },
+    {
+      "enabled": true,
+      "name": "Walls",
+      "order": 0,
+      "solid": ["###############..###############", "#..............................#", "#..............................#", "#..............................#", "#..#........................#..#", "#........##############........#", "#........#............#........#", ".......###............###.......", "......#..................#......", "......#......#....#......#......", "#.....#..................#.....#", "#.....#..................#.....#", "#..#..#.......####.......#..#..#", "#............######............#", "#..............................#", "#..............................#", "#..............................#", "################################"],
+      "sorting_layer": "Default",
+      "tiles": [
+        [184, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 72, -1, -1, 56, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 192],
+        [40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, -1, -1, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 40],
+        [40, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 40],
+        [40, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 40],
+        [40, -1, -1, 88, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 88, -1, -1, 40],
+        [40, -1, -1, 48, -1, -1, -1, -1, -1, 168, 16, 16, 16, 16, 24, 24, 24, 24, 16, 16, 16, 16, 176, -1, -1, -1, -1, -1, 48, -1, -1, 40],
+        [160, -1, -1, -1, -1, -1, -1, -1, -1, 40, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 40, -1, -1, -1, -1, -1, -1, -1, -1, 96],
+        [-1, -1, -1, -1, -1, -1, -1, 144, 16, 32, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 8, 16, 152, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, 128, 136, 136, 136, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 136, 136, 136, 128, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, 40, -1, -1, -1, -1, -1, -1, 88, -1, -1, -1, -1, 88, -1, -1, -1, -1, -1, -1, 40, -1, -1, -1, -1, -1, -1],
+        [128, -1, -1, -1, -1, -1, 40, -1, -1, -1, -1, -1, -1, 80, -1, -1, -1, -1, 80, -1, -1, -1, -1, -1, -1, 40, -1, -1, -1, -1, -1, 128],
+        [40, -1, -1, -1, -1, -1, 40, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 40, -1, -1, -1, -1, -1, 40],
+        [40, -1, -1, 88, -1, -1, 96, -1, -1, -1, -1, -1, -1, -1, 104, 112, 112, 120, -1, -1, -1, -1, -1, -1, -1, 96, -1, -1, 88, -1, -1, 40],
+        [40, -1, -1, 48, -1, -1, 48, -1, -1, -1, -1, -1, -1, 56, 64, 64, 64, 64, 72, -1, -1, -1, -1, -1, -1, 80, -1, -1, 48, -1, -1, 40],
+        [40, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 48, 48, 48, 48, 48, 48, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 40],
+        [40, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 40],
+        [40, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 40],
+        [8, 16, 16, 16, 16, 16, 24, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, 16, 16, 16, 16, 16, 32]
+      ]
+    },
+    {
+      "enabled": true,
+      "ledge": true,
+      "name": "Ledges",
+      "order": 0,
+      "sorting_layer": "Default",
+      "tiles": [
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+      ]
+    },
+    {
+      "enabled": true,
+      "name": "Foreground",
+      "order": 0,
+      "sorting_layer": "Foreground",
+      "tiles": [
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 296, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 312, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, 328, 328, -1, 328, 328, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 328, 328, -1, 328, 328, -1],
+        [-1, 320, 320, -1, 320, 320, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 320, 320, -1, 320, 320, -1],
+        [-1, 304, 304, 312, 304, 304, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 304, 304, -1, 304, 304, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 296, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+      ]
+    }
+  ],
+  "lights": [
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 7.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (6)",
+      "outer_radius": 1.6844,
+      "position": [6.45, 1.04],
+      "shadow": 0.75
+    },
+    {
+      "color": [0.9811, 0.9589, 0.7096],
+      "falloff": 1.0,
+      "falloff_size": 0.0,
+      "group": "Light_Default",
+      "intensity": 0.2,
+      "kind": "freeform",
+      "layers": ["Default", "Background", "Foreground"],
+      "name": "Default",
+      "path": [
+        [0.0, 0.0],
+        [16.0, 0.0],
+        [16.0027, 8.9209],
+        [0.0, 9.0]
+      ],
+      "position": [0.0, 0.0]
+    },
+    {
+      "color": [0.6887, 0.2956, 0.2956],
+      "falloff": 1.0,
+      "falloff_size": 0.0,
+      "group": "NEW2",
+      "intensity": 5.0,
+      "kind": "freeform",
+      "layers": ["Entities"],
+      "name": "LightEntities",
+      "path": [
+        [0.0, 0.0],
+        [16.0, 0.0],
+        [16.0027, 8.9209],
+        [0.0, 9.0]
+      ],
+      "position": [0.0, 0.0]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D",
+      "outer_radius": 2.6192,
+      "position": [2.4531, 6.8388],
+      "shadow": 0.807
+    },
+    {
+      "color": [0.9245, 0.8057, 0.6585],
+      "falloff": 0.5,
+      "falloff_size": 0.5,
+      "group": "LightFG",
+      "intensity": 1.0,
+      "kind": "freeform",
+      "layers": ["Foreground"],
+      "name": "Light 2D (2)",
+      "path": [
+        [4.1107, 3.8352],
+        [6.0253, 3.8352],
+        [6.0253, 4.2188],
+        [4.1107, 4.2188]
+      ],
+      "position": [5.068, 4.027]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (4)",
+      "outer_radius": 2.2885,
+      "position": [13.5731, 6.9288],
+      "shadow": 0.75
+    },
+    {
+      "color": [0.9245, 0.8057, 0.6585],
+      "falloff": 0.5,
+      "falloff_size": 0.5,
+      "group": "LightFG",
+      "intensity": 1.0,
+      "kind": "freeform",
+      "layers": ["Foreground"],
+      "name": "Light 2D (5)",
+      "path": [
+        [13.166, 2.6502],
+        [13.762, 2.6502],
+        [13.762, 2.9318],
+        [13.166, 2.9318]
+      ],
+      "position": [13.464, 2.791]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 3.0,
+      "kind": "point",
+      "layers": ["HUD Items"],
+      "name": "Light 2D (19)",
+      "outer_radius": 0.9048,
+      "position": [5.3301, 5.0248],
+      "shadow": 0.75
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 5.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (17)",
+      "outer_radius": 1.6844,
+      "position": [1.27, 3.42]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (13)",
+      "outer_radius": 2.0309,
+      "position": [10.5141, 3.42],
+      "shadow": 1.0
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 7.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (1)",
+      "outer_radius": 1.6844,
+      "position": [6.0631, 7.2788],
+      "shadow": 0.915
+    },
+    {
+      "color": [0.7529, 0.9804, 0.84],
+      "falloff": 0.5,
+      "group": "LightFG",
+      "inner_radius": 0.0,
+      "intensity": 1.0,
+      "kind": "point",
+      "layers": ["Foreground"],
+      "name": "Light 2D (8)",
+      "outer_radius": 1.0293,
+      "position": [7.8547, 1.4631]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (11)",
+      "outer_radius": 3.0479,
+      "position": [5.2391, 3.1988],
+      "shadow": 1.0
+    },
+    {
+      "color": [0.9245, 0.8057, 0.6585],
+      "falloff": 0.5,
+      "falloff_size": 0.5,
+      "group": "LightFG",
+      "intensity": 1.0,
+      "kind": "freeform",
+      "layers": ["Foreground"],
+      "name": "Light 2D",
+      "path": [
+        [0.5775, 2.6502],
+        [1.4025, 2.6502],
+        [1.4025, 2.9318],
+        [0.5775, 2.9318]
+      ],
+      "position": [0.99, 2.791]
+    },
+    {
+      "color": [0.7529, 0.9804, 0.84],
+      "falloff": 0.5,
+      "group": "LightFG",
+      "inner_radius": 0.0,
+      "intensity": 1.0,
+      "kind": "point",
+      "layers": ["Foreground"],
+      "name": "Light 2D (7)",
+      "outer_radius": 1.0,
+      "position": [14.5047, 7.8931]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 8.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (15)",
+      "outer_radius": 1.4202,
+      "position": [13.42, 3.1838]
+    },
+    {
+      "color": [0.9245, 0.8057, 0.6585],
+      "falloff": 0.5,
+      "falloff_size": 0.5,
+      "group": "LightFG",
+      "intensity": 1.0,
+      "kind": "freeform",
+      "layers": ["Foreground"],
+      "name": "Light 2D (6)",
+      "path": [
+        [14.681, 2.6502],
+        [15.251, 2.6502],
+        [15.251, 2.9318],
+        [14.681, 2.9318]
+      ],
+      "position": [14.966, 2.791]
+    },
+    {
+      "color": [1.0, 1.0, 1.0],
+      "falloff": 1.0,
+      "falloff_size": 0.0,
+      "group": "NEW2",
+      "intensity": 10.0,
+      "kind": "freeform",
+      "layers": ["Bullets"],
+      "name": "BulletsLight",
+      "path": [
+        [0.0, 0.0],
+        [16.0, 0.0],
+        [16.0027, 8.9209],
+        [0.0, 9.0]
+      ],
+      "position": [0.0, 0.0]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (12)",
+      "outer_radius": 1.6844,
+      "position": [8.1221, 3.42]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 8.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (16)",
+      "outer_radius": 1.4485,
+      "position": [14.79, 3.1838]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 7.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (3)",
+      "outer_radius": 1.6844,
+      "position": [10.0631, 7.42],
+      "shadow": 0.863
+    },
+    {
+      "color": [0.9811, 0.8752, 0.7544],
+      "falloff": 0.5,
+      "group": "LightFG",
+      "inner_radius": 0.0,
+      "intensity": 1.0,
+      "kind": "point",
+      "layers": ["Foreground"],
+      "name": "Light 2D",
+      "outer_radius": 1.0,
+      "position": [1.39, 2.038]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 7.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (5)",
+      "outer_radius": 1.6844,
+      "position": [4.39, 1.04]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 7.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (8)",
+      "outer_radius": 1.6844,
+      "position": [10.27, 1.04],
+      "shadow": 0.75
+    },
+    {
+      "color": [0.9245, 0.8057, 0.6585],
+      "falloff": 0.5,
+      "falloff_size": 0.5,
+      "group": "LightFG",
+      "intensity": 1.0,
+      "kind": "freeform",
+      "layers": ["Foreground"],
+      "name": "Light 2D (1)",
+      "path": [
+        [2.1559, 2.6502],
+        [2.7581, 2.6502],
+        [2.7581, 2.9318],
+        [2.1559, 2.9318]
+      ],
+      "position": [2.457, 2.791]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (2)",
+      "outer_radius": 1.6844,
+      "position": [8.0531, 7.42]
+    },
+    {
+      "color": [0.9245, 0.8057, 0.6585],
+      "falloff": 0.5,
+      "falloff_size": 0.5,
+      "group": "LightFG",
+      "intensity": 1.0,
+      "kind": "freeform",
+      "layers": ["Foreground"],
+      "name": "Light 2D (4)",
+      "path": [
+        [10.1417, 3.8352],
+        [12.0563, 3.8352],
+        [12.0563, 4.2188],
+        [10.1417, 4.2188]
+      ],
+      "position": [11.099, 4.027]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 3.0,
+      "kind": "point",
+      "layers": ["HUD Items"],
+      "name": "Light 2D (20)",
+      "outer_radius": 0.9048,
+      "position": [10.6461, 5.0248]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 5.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (18)",
+      "outer_radius": 1.6844,
+      "position": [2.64, 3.42]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (14)",
+      "outer_radius": 1.6844,
+      "position": [9.7581, 5.1898],
+      "shadow": 0.75
+    },
+    {
+      "color": [0.7529, 0.9804, 0.84],
+      "falloff": 0.5,
+      "group": "LightFG",
+      "inner_radius": 0.0,
+      "intensity": 1.0,
+      "kind": "point",
+      "layers": ["Foreground"],
+      "name": "Light 2D (1)",
+      "outer_radius": 1.0,
+      "position": [13.8447, 5.967]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 7.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (7)",
+      "outer_radius": 1.6844,
+      "position": [8.48, 1.04],
+      "shadow": 0.948
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 7.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (9)",
+      "outer_radius": 1.6844,
+      "position": [11.83, 1.04]
+    },
+    {
+      "color": [0.9623, 0.68, 0.3223],
+      "falloff": 0.5,
+      "group": "LightBG_Lava",
+      "inner_radius": 0.0,
+      "intensity": 2.0,
+      "kind": "point",
+      "layers": ["Background"],
+      "name": "Light 2D (10)",
+      "outer_radius": 1.6844,
+      "position": [6.8721, 5.1268],
+      "shadow": 0.75
+    }
+  ],
+  "markers": [],
+  "name": "NEW2",
+  "objects": [
+    {
+      "group": "NEW2",
+      "name": "Rare Weapon Chest",
+      "position": [5.5278, 5.2432],
+      "prefab": "Rare Weapon Chest"
+    },
+    {
+      "group": "Enemies",
+      "name": "Enemy (8)",
+      "overrides": {
+        "SpriteRenderer.m_Materials.Array.data[0]": "asset:Sprite-Lit-Default"
+      },
+      "position": [6.14, 4.94],
+      "prefab": "Warrior"
+    },
+    {
+      "group": "EffectGrates",
+      "name": "EffectGrate",
+      "overrides": {
+        "BoxCollider2D.m_IsTrigger": "1",
+        "BoxCollider2D.m_Offset.x": "0.11811137",
+        "BoxCollider2D.m_Offset.y": "0.3620367",
+        "BoxCollider2D.m_Size.x": "2.4833903",
+        "BoxCollider2D.m_Size.y": "1.4636555",
+        "EffectGrate.lava": "1",
+        "EffectGrate.water": "0"
+      },
+      "position": [5.8975, 6.8661],
+      "prefab": "EffectGrate"
+    },
+    {
+      "group": "EffectGrates",
+      "name": "EffectGrate (2)",
+      "overrides": {
+        "BoxCollider2D.m_IsTrigger": "1",
+        "BoxCollider2D.m_Offset.x": "0.042238235",
+        "BoxCollider2D.m_Offset.y": "0.05913341",
+        "BoxCollider2D.m_Size.x": "9.055628",
+        "BoxCollider2D.m_Size.y": "0.97369456",
+        "EffectGrate.lava": "1",
+        "EffectGrate.water": "0"
+      },
+      "position": [7.9675, 0.9361],
+      "prefab": "EffectGrate"
+    },
+    {
+      "group": "Enemies",
+      "name": "Crab",
+      "position": [7.6044, 5.0672],
+      "prefab": "Crab"
+    },
+    {
+      "group": "NEW2",
+      "name": "Rare Data Chest",
+      "position": [10.4706, 5.2432],
+      "prefab": "Rare Data Chest"
+    },
+    {
+      "group": "Enemies",
+      "name": "multi-turret_1 (2)",
+      "position": [5.09, 3.22],
+      "prefab": "multi-turret_1"
+    },
+    {
+      "group": "Enemies",
+      "name": "Drone",
+      "position": [8.0176, 6.3613],
+      "prefab": "Drone",
+      "scale": [0.5, 0.5]
+    },
+    {
+      "group": "Enemies",
+      "name": "Drone (2)",
+      "position": [3.05, 0.21],
+      "prefab": "Drone",
+      "scale": [0.5, 0.5]
+    },
+    {
+      "group": "Enemies",
+      "name": "LASERCrab",
+      "position": [0.79, 7.86],
+      "prefab": "LASERCrab"
+    },
+    {
+      "group": "Enemies",
+      "name": "multi-turret_1 (3)",
+      "position": [10.74, 3.22],
+      "prefab": "multi-turret_1"
+    },
+    {
+      "group": "Enemies",
+      "name": "Warrior (1)",
+      "position": [2.3654, 1.425],
+      "prefab": "Warrior"
+    },
+    {
+      "group": "Enemies",
+      "name": "multi-turret_1",
+      "position": [3.9, 6.1209],
+      "prefab": "multi-turret_1"
+    },
+    {
+      "group": "Enemies",
+      "name": "Crab",
+      "position": [2.7045, 7.3661],
+      "prefab": "Crab"
+    },
+    {
+      "group": "Enemies",
+      "name": "LASERCrab (1)",
+      "position": [15.25, 7.86],
+      "prefab": "LASERCrab"
+    },
+    {
+      "group": "Enemies",
+      "name": "Crab (1)",
+      "position": [13.5945, 7.4792],
+      "prefab": "Crab"
+    },
+    {
+      "group": "EffectGrates",
+      "name": "EffectGrate (3)",
+      "overrides": {
+        "BoxCollider2D.m_IsTrigger": "1",
+        "BoxCollider2D.m_Offset.x": "0.0084478855",
+        "BoxCollider2D.m_Offset.y": "-0.008447766",
+        "BoxCollider2D.m_Size.x": "2.4833913",
+        "BoxCollider2D.m_Size.y": "0.48373294",
+        "EffectGrate.lava": "1",
+        "EffectGrate.water": "0"
+      },
+      "position": [1.7575, 3.2661],
+      "prefab": "EffectGrate"
+    },
+    {
+      "group": "Enemies",
+      "name": "multi-turret_1 (1)",
+      "position": [12.17, 6.18],
+      "prefab": "multi-turret_1"
+    },
+    {
+      "group": "Enemies",
+      "name": "Drone (1)",
+      "position": [12.66, 0.32],
+      "prefab": "Drone",
+      "scale": [0.5, 0.5]
+    },
+    {
+      "group": "NEW2",
+      "name": "Common Weapon Chest",
+      "position": [8.011, 1.5607],
+      "prefab": "Common Weapon Chest"
+    },
+    {
+      "group": "EffectGrates",
+      "name": "EffectGrate (4)",
+      "overrides": {
+        "BoxCollider2D.m_IsTrigger": "1",
+        "BoxCollider2D.m_Offset.x": "0.0084478855",
+        "BoxCollider2D.m_Offset.y": "-0.008447766",
+        "BoxCollider2D.m_Size.x": "2.4833913",
+        "BoxCollider2D.m_Size.y": "0.48373294",
+        "EffectGrate.lava": "1",
+        "EffectGrate.water": "0"
+      },
+      "position": [14.2575, 3.2661],
+      "prefab": "EffectGrate"
+    },
+    {
+      "group": "Enemies",
+      "name": "Enemy (3)",
+      "overrides": {
+        "SpriteRenderer.m_Materials.Array.data[0]": "asset:Sprite-Lit-Default"
+      },
+      "position": [7.67, 0.79],
+      "prefab": "Warrior"
+    },
+    {
+      "group": "Enemies",
+      "name": "EnemyTank",
+      "position": [8.0553, 4.2133],
+      "prefab": "EnemyTank",
+      "scale": [2.0, 2.0]
+    },
+    {
+      "group": "Enemies",
+      "name": "Drone",
+      "position": [7.9671, 2.4809],
+      "prefab": "Drone",
+      "scale": [0.5, 0.5]
+    },
+    {
+      "group": "Enemies",
+      "name": "Enemy (9)",
+      "overrides": {
+        "SpriteRenderer.m_Materials.Array.data[0]": "asset:Sprite-Lit-Default"
+      },
+      "position": [9.75, 5.21],
+      "prefab": "Warrior"
+    },
+    {
+      "group": "Enemies",
+      "name": "Warrior",
+      "position": [13.5192, 1.3119],
+      "prefab": "Warrior"
+    },
+    {
+      "group": "Enemies",
+      "name": "Enemy (6)",
+      "overrides": {
+        "SpriteRenderer.m_Materials.Array.data[0]": "asset:Sprite-Lit-Default"
+      },
+      "position": [8.38, 0.83],
+      "prefab": "Warrior"
+    },
+    {
+      "group": "Enemies",
+      "name": "Crab (1)",
+      "position": [8.5606, 5.0868],
+      "prefab": "Crab"
+    },
+    {
+      "group": "EffectGrates",
+      "name": "EffectGrate (1)",
+      "overrides": {
+        "BoxCollider2D.m_IsTrigger": "1",
+        "BoxCollider2D.m_Offset.x": "0.11811137",
+        "BoxCollider2D.m_Offset.y": "0.3620367",
+        "BoxCollider2D.m_Size.x": "2.4833903",
+        "BoxCollider2D.m_Size.y": "1.4636555",
+        "EffectGrate.lava": "1",
+        "EffectGrate.water": "0"
+      },
+      "position": [9.8575, 6.8661],
+      "prefab": "EffectGrate"
+    }
+  ],
+  "palette": ["horizontalDeadRobot", "postReviewTileSetCeiling_1_12", "postReviewTileSetCeiling_1_1", "main_dark_compound_1", "postReviewTileSetCeiling_1_13", "postReviewTileSetCeiling_1_2", "main_dark_compound_34", "postReviewTileSetCeiling_1_18", "postReviewTileSetCeiling_1_17", "postReviewTileSetCeiling_1_19", "wallTileSet_1_0", "postReviewTileSetCeiling_1_0", "postReviewTileSetCeiling_1_21", "postReviewTileSetCeiling_1_4", "postReviewTileSetCeiling_1_16", "postReviewTileSetCeiling_1_5", "postReviewTileSetCeiling_1_20", "main_dark_compound_35", "main_dark_compound_24", "main_dark_compound_25", "main_dark_compound_27", "main_dark_compound_8", "main_dark_compound_9", "postReviewTileSetCeiling_1_6", "postReviewTileSetCeiling_1_7", "sadHeadlessEnemy", "horizontalDeadRobot-export", "fullyFormedOnRack", "main_dark_compound_21", "main_dark_compound_41", "main_dark_compound_22", "dark_compound_2_13", "main_dark_compound_37", "main_dark_compound_38", "main_dark_compound_23", "main_dark_compound_31", "main_dark_compound_30", "dark_compound_2_1", "dark_compound_2_26", "dark_compound_2_0", "dark_compound_2_18", "dark_compound_2_10", "shotUpEnemy", "dark_compound_2_58", "dark_compound_2_56", "dark_compound_2_27", "dark_compound_2_53", "dark_compound_2_48"],
+  "room_type": "random",
+  "size": [32, 18],
+  "source": "Prefabs/Generatable Rooms/3_doors/NEW/NEW2.prefab"
+}

@@ -41,7 +41,7 @@ const INSTANCE_SIZE: u64 = std::mem::size_of::<Sprite>() as u64;
 const INITIAL_DYNAMIC_CAPACITY: u64 = 1024;
 
 /// A texture uploaded with [`Renderer2d::add_texture`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct TextureId(u32);
 
 /// Sprites uploaded once with [`Renderer2d::add_batch`], e.g. a room's tile layer.
