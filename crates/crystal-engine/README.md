@@ -1,7 +1,7 @@
 # crystal-engine
 
 A general-purpose rendering engine on [`wgpu`](https://wgpu.rs/): scenes, skinned
-meshes, animation clips and glTF loading. It started as a triangle experiment
+meshes, animation clips and glTF loading, plus a 2D layer of sprites and tiles. It started as a triangle experiment
 (see [blog post](https://garstka.dev/2026/09/05/rust-wgpu-exploration/)) and
 took over the renderer that [`ff-view`](../../apps/ff-view) grew.
 
@@ -28,15 +28,22 @@ src/
   loader.rs      glTF 2.0 -> scene (the only file that knows about `gltf`)
   terrain.rs     terrain folder (terrain.json + height/splat PNGs) -> scene
   renderer.rs    wgpu: pipelines, buffers, bind groups, draw loop
+  sprite.rs      2D: one textured quad as plain data, sprite sheets, PNG decoding
+  tilemap.rs     2D: a grid of tileset cells -> sprites
+  camera2d.rs    2D: straight-down orthographic camera, pixel-space camera for UI
+  render2d.rs    wgpu: instanced sprite drawing into any target, off-screen readback
+  surface.rs     wgpu: a window's swapchain and device, with no pipelines attached
   shaders/
     model.wgsl   skinned vertex stage, two-light fragment stage
     terrain.wgsl pixel-art splat blend over a heightmap grid
+    sprite.wgsl  one quad per instance, built from the vertex index
 examples/
   triangle/      winit + wgpu from scratch, kept as the minimal reference
 ```
 
-The dependency direction is one-way: `loader` -> `scene` -> `renderer`. Nothing
-above `renderer` knows about wgpu, which is what makes an app's `--info` mode and
+The dependency direction is one-way: `loader` -> `scene` -> `renderer`, and
+`sprite`/`tilemap`/`camera2d` -> `render2d`. Nothing above `renderer`, `render2d`
+and `surface` knows about wgpu, which is what makes an app's `--info` mode and
 the unit tests possible without a GPU.
 
 ### Math
@@ -56,6 +63,30 @@ version.
 that wants to draw something else on top can insert a pass between them. That is
 all `ff-view` needs to put egui over the 3D, and to shrink the 3D to the area its
 panel leaves free.
+
+### The 2D layer
+
+A `Sprite` is one quad with a full 3D position: x right, y up, z height above the
+ground. `Camera2d` looks straight down, so a larger z is nearer and wins the depth
+test. Sprites are alpha-blended and depth-tested; add them back to front and
+blending is right, and the depth buffer keeps the same scene working once a camera
+stops looking straight down.
+
+`Renderer2d` owns no window. It is given a device and a target format and records
+passes into the caller's encoder:
+
+```rust
+renderer.begin_frame();
+list.clear();
+list.batch(room_tiles);              // uploaded once with add_batch
+list.sprite(player_sheet, sprite);   // re-uploaded every frame
+renderer.draw(&mut encoder, target, &Pass { view_projection, clear, viewport }, &list);
+```
+
+A run of sprites sharing a texture is one instanced draw call, and a static batch
+(a room's tile layer) is one call however many tiles it holds. The target can be a
+`surface::WindowSurface` frame or a `render2d::Offscreen` texture, which is how an
+app takes screenshots with no window; `apps/cycle-of-steel` does both.
 
 ### Skinning
 

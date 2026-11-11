@@ -1,0 +1,18 @@
+[package]
+name = "cycle-of-steel"
+version = "0.1.0"
+edition = "2024"
+description = "Cycle of Steel: top-down roguelike shooter, ported from Unity onto crystal-engine"
+publish = false
+
+[dependencies]
+anyhow = "1"
+crystal-engine = { path = "../../crates/crystal-engine" }
+env_logger = "0.11"
+# Gamepads. On Linux this needs libudev's headers at build time (libudev-dev).
+gilrs = "0.11"
+log = "0.4"
+png = "0.17"
+pollster = "1"
+wgpu = "30"
+winit = "0.30"

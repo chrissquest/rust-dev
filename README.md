@@ -7,12 +7,13 @@ All of them share one Cargo workspace, one lockfile and one `target/`.
 
 | Crate | What it is |
 | --- | --- |
-| [`crates/crystal-engine`](crates/crystal-engine) | General-purpose rendering engine on wgpu: scenes, skinning, animation, glTF loading |
+| [`crates/crystal-engine`](crates/crystal-engine) | General-purpose rendering engine on wgpu: 3D scenes, skinning, animation, glTF loading, and a 2D sprite and tile layer |
 
 ## Apps
 
 | App | Package | What it is |
 | --- | --- | --- |
+| [`apps/cycle-of-steel`](apps/cycle-of-steel) | `cycle-of-steel` | Cycle of Steel, a top-down roguelike shooter, being ported from Unity onto `crystal-engine` |
 | [`apps/ff-export`](apps/ff-export) | `ff-export` | Fossil Fighters (NDS) -> glTF/GLB asset exporter (CLI and library) |
 | [`apps/ff-export-gui`](apps/ff-export-gui) | `ff-export-gui` | Slint window for `ff-export`: pick a ROM, export everything |
 | [`apps/ff-view`](apps/ff-view) | `ff-view` | Low-poly glTF model viewer and browser, built on `crystal-engine` |
@@ -31,6 +32,7 @@ cargo test                                     # unit tests for the same set
 cargo run -p ff-export -- --help
 cargo run -p ff-export-gui                     # the exporter's window
 cargo run -p ff-view
+cargo run -p cycle-of-steel
 cargo run -p crystal-engine --example triangle
 ```
 
