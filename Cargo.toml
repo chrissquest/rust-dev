@@ -1,0 +1,22 @@
+# rust-dev: one workspace for the rendering, game-dev and asset-extraction apps.
+#
+# Every app lives in `apps/`; code shared between apps goes in `crates/` once it exists.
+# One lockfile and one `target/` serve the whole workspace.
+[workspace]
+resolver = "3"
+members = [
+    "apps/ff-export",
+    "apps/ff-export/gui",
+    "apps/ff-view",
+    "apps/rust-wgpu",
+]
+# A plain `cargo build` skips the Slint GUI, as building ff-export's CLI always has.
+# Build it with `cargo build -p ff-export-gui`.
+default-members = [
+    "apps/ff-export",
+    "apps/ff-view",
+    "apps/rust-wgpu",
+]
+
+[profile.release]
+opt-level = 3

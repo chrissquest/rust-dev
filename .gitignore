@@ -1,0 +1,11 @@
+# build output
+/target
+
+# editor / OS noise
+.idea/
+.vscode/
+.junie/
+*.swp
+Thumbs.db
+
+# Each app's own .gitignore covers its data (ff-export: ROMs, externals/, exported .glb).
