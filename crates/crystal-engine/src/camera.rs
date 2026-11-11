@@ -66,6 +66,16 @@ impl OrbitCamera {
         self.far = (self.distance + radius * 8.0).max(radius * 2.0).max(1.0);
     }
 
+    /// Places the camera explicitly: angles in radians, `target` in world space.
+    /// Keeps the framed radius, so the clip planes still suit the scene.
+    pub fn set_view(&mut self, yaw: f32, pitch: f32, distance: f32, target: Vec3) {
+        self.yaw = yaw;
+        self.pitch = pitch.clamp(-1.5, 1.5);
+        self.distance = distance.clamp(1e-4, 1e7);
+        self.target = target;
+        self.refresh_clip();
+    }
+
     pub fn reset(&mut self) {
         self.yaw = std::f32::consts::FRAC_PI_4;
         self.pitch = 0.35;

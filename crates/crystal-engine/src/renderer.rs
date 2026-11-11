@@ -10,6 +10,16 @@
 //! group 1  binding 2  sampler                               fragment
 //! ```
 //!
+//! Terrains use their own pipeline (`shaders/terrain.wgsl`) with the same group 0:
+//!
+//! ```text
+//! group 1  binding 0  TerrainParams (rect, blend, gains...)  uniform, fragment
+//! group 1  binding 1  layer textures (2D array, sRGB)        fragment
+//! group 1  binding 2  nearest repeat sampler                 fragment
+//! group 1  binding 3  splat maps (2D array of 2, linear)     fragment
+//! group 1  binding 4  linear clamp sampler                   fragment
+//! ```
+//!
 //! One bind group per draw item means textures and materials are resolved once
 //! at load time; per frame only the uniform buffers change.
 
@@ -24,11 +34,14 @@ use winit::window::Window;
 use crate::camera::OrbitCamera;
 use crate::math::Mat4;
 use crate::scene::{Primitive, Scene, Texture, TextureFilter};
+use crate::terrain::{MAX_LAYERS, Terrain};
 
 pub const MAX_JOINTS: usize = 128;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const CAMERA_UNIFORM_SIZE: u64 = 64;
+/// rect, blend, extra (3 vec4) + gains, slope_lo, slope_hi (3 x 2 vec4).
+const TERRAIN_UNIFORM_SIZE: u64 = 9 * 16;
 /// model (64) + base colour (16) + params (16) + joint matrices (128 * 64).
 const OBJECT_UNIFORM_SIZE: u64 = 64 + 16 + 16 + (MAX_JOINTS as u64 * 64);
 
@@ -119,10 +132,47 @@ impl Vertex {
     };
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct TerrainVertex {
+    position: [f32; 3],
+    normal: [f32; 3],
+}
+
+static TERRAIN_VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
+    wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Float32x3,
+        offset: 0,
+        shader_location: 0,
+    },
+    wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Float32x3,
+        offset: 12,
+        shader_location: 1,
+    },
+];
+
+impl TerrainVertex {
+    const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<TerrainVertex>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &TERRAIN_VERTEX_ATTRIBUTES,
+    };
+}
+
 struct GpuPrimitive {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
+}
+
+/// Everything one terrain draw needs. Its parameters never change after load, so
+/// unlike `DrawItem` there is no per-frame upload.
+struct GpuTerrain {
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    index_count: u32,
+    bind_group: wgpu::BindGroup,
 }
 
 struct DrawItem {
@@ -152,13 +202,20 @@ pub struct Renderer {
     wireframe_pipeline: Option<wgpu::RenderPipeline>,
     wireframe: bool,
 
+    terrain_layout: wgpu::BindGroupLayout,
+    terrain_pipeline: wgpu::RenderPipeline,
+    terrain_wireframe_pipeline: Option<wgpu::RenderPipeline>,
+
     linear_sampler: wgpu::Sampler,
     nearest_sampler: wgpu::Sampler,
+    /// Splat maps must not wrap: the far edge would bleed into the near one.
+    clamp_sampler: wgpu::Sampler,
     fallback_view: wgpu::TextureView,
     texture_views: Vec<wgpu::TextureView>,
 
     meshes: Vec<Vec<Option<GpuPrimitive>>>,
     draw_items: Vec<DrawItem>,
+    terrains: Vec<GpuTerrain>,
 
     /// Reused staging buffer for uniform uploads; sized for one object.
     scratch: Vec<f32>,
@@ -303,6 +360,7 @@ impl Renderer {
             &pipeline_layout,
             &shader,
             format,
+            Vertex::LAYOUT,
             wgpu::PolygonMode::Fill,
         );
         let wireframe_pipeline = wireframe_supported.then(|| {
@@ -311,6 +369,70 @@ impl Renderer {
                 &pipeline_layout,
                 &shader,
                 format,
+                Vertex::LAYOUT,
+                wgpu::PolygonMode::Line,
+            )
+        });
+
+        let terrain_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("terrain shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/terrain.wgsl").into()),
+        });
+        let fragment_texture_array = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2Array,
+                multisampled: false,
+            },
+            count: None,
+        };
+        let fragment_sampler = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        };
+        let terrain_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("terrain layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(TERRAIN_UNIFORM_SIZE),
+                    },
+                    count: None,
+                },
+                fragment_texture_array(1),
+                fragment_sampler(2),
+                fragment_texture_array(3),
+                fragment_sampler(4),
+            ],
+        });
+        let terrain_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("terrain pipeline layout"),
+            bind_group_layouts: &[Some(&camera_layout), Some(&terrain_layout)],
+            immediate_size: 0,
+        });
+        let terrain_pipeline = create_pipeline(
+            &device,
+            &terrain_pipeline_layout,
+            &terrain_shader,
+            format,
+            TerrainVertex::LAYOUT,
+            wgpu::PolygonMode::Fill,
+        );
+        let terrain_wireframe_pipeline = wireframe_supported.then(|| {
+            create_pipeline(
+                &device,
+                &terrain_pipeline_layout,
+                &terrain_shader,
+                format,
+                TerrainVertex::LAYOUT,
                 wgpu::PolygonMode::Line,
             )
         });
@@ -348,6 +470,15 @@ impl Renderer {
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
+        let clamp_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("linear clamp"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
 
         let fallback_view = create_solid_texture(&device, &queue, "fallback", [255, 255, 255, 255]);
 
@@ -365,12 +496,17 @@ impl Renderer {
             pipeline,
             wireframe_pipeline,
             wireframe: false,
+            terrain_layout,
+            terrain_pipeline,
+            terrain_wireframe_pipeline,
             linear_sampler,
             nearest_sampler,
+            clamp_sampler,
             fallback_view,
             texture_views: Vec::new(),
             meshes: Vec::new(),
             draw_items: Vec::new(),
+            terrains: Vec::new(),
             scratch: Vec::with_capacity(16 + 8 + MAX_JOINTS * 16),
             adapter_name: info.name,
             backend: info.backend,
@@ -702,6 +838,20 @@ impl Renderer {
         );
         pass.set_scissor_rect(viewport.x, viewport.y, viewport.width, viewport.height);
 
+        if !self.terrains.is_empty() {
+            match self.terrain_wireframe_pipeline.as_ref().filter(|_| self.wireframe) {
+                Some(pipeline) => pass.set_pipeline(pipeline),
+                None => pass.set_pipeline(&self.terrain_pipeline),
+            }
+            pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            for terrain in &self.terrains {
+                pass.set_bind_group(1, &terrain.bind_group, &[]);
+                pass.set_vertex_buffer(0, terrain.vertex_buffer.slice(..));
+                pass.set_index_buffer(terrain.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..terrain.index_count, 0, 0..1);
+            }
+        }
+
         match self.wireframe_pipeline.as_ref().filter(|_| self.wireframe) {
             Some(pipeline) => pass.set_pipeline(pipeline),
             None => pass.set_pipeline(&self.pipeline),
@@ -810,6 +960,98 @@ impl Renderer {
             }
         }
         self.draw_items = draw_items;
+
+        self.terrains = scene
+            .terrains
+            .iter()
+            .filter_map(|terrain| self.upload_terrain(terrain))
+            .collect();
+    }
+
+    fn upload_terrain(&self, terrain: &Terrain) -> Option<GpuTerrain> {
+        use wgpu::util::DeviceExt;
+
+        let mesh = &terrain.mesh;
+        if mesh.positions.is_empty() || mesh.indices.len() < 3 || terrain.layers.is_empty() {
+            return None;
+        }
+
+        let vertices: Vec<TerrainVertex> = mesh
+            .positions
+            .iter()
+            .enumerate()
+            .map(|(index, position)| TerrainVertex {
+                position: *position,
+                normal: mesh.normals.get(index).copied().unwrap_or([0.0, 1.0, 0.0]),
+            })
+            .collect();
+        let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("terrain vertices"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("terrain indices"),
+            contents: bytemuck::cast_slice(&mesh.indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let layer_textures: Vec<&Texture> = terrain.layers.iter().map(|layer| &layer.texture).collect();
+        let layers_view = upload_texture_array(
+            &self.device,
+            &self.queue,
+            "terrain layers",
+            &layer_textures,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+        );
+        let splats_view = upload_texture_array(
+            &self.device,
+            &self.queue,
+            "terrain splats",
+            &[&terrain.splats[0], &terrain.splats[1]],
+            // Weights are data, not colour: no sRGB curve.
+            wgpu::TextureFormat::Rgba8Unorm,
+        );
+
+        let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("terrain params"),
+            contents: bytemuck::cast_slice(&terrain_params(terrain)),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("terrain"),
+            layout: &self.terrain_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&layers_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.nearest_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&splats_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&self.clamp_sampler),
+                },
+            ],
+        });
+
+        Some(GpuTerrain {
+            vertex_buffer,
+            index_buffer,
+            index_count: mesh.indices.len() as u32,
+            bind_group,
+        })
     }
 
     fn write_object_uniforms(&mut self, scene: &Scene, world: &[Mat4]) {
@@ -857,21 +1099,109 @@ impl Renderer {
     }
 }
 
+/// The terrain shader's uniform block, flattened in WGSL order (see `TerrainParams`).
+fn terrain_params(terrain: &Terrain) -> [f32; 36] {
+    let blend = &terrain.blend;
+    let mut values = [0.0; 36];
+    values[0..4].copy_from_slice(&terrain.rect);
+    values[4..8].copy_from_slice(&[
+        blend.texels_per_metre,
+        blend.tile_metres,
+        blend.wobble,
+        blend.wobble_period.max(0.01),
+    ]);
+    values[8..12].copy_from_slice(&[
+        blend.grain,
+        blend.contact_shadow,
+        terrain.layers.len().min(MAX_LAYERS) as f32,
+        0.0,
+    ]);
+    for (index, layer) in terrain.layers.iter().take(MAX_LAYERS).enumerate() {
+        values[12 + index] = layer.gain;
+        // slope_hi <= slope_lo means "no slope term" to the shader.
+        let [low, high] = layer.slope.unwrap_or([1.0, 0.0]);
+        values[20 + index] = low;
+        values[28 + index] = high;
+    }
+    values
+}
+
+/// Uploads same-sized RGBA8 textures as the layers of one 2D array texture.
+fn upload_texture_array(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    textures: &[&Texture],
+    format: wgpu::TextureFormat,
+) -> wgpu::TextureView {
+    let width = textures[0].width.max(1);
+    let height = textures[0].height.max(1);
+    let gpu_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: textures.len() as u32,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    let expected = width as usize * height as usize * 4;
+    for (layer, texture) in textures.iter().enumerate() {
+        let mut pixels = texture.rgba.clone();
+        pixels.resize(expected, 255);
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &gpu_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: 0,
+                    z: layer as u32,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            &pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    gpu_texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..Default::default()
+    })
+}
+
 fn create_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     shader: &wgpu::ShaderModule,
     format: wgpu::TextureFormat,
+    vertex_layout: wgpu::VertexBufferLayout<'static>,
     polygon_mode: wgpu::PolygonMode,
 ) -> wgpu::RenderPipeline {
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("model pipeline"),
+        label: Some("pipeline"),
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: shader,
             entry_point: Some("vs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
-            buffers: &[Some(Vertex::LAYOUT)],
+            buffers: &[Some(vertex_layout)],
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,

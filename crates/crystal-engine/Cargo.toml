@@ -12,6 +12,10 @@ bytemuck = { version = "1", features = ["derive"] }
 glam = "0.30"
 gltf = "1"
 log = "0.4"
+# Terrain folders: height/splat PNGs (16-bit heights included) and terrain.json.
+png = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 wgpu = "30"
 winit = "0.30"
 

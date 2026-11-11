@@ -125,6 +125,8 @@ pub struct Scene {
     pub textures: Vec<Texture>,
     pub skins: Vec<Skin>,
     pub animations: Vec<crate::anim::Animation>,
+    /// Splat-blended heightmap patches, already in world space (see [`crate::terrain`]).
+    pub terrains: Vec<crate::terrain::Terrain>,
     pub bounds: Aabb,
     /// Where it came from, for the window title.
     pub source: String,
@@ -223,7 +225,15 @@ impl Scene {
     /// Recomputes `bounds` from the rest pose. Called once after loading.
     pub fn recompute_bounds(&mut self) {
         let world = self.world_transforms(&self.default_pose());
-        self.bounds = self.bounds_for(&world);
+        let mut bounds = self.bounds_for(&world);
+        for terrain in &self.terrains {
+            let terrain_bounds = terrain.bounds();
+            if !terrain_bounds.is_empty() {
+                bounds.expand(terrain_bounds.min);
+                bounds.expand(terrain_bounds.max);
+            }
+        }
+        self.bounds = bounds;
     }
 
     /// The extents of every mesh vertex with skinning applied, for a given set of node
@@ -332,6 +342,25 @@ impl Scene {
                     .map(|animation| format!("{} ({:.2}s)", animation.name, animation.duration))
                     .collect::<Vec<_>>()
                     .join(", "),
+            ),
+            (
+                String::from("terrains"),
+                self.terrains
+                    .iter()
+                    .map(|terrain| {
+                        let layers: Vec<&str> =
+                            terrain.layers.iter().map(|layer| layer.name.as_str()).collect();
+                        format!(
+                            "{} ({:.0} x {:.0} m, {} tris, layers: {})",
+                            terrain.name,
+                            terrain.rect[2],
+                            terrain.rect[3],
+                            terrain.mesh.triangle_count(),
+                            layers.join(", ")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; "),
             ),
             (String::from("bounds"), bounds),
         ]

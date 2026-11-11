@@ -36,6 +36,7 @@ pub fn load(path: &Path) -> Result<Scene> {
         textures,
         skins,
         animations,
+        terrains: Vec::new(),
         bounds: Aabb::empty(),
         source: path.display().to_string(),
     };

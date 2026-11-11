@@ -1049,7 +1049,10 @@ dependencies = [
  "glam",
  "gltf",
  "log",
+ "png 0.17.16",
  "pollster 1.0.1",
+ "serde",
+ "serde_json",
  "wgpu",
  "winit",
 ]

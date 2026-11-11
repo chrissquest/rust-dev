@@ -26,9 +26,11 @@ src/
   anim.rs        keyframe sampling and clip playback
   camera.rs      orbit camera, fitted from bounds
   loader.rs      glTF 2.0 -> scene (the only file that knows about `gltf`)
+  terrain.rs     terrain folder (terrain.json + height/splat PNGs) -> scene
   renderer.rs    wgpu: pipelines, buffers, bind groups, draw loop
   shaders/
     model.wgsl   skinned vertex stage, two-light fragment stage
+    terrain.wgsl pixel-art splat blend over a heightmap grid
 examples/
   triangle/      winit + wgpu from scratch, kept as the minimal reference
 ```
@@ -72,6 +74,57 @@ tell whether a rig is being read correctly. Point it at a real file to check:
 $env:CRYSTAL_TEST_MODEL = "path\to\rigged.glb"
 cargo test -p crystal-engine bind_pose -- --ignored --nocapture
 ```
+
+### Terrain
+
+A terrain is a folder, not a mesh, so ground can be painted (and later changed
+at runtime) instead of modelled:
+
+```text
+meadow/
+  terrain.json   size, height range, layers, optional props .glb
+  height.png     8- or 16-bit grey, one sample per grid vertex
+  splat.png      RGBA weights for layers 0-3 (row 0 = -Z edge, column 0 = -X edge)
+  splat2.png     optional, layers 4-7
+```
+
+```json
+{
+  "size": [32, 32],
+  "height_range": [-0.96, 4.12],
+  "splat2": "splat2.png",
+  "layers": [
+    { "name": "grass",  "texture": "../../textures/grass.png",  "gain": 0.45 },
+    { "name": "dirt",   "texture": "../../textures/dirt.png",   "gain": 0.25 },
+    { "name": "cobble", "texture": "../../textures/cobble.png", "gain": 0.55 },
+    { "name": "rock",   "texture": "../../textures/rock.png",   "gain": 0.35, "slope": [0.16, 0.30] }
+  ],
+  "props": "../../models/nature_props.glb",
+  "blend": { "texels_per_metre": 16, "tile_metres": 2, "wobble": 0.45,
+             "wobble_period": 0.8, "grain": 0.1, "contact_shadow": 0.62 }
+}
+```
+
+`blend` is optional (those are the defaults); so are `splat2`, `props` and each
+layer's `gain` (0.35) and `slope`. `terrain::load` builds a grid mesh with smooth
+normals and returns a `Scene` holding the terrain plus the props, so everything
+else - bounds, camera framing, `--info` - works unchanged.
+
+The shader never blends colours. Per **texel** (world XZ snapped to
+`texels_per_metre`) it scores every layer:
+
+```text
+score = splat weight + slope term
+      + gain   * (texel brightness - 0.5)     stones and blade tips stand proud
+      + wobble * (value noise at ~0.8 m - 0.5)  borders meander, per-layer offset
+      + grain  * (per-texel hash - 0.5)        no long straight runs
+```
+
+and draws the winner's texel as-is, so borders are crisp pixel steps and every
+pixel stays on the palette. A texel whose +X or +Z neighbour belongs to a higher
+layer is darkened by `contact_shadow`. Layer textures go into one
+`texture_2d_array` (nearest), the splat maps into another (linear, clamped,
+non-sRGB because weights are data). One draw call per terrain.
 
 ### Flat rigs
 

@@ -136,7 +136,17 @@ cargo run -p ff-view -- model.glb --frames 5
 
 # one frame to a PNG, off-screen: for asset diffs, no window appears
 cargo run -p ff-view -- model.glb --screenshot shot.png
+
+# the same, from a fixed camera: yaw, pitch (degrees), distance, target x,y,z
+cargo run -p ff-view -- model.glb --view "15,14,9,0.5,0.6,-3" --screenshot shot.png
+
+# a terrain folder (one holding terrain.json): splat-blended ground plus its props
+cargo run -p ff-view -- path\to\terrain\meadow
 ```
+
+A folder with a `terrain.json` opens as a crystal-engine terrain rather than as a
+model listing, whether it is passed, or dropped on the window. See the
+[engine README](../../crates/crystal-engine/README.md#terrain) for the format.
 
 ```
 --info                  print the scene's (or folder's) contents and exit
@@ -147,6 +157,7 @@ cargo run -p ff-view -- model.glb --screenshot shot.png
 --backend <name>        gl | vulkan | dx12 | metal | all (default: all)
 --frames <n>            render n frames, then exit
 --screenshot <file>     render one frame off-screen, save it, and exit
+--view <y,p,d,x,y,z>    start the camera here instead of framing the scene
 ```
 
 `--info` never touches wgpu, and `--screenshot` renders into an off-screen

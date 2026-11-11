@@ -62,6 +62,9 @@ pub struct Launch {
     pub frames: Option<u32>,
     /// Render one frame off-screen, save it, and exit.
     pub screenshot: Option<PathBuf>,
+    /// `--view`: yaw and pitch in degrees, distance, then the orbit target x, y, z.
+    /// Applied to the first scene instead of the automatic framing.
+    pub view: Option<[f32; 6]>,
     /// Keep the folder panel visible even when no folder is open.
     pub always_panel: bool,
     /// First word of the window title.
@@ -78,6 +81,7 @@ impl Default for Launch {
             bind_pose: false,
             frames: None,
             screenshot: None,
+            view: None,
             always_panel: false,
             app_name: String::from("ff-view"),
         }
@@ -130,6 +134,8 @@ struct App {
     bind_pose: bool,
     frames: Option<u32>,
     screenshot: Option<PathBuf>,
+    /// Taken by the first scene installed.
+    view: Option<[f32; 6]>,
     always_panel: bool,
 
     /// Taken in `resumed`.
@@ -196,6 +202,7 @@ impl App {
             bind_pose,
             frames,
             screenshot,
+            view,
             always_panel,
             app_name,
         } = launch;
@@ -228,6 +235,7 @@ impl App {
             bind_pose,
             frames,
             screenshot,
+            view,
             always_panel,
             pending_scene,
             pending_catalog,
@@ -267,7 +275,7 @@ impl App {
             || self
                 .scene
                 .as_ref()
-                .is_none_or(|scene| scene.meshes.is_empty())
+                .is_none_or(|scene| scene.meshes.is_empty() && scene.terrains.is_empty())
     }
 
     /// The pointer position in egui points, once winit has reported one.
@@ -337,7 +345,7 @@ impl App {
             self.camera.retarget(&scene.bounds);
         } else {
             self.camera = OrbitCamera::default();
-            self.camera.frame(&scene.bounds);
+            self.frame_camera(&scene);
         }
         self.playback = playback;
         self.follow = Vec3::ZERO;
@@ -347,6 +355,15 @@ impl App {
         if let Some(window) = &self.window {
             window.set_title(&title);
             window.request_redraw();
+        }
+    }
+
+    /// Frames `scene`, or - once, for the first scene - uses the `--view` placement.
+    fn frame_camera(&mut self, scene: &Scene) {
+        self.camera.frame(&scene.bounds);
+        if let Some([yaw, pitch, distance, x, y, z]) = self.view.take() {
+            self.camera
+                .set_view(yaw.to_radians(), pitch.to_radians(), distance, Vec3::new(x, y, z));
         }
     }
 
@@ -488,6 +505,22 @@ impl App {
 
     /// A drop, a remembered folder, or a path on the command line.
     fn open_path(&mut self, path: &Path) {
+        if crystal_engine::terrain::is_terrain_folder(path) {
+            match crystal_engine::terrain::load(path) {
+                Ok(scene) => {
+                    self.catalog = None;
+                    self.selected = None;
+                    self.status = format!("Loaded terrain {}", file_name(path));
+                    self.install_scene(scene, None, false);
+                }
+                Err(error) => {
+                    self.status = format!("Could not load terrain: {error:#}");
+                    eprintln!("error: could not load terrain {}: {error:#}", path.display());
+                }
+            }
+            return;
+        }
+
         if path.is_dir() {
             match Catalog::open(path) {
                 Ok(catalog) => self.install_catalog(catalog),
@@ -714,7 +747,7 @@ impl ApplicationHandler for App {
         self.window = Some(window);
         self.last_frame = Instant::now();
 
-        self.camera.frame(&scene.bounds);
+        self.frame_camera(&scene);
         self.playback = self.playback_for(&scene);
         self.scene = Some(scene);
 

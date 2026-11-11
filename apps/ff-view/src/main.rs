@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 
 use ff_view::library::Catalog;
-use crystal_engine::loader;
+use crystal_engine::{loader, terrain};
 use ff_view::settings;
 use ff_view::ui::{self, Initial, Launch};
 
@@ -21,9 +21,10 @@ const USAGE: &str = "\
 ff-view - low-poly model viewer
 
 USAGE:
-    ff-view [model.gltf|model.glb | export-folder] [options]
+    ff-view [model.gltf|model.glb | export-folder | terrain-folder] [options]
 
     With no path, opens the picker window: drop a model or an export folder on it.
+    A folder holding a terrain.json opens as a splat-blended terrain (plus its props).
     An export folder - passed, remembered or dropped - lists its creatures and
     clips in a side panel, starting each creature on its `idle` animation. The
     last folder opened is reopened next time.
@@ -37,6 +38,9 @@ OPTIONS:
     --backend <name>        gl | vulkan | dx12 | metal | all (default: all)
     --frames <n>            render n frames, then exit (smoke test)
     --screenshot <file.png> render one frame off-screen, save it, and exit
+    --view <yaw,pitch,dist,x,y,z>
+                            start the camera here instead of framing the scene
+                            (degrees, metres; target x,y,z in world space)
     -h, --help              show this text
 
 CONTROLS:
@@ -96,6 +100,7 @@ fn main() -> Result<()> {
     launch.bind_pose = options.bind_pose;
     launch.frames = options.frames;
     launch.screenshot = options.screenshot;
+    launch.view = options.view;
 
     ui::run(launch)
 }
@@ -125,6 +130,11 @@ fn print_settings() {
 /// nothing was - into what the window starts with.
 fn load_initial(options: &Options) -> Result<Initial> {
     match options.model.clone() {
+        Some(path) if terrain::is_terrain_folder(&path) => {
+            let scene = terrain::load(&path)
+                .with_context(|| format!("could not load terrain {}", path.display()))?;
+            Ok(Initial::Scene(scene))
+        }
         Some(path) if path.is_dir() => {
             // `Catalog`'s errors already name the folder or the file inside it.
             Ok(Initial::Catalog(Catalog::open(&path)?))
@@ -157,8 +167,24 @@ struct Options {
     bind_pose: bool,
     frames: Option<u32>,
     screenshot: Option<PathBuf>,
+    view: Option<[f32; 6]>,
     backends: wgpu::Backends,
     clip: Option<String>,
+}
+
+/// `yaw,pitch,distance,x,y,z` -> six numbers.
+fn parse_view(value: &str) -> Result<[f32; 6]> {
+    let numbers = value
+        .split(',')
+        .map(|part| {
+            part.trim()
+                .parse::<f32>()
+                .with_context(|| format!("`{part}` in --view is not a number"))
+        })
+        .collect::<Result<Vec<f32>>>()?;
+    numbers
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("--view needs six numbers: yaw,pitch,distance,x,y,z"))
 }
 
 fn parse_args() -> Result<Option<Options>> {
@@ -170,6 +196,7 @@ fn parse_args() -> Result<Option<Options>> {
     let mut bind_pose = false;
     let mut frames = None;
     let mut screenshot = None;
+    let mut view = None;
     let mut backends = backends_from_env();
     let mut clip = None;
 
@@ -200,6 +227,9 @@ fn parse_args() -> Result<Option<Options>> {
                     args.next().context("--screenshot needs a path")?,
                 ));
             }
+            "--view" => {
+                view = Some(parse_view(&args.next().context("--view needs six numbers")?)?);
+            }
             other if other.starts_with('-') => bail!("unknown option `{other}`\n\n{USAGE}"),
             other => {
                 if model.is_some() {
@@ -218,6 +248,7 @@ fn parse_args() -> Result<Option<Options>> {
         bind_pose,
         frames: frames.filter(|&count| count > 0),
         screenshot,
+        view,
         backends,
         clip,
     }))
@@ -265,6 +296,7 @@ mod tests {
             bind_pose: false,
             frames: None,
             screenshot: None,
+            view: None,
             backends: wgpu::Backends::all(),
             clip: None,
         };
