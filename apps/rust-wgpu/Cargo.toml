@@ -1,0 +1,14 @@
+[package]
+name = "chris-wgpu"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+winit = "0.30.*"
+pollster = "1.0.*"
+wgpu = "30.0.*"
+
+
+env_logger = "0.11.*"
+log = "0.4.*"
