@@ -202,7 +202,7 @@ impl Renderer {
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
-                label: Some("ff-view"),
+                label: Some("crystal-engine"),
                 required_features,
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::default(),
@@ -508,7 +508,7 @@ impl Renderer {
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::cast_slice(&view_projection.0),
+            bytemuck::cast_slice(&view_projection.to_cols_array()),
         );
         self.write_object_uniforms(scene, world);
 
@@ -539,7 +539,7 @@ impl Renderer {
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::cast_slice(&view_projection.0),
+            bytemuck::cast_slice(&view_projection.to_cols_array()),
         );
         self.write_object_uniforms(scene, world);
 
@@ -827,7 +827,7 @@ impl Renderer {
                 .unwrap_or(false);
 
             values.clear();
-            values.extend_from_slice(&model.0);
+            values.extend_from_slice(&model.to_cols_array());
             values.extend_from_slice(&base_color);
             values.extend_from_slice(&[if alpha_mask { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0]);
 
@@ -836,12 +836,12 @@ impl Renderer {
                     let joints = scene.joint_matrices(world, skin_index, item.node);
                     for joint in 0..MAX_JOINTS {
                         let matrix = joints.get(joint).copied().unwrap_or(Mat4::IDENTITY);
-                        values.extend_from_slice(&matrix.0);
+                        values.extend_from_slice(&matrix.to_cols_array());
                     }
                 }
                 None => {
                     for _ in 0..MAX_JOINTS {
-                        values.extend_from_slice(&Mat4::IDENTITY.0);
+                        values.extend_from_slice(&Mat4::IDENTITY.to_cols_array());
                     }
                 }
             }

@@ -2,7 +2,8 @@
 
 A low-poly model viewer: glTF/GLB in, wgpu out. Skinning and animation clips
 work; the point is to look at exported Fossil Fighters creatures without
-bouncing through Blender, and to grow into the renderer the engine will reuse.
+bouncing through Blender. The renderer it grew is now
+[`crystal-engine`](../../crates/crystal-engine); this app is the window around it.
 
 Deliberately **not** Fossil-Fighters-specific. It consumes glTF, so anything
 `ff-export` produces - or any other exporter - opens the same way. The coupling
@@ -181,77 +182,29 @@ each frame.
 
 ## How it is put together
 
+The scene, glTF loading, animation, camera and drawing all come from
+[`crystal-engine`](../../crates/crystal-engine), whose README covers skinning,
+the renderer's frame API and the current rendering limits. What is left here is
+the app:
+
 ```text
 src/
   lib.rs         the library both binaries use
   main.rs        `ff-view`: the CLI, then `ui::run`
   bin/browser.rs `ff-browser`: the same window, panel always on
   ui.rs          the window: scene, folder panel, input, title
-  math.rs        Vec3 / Quat / Mat4 / Aabb, column-major
-  scene.rs       CPU scene: nodes, meshes, materials, textures, skins
-  loader.rs      glTF 2.0 -> scene (the only file that knows about `gltf`)
   library.rs     an export folder: manifest.json, or a scan for .glb files
   settings.rs    the last folder, remembered between launches
-  anim.rs        keyframe sampling and clip playback
-  camera.rs      orbit camera, fitted from bounds
-  renderer.rs    wgpu: pipelines, buffers, bind groups, draw loop
-  shaders/
-    model.wgsl   skinned vertex stage, two-light fragment stage
 ```
 
-The dependency direction is one-way: `loader` -> `scene` -> `renderer`. Nothing
-below `ui` knows about a window, and nothing above `renderer` knows about wgpu,
-which is what makes `--info` and the unit tests possible without a GPU. Both
-binaries are thin: they decide what to open and hand it to `ui::run`.
+Nothing below `ui` knows about a window. Both binaries are thin: they decide what
+to open and hand it to `ui::run`, which puts egui over the engine's 3D by
+inserting a pass between `Renderer::encode_scene` and `end_frame`.
 
-`Renderer` exposes the frame in three calls - `begin_frame`, `encode_scene`
-(which takes the viewport rectangle and the camera), `end_frame` - so a caller
-that wants to draw something else on top can insert a pass between them. That is
-all the window needs to put egui over the 3D, and to shrink the 3D to the area the
-panel leaves free.
-
-### Skinning
-
-Joint matrices are computed on the CPU once per frame
-(`inverse(mesh_node_world) * joint_world * inverse_bind`, per the glTF spec) and
-uploaded as a uniform array of 128 `mat4`s; the vertex shader does the four-way
-weighted sum. That is the wrong call for thousands of characters, and the right
-call for one model at a time: the sampling code stays unit-testable and the
-shader stays short. When this becomes an engine renderer, joint matrices move to
-a storage buffer and the CPU pass becomes an optional fallback.
-
-The formula collapses to identity at the rest pose, which is the cheapest way to
-tell whether a rig is being read correctly. Point it at a real file to check:
-
-```powershell
-$env:FF_VIEW_TEST_MODEL = "path\to\rigged.glb"
-cargo test -p ff-view bind_pose -- --ignored --nocapture
-```
-
-### Flat rigs
-
-Some exporters - Blender's glTF exporter among them - emit a skin's joints as
-nodes that appear in no scene graph at all, referenced only from `skin.joints`.
-Those nodes are treated as roots, because the alternative is leaving them at the
-identity and having every skinned mesh collapse to a point. One of the assets
-used to test this viewer had 62 of its 71 joints in exactly that state.
-`scene::tests::orphaned_nodes_act_as_roots` covers it.
-
-## Current limits
-
-- **No mipmaps.** Textures upload at full size and alias at distance. This is
-  the first thing that will look wrong on a big sheet.
-- **Alpha is cut-out only.** `alphaMode: MASK` discards, everything else is
-  opaque; there is no blending pipeline yet.
-- **Cubic-spline clips are approximated.** Tangents are dropped and the key
-  values are interpolated linearly. Fossil Fighters exports are linear anyway.
-- **Morph targets are skipped.** The Fossil Fighters pipeline does not produce
-  them.
-- **glTF only.** No OBJ, no FBX, no `ff-export`'s own formats. Adding a second
-  producer means writing another `-> Scene` function, not touching the renderer.
+Fossil Fighters exports use linear keyframes and no morph targets, so the
+engine's limits on cubic-spline clips and morph targets do not affect them.
 
 ## Workspace
 
 This crate is a member of the `rust-dev` workspace at the repository root,
-alongside `ff-export` and `crystal-engine`; see the root README. Shared code (a common
-format library, for example) goes in `crates/` when there is something to share.
+alongside `ff-export` and `crystal-engine`; see the root README.

@@ -1,0 +1,26 @@
+[package]
+name = "crystal-engine"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "General-purpose rendering engine on wgpu: scenes, skinning, animation, glTF loading"
+publish = false
+
+[dependencies]
+anyhow = "1"
+bytemuck = { version = "1", features = ["derive"] }
+glam = "0.30"
+gltf = "1"
+log = "0.4"
+wgpu = "30"
+winit = "0.30"
+
+[dev-dependencies]
+# Only the examples use these: they own the event loop and the logger.
+env_logger = "0.11"
+pollster = "1"
+
+# The original wgpu experiment: a window and one triangle. `cargo run -p crystal-engine --example triangle`
+[[example]]
+name = "triangle"
+path = "examples/triangle/main.rs"

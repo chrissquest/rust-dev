@@ -78,7 +78,7 @@ impl Channel {
                 transform.rotation = if self.interpolation == Interpolation::Step {
                     a
                 } else {
-                    Quat::slerp(a, b, alpha)
+                    a.slerp(b, alpha)
                 };
             }
             Values::Scale(values) => {

@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 
 use ff_view::library::Catalog;
-use ff_view::loader;
+use crystal_engine::loader;
 use ff_view::settings;
 use ff_view::ui::{self, Initial, Launch};
 

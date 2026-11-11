@@ -25,7 +25,7 @@ impl Default for Transform {
 
 impl Transform {
     pub fn to_matrix(self) -> Mat4 {
-        Mat4::from_trs(self.translation, self.rotation, self.scale)
+        crate::math::trs(self.translation, self.rotation, self.scale)
     }
 }
 
@@ -206,11 +206,9 @@ impl Scene {
         let Some(skin) = self.skins.get(skin) else {
             return Vec::new();
         };
-        let inverse_mesh = world
-            .get(mesh_node)
-            .copied()
-            .unwrap_or(Mat4::IDENTITY)
-            .inverse();
+        let inverse_mesh = crate::math::inverse_or_identity(
+            world.get(mesh_node).copied().unwrap_or(Mat4::IDENTITY),
+        );
 
         skin.joints
             .iter()
@@ -256,7 +254,7 @@ impl Scene {
                 for vertex in 0..primitive.vertex_count() {
                     let position = Vec3::from_array(primitive.positions[vertex]);
                     let point = if joints.is_empty() {
-                        model.transform_point(position)
+                        model.transform_point3(position)
                     } else {
                         skinned_position(&joints, primitive, vertex, position)
                     };
@@ -375,7 +373,7 @@ fn skinned_position(
             .get(indices[slot] as usize)
             .copied()
             .unwrap_or(Mat4::IDENTITY);
-        point += joint.transform_point(position) * weight;
+        point += joint.transform_point3(position) * weight;
         total += weight;
     }
 
@@ -413,7 +411,7 @@ mod tests {
 
         let world = scene.world_transforms(&scene.default_pose());
         assert_eq!(
-            world[1].transform_point(Vec3::ZERO),
+            world[1].transform_point3(Vec3::ZERO),
             Vec3::new(0.0, 3.0, 0.0)
         );
     }
@@ -433,7 +431,7 @@ mod tests {
 
         let world = scene.world_transforms(&scene.default_pose());
         assert_eq!(
-            world[1].transform_point(Vec3::ZERO),
+            world[1].transform_point3(Vec3::ZERO),
             Vec3::new(0.0, 7.0, 0.0)
         );
     }
@@ -442,13 +440,13 @@ mod tests {
     /// to identity at the rest pose. Run it against a rigged model with
     ///
     /// ```text
-    /// $env:FF_VIEW_TEST_MODEL = "path\to\rigged.glb"
-    /// cargo test -p ff-view bind_pose -- --ignored --nocapture
+    /// $env:CRYSTAL_TEST_MODEL = "path\to\rigged.glb"
+    /// cargo test -p crystal-engine bind_pose -- --ignored --nocapture
     /// ```
     #[test]
-    #[ignore = "needs FF_VIEW_TEST_MODEL pointing at a rigged glTF"]
+    #[ignore = "needs CRYSTAL_TEST_MODEL pointing at a rigged glTF"]
     fn bind_pose_skinning_is_identity() {
-        let Ok(path) = std::env::var("FF_VIEW_TEST_MODEL") else {
+        let Ok(path) = std::env::var("CRYSTAL_TEST_MODEL") else {
             return;
         };
         let scene = loader::load(std::path::Path::new(&path)).expect("load test model");
@@ -459,12 +457,12 @@ mod tests {
                 continue;
             };
             let skin = &scene.skins[skin_index];
-            let inverse_mesh = world[mesh_node].inverse();
+            let inverse_mesh = crate::math::inverse_or_identity(world[mesh_node]);
 
             let mut worst = 0.0f32;
             for (joint, inverse_bind) in skin.joints.iter().zip(&skin.inverse_bind) {
                 let matrix = inverse_mesh * world[*joint] * *inverse_bind;
-                for (value, identity) in matrix.0.iter().zip(Mat4::IDENTITY.0.iter()) {
+                for (value, identity) in matrix.to_cols_array().iter().zip(Mat4::IDENTITY.to_cols_array().iter()) {
                     worst = worst.max((value - identity).abs());
                 }
             }

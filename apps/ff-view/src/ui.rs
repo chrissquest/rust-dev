@@ -23,13 +23,14 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{Window, WindowId};
 
-use crate::anim::Playback;
-use crate::camera::OrbitCamera;
+use crystal_engine::anim::Playback;
+use crystal_engine::camera::OrbitCamera;
+use crystal_engine::loader;
+use crystal_engine::math::{Mat4, Vec3};
+use crystal_engine::renderer::{Renderer, Viewport};
+use crystal_engine::scene::Scene;
+
 use crate::library::Catalog;
-use crate::loader;
-use crate::math::{Mat4, Vec3};
-use crate::renderer::{Renderer, Viewport};
-use crate::scene::Scene;
 use crate::settings;
 
 /// What the window starts with.

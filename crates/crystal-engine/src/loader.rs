@@ -277,7 +277,7 @@ fn smooth_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
 
     normals
         .iter()
-        .map(|normal| normal.normalize().to_array())
+        .map(|normal| normal.normalize_or_zero().to_array())
         .collect()
 }
 
@@ -316,7 +316,7 @@ fn load_skins(document: &gltf::Document, buffers: &[gltf::buffer::Data]) -> Vec<
             let inverse_bind = skin
                 .reader(|buffer| Some(&buffers[buffer.index()].0[..]))
                 .read_inverse_bind_matrices()
-                .map(|matrices| matrices.map(Mat4::from_gltf).collect::<Vec<_>>())
+                .map(|matrices| matrices.map(|m| Mat4::from_cols_array_2d(&m)).collect::<Vec<_>>())
                 .unwrap_or_else(|| vec![Mat4::IDENTITY; joints.len()]);
 
             Skin {
