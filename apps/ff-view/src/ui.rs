@@ -20,7 +20,9 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+use winit::keyboard::{ModifiersState, PhysicalKey};
+
+use crate::input::{Action, Bindings, KeyChord};
 use winit::window::{Window, WindowId};
 
 use crystal_engine::anim::Playback;
@@ -65,6 +67,8 @@ pub struct Launch {
     /// `--view`: yaw and pitch in degrees, distance, then the orbit target x, y, z.
     /// Applied to the first scene instead of the automatic framing.
     pub view: Option<[f32; 6]>,
+    /// Which keys do what. Defaults unless the binaries load the user's overrides.
+    pub bindings: Bindings,
     /// Keep the folder panel visible even when no folder is open.
     pub always_panel: bool,
     /// First word of the window title.
@@ -82,6 +86,7 @@ impl Default for Launch {
             frames: None,
             screenshot: None,
             view: None,
+            bindings: Bindings::default(),
             always_panel: false,
             app_name: String::from("ff-view"),
         }
@@ -136,7 +141,11 @@ struct App {
     screenshot: Option<PathBuf>,
     /// Taken by the first scene installed.
     view: Option<[f32; 6]>,
+    bindings: Bindings,
     always_panel: bool,
+    /// Where the 3D view was drawn last frame, in physical pixels; picking maps the
+    /// cursor through it.
+    last_viewport: Viewport,
 
     /// Taken in `resumed`.
     pending_scene: Option<Scene>,
@@ -169,7 +178,7 @@ struct App {
     /// applied to the camera. Only the change is applied each frame, so panning
     /// is not undone by the follow.
     follow: Vec3,
-    /// Move the camera with the animated centre (on by default, `f` toggles it).
+    /// Move the camera with the animated centre (on by default, `toggle_follow` - T).
     follow_animation: bool,
     /// Set when the follow is switched back on: the next frame adopts the current
     /// offset instead of jumping the camera by it.
@@ -203,6 +212,7 @@ impl App {
             frames,
             screenshot,
             view,
+            bindings,
             always_panel,
             app_name,
         } = launch;
@@ -236,7 +246,9 @@ impl App {
             frames,
             screenshot,
             view,
+            bindings,
             always_panel,
+            last_viewport: Viewport::full(0, 0),
             pending_scene,
             pending_catalog,
             window: None,
@@ -558,51 +570,35 @@ impl App {
         Some(scene.world_transforms(&pose))
     }
 
-    fn key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode) {
-        // Navigation replaces the scene, so it cannot run while `scene` is borrowed.
-        match code {
-            KeyCode::Escape => {
-                event_loop.exit();
-                return;
-            }
-            KeyCode::ArrowUp => {
-                self.step_creature(-1);
-                return;
-            }
-            KeyCode::ArrowDown => {
-                self.step_creature(1);
-                return;
-            }
-            KeyCode::ArrowLeft => {
-                self.step_clip(-1);
-                return;
-            }
-            KeyCode::ArrowRight => {
-                self.step_clip(1);
-                return;
-            }
-            _ => {}
-        }
-
-        match code {
-            KeyCode::Space => self.playback.paused = !self.playback.paused,
-            KeyCode::KeyN | KeyCode::KeyP => {
+    /// Does whatever `action` means. Keys never reach here directly: they go
+    /// through `bindings` first, which is what makes them rebindable.
+    fn act(&mut self, event_loop: &ActiveEventLoop, action: Action) {
+        match action {
+            Action::Quit => event_loop.exit(),
+            // Navigation replaces the scene, so it runs without `scene` borrowed.
+            Action::PreviousCreature => self.step_creature(-1),
+            Action::NextCreature => self.step_creature(1),
+            Action::PreviousClip => self.step_clip(-1),
+            Action::NextClip => self.step_clip(1),
+            Action::TogglePause => self.playback.paused = !self.playback.paused,
+            Action::NextClipInFile | Action::PreviousClipInFile => {
                 let Some(scene) = &self.scene else {
                     return;
                 };
-                if code == KeyCode::KeyN {
+                if action == Action::NextClipInFile {
                     self.playback.next_clip(&scene.animations);
                 } else {
                     self.playback.previous_clip(&scene.animations);
                 }
             }
-            KeyCode::KeyW => {
+            Action::ToggleWireframe => {
                 if let Some(gpu) = &mut self.gpu {
                     self.wireframe = gpu.renderer.toggle_wireframe();
                 }
             }
-            KeyCode::KeyF => self.set_follow(!self.follow_animation),
-            KeyCode::KeyR => {
+            Action::ToggleFollow => self.set_follow(!self.follow_animation),
+            Action::FocusCursor => self.focus_under_cursor(),
+            Action::ResetCamera => {
                 self.camera.reset();
                 if let Some(scene) = &self.scene {
                     self.camera.frame(&scene.bounds);
@@ -610,7 +606,35 @@ impl App {
                 self.follow = Vec3::ZERO;
                 self.playback.restart();
             }
-            _ => {}
+        }
+    }
+
+    /// Makes the surface under the mouse the orbit centre, keeping the eye where it
+    /// is. Nothing under the cursor (sky, the panel) leaves the camera alone.
+    fn focus_under_cursor(&mut self) {
+        let Some((x, y)) = self.cursor else {
+            return;
+        };
+        let Some(ndc) = cursor_to_ndc(self.last_viewport, x, y) else {
+            return;
+        };
+        let Some(world) = self.world() else {
+            return;
+        };
+        let Some(scene) = &self.scene else {
+            return;
+        };
+
+        let viewport = self.last_viewport;
+        let aspect = viewport.width as f32 / viewport.height as f32;
+        let (origin, direction) = self.camera.ray(ndc.0, ndc.1, aspect);
+        match scene.raycast(&world, origin, direction) {
+            Some(distance) => {
+                let point = origin + direction * distance;
+                self.camera.focus_on(point);
+                self.status = format!("Focus: ({:.2}, {:.2}, {:.2})", point.x, point.y, point.z);
+            }
+            None => self.status = String::from("Nothing under the cursor to focus on"),
         }
     }
 
@@ -857,12 +881,16 @@ impl ApplicationHandler for App {
                 let PhysicalKey::Code(code) = event.physical_key else {
                     return;
                 };
-                // Holding an arrow walks the creature list; everything else acts
-                // once per press, or space would flicker and `w` would strobe.
-                if event.repeat && !acts_while_held(code) {
+                let pressed = KeyChord::pressed(code, self.modifiers);
+                let Some(action) = self.bindings.action_for(pressed) else {
+                    return;
+                };
+                // Holding a key walks the creature list; everything else acts once
+                // per press, or pause would flicker and wireframe would strobe.
+                if event.repeat && !action.repeats() {
                     return;
                 }
-                self.key(event_loop, code);
+                self.act(event_loop, action);
             }
             WindowEvent::DroppedFile(path) => self.open_path(&path),
             WindowEvent::RedrawRequested => {
@@ -954,7 +982,7 @@ impl App {
         let world = self.world();
 
         // The camera follows the animated centre so a lunge does not walk out of
-        // frame; `f` (or the panel checkbox) turns that off. Only the *change* in
+        // frame; `toggle_follow` (or the panel checkbox) turns that off. Only the *change* in
         // the offset is applied, so a middle/right-drag pan moves the camera and
         // stays moved - setting the target outright would snap it back every
         // frame. Switching the follow back on rebases instead of jumping.
@@ -989,6 +1017,7 @@ impl App {
                 None => Viewport::full(0, 0),
             }
         };
+        self.last_viewport = viewport;
 
         let Some(gpu) = &mut self.gpu else {
             return;
@@ -1281,10 +1310,15 @@ fn next_creature(catalog: &Catalog, creature: usize, delta: isize) -> Option<usi
     }
 }
 
-/// Keys that keep acting while held. The creature arrows are the only ones where
-/// repeated events are wanted; space/w/f must act once per press.
-fn acts_while_held(code: KeyCode) -> bool {
-    matches!(code, KeyCode::ArrowUp | KeyCode::ArrowDown)
+/// A cursor position (physical pixels, window space) as normalised device
+/// coordinates of the 3D viewport, or `None` when it is outside the viewport.
+fn cursor_to_ndc(viewport: Viewport, x: f32, y: f32) -> Option<(f32, f32)> {
+    if viewport.is_empty() {
+        return None;
+    }
+    let u = (x - viewport.x as f32) / viewport.width as f32;
+    let v = (y - viewport.y as f32) / viewport.height as f32;
+    ((0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v)).then(|| (u * 2.0 - 1.0, 1.0 - v * 2.0))
 }
 
 /// The window title. A scene with no source is the empty drop window, `label`
@@ -1384,6 +1418,7 @@ fn save_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use winit::keyboard::KeyCode;
 
     #[test]
     fn an_empty_scene_titles_itself_as_a_drop_target() {
@@ -1523,9 +1558,32 @@ mod tests {
 
     #[test]
     fn only_the_creature_arrows_repeat_when_held() {
-        assert!(acts_while_held(KeyCode::ArrowUp));
-        assert!(acts_while_held(KeyCode::ArrowDown));
-        assert!(!acts_while_held(KeyCode::Space));
-        assert!(!acts_while_held(KeyCode::KeyW));
+        let bindings = Bindings::default();
+        let held = |code| {
+            bindings
+                .action_for(KeyChord::key(code))
+                .is_some_and(Action::repeats)
+        };
+        assert!(held(KeyCode::ArrowUp));
+        assert!(held(KeyCode::ArrowDown));
+        assert!(!held(KeyCode::Space));
+        assert!(!held(KeyCode::KeyW));
+        assert!(!held(KeyCode::KeyF));
+    }
+
+    #[test]
+    fn the_cursor_maps_into_the_viewport_not_the_window() {
+        // A 960x800 view to the right of a 320 px panel.
+        let viewport = Viewport {
+            x: 320,
+            y: 0,
+            width: 960,
+            height: 800,
+        };
+        assert_eq!(cursor_to_ndc(viewport, 800.0, 400.0), Some((0.0, 0.0)));
+        assert_eq!(cursor_to_ndc(viewport, 320.0, 0.0), Some((-1.0, 1.0)));
+        assert_eq!(cursor_to_ndc(viewport, 1280.0, 800.0), Some((1.0, -1.0)));
+        assert_eq!(cursor_to_ndc(viewport, 100.0, 400.0), None, "over the panel");
+        assert_eq!(cursor_to_ndc(Viewport::full(0, 0), 1.0, 1.0), None);
     }
 }

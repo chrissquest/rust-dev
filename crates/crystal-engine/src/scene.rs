@@ -276,6 +276,62 @@ impl Scene {
         bounds
     }
 
+    /// Distance along a ray to the nearest triangle - meshes (skinned like the shader
+    /// does it, for the pose in `world`) and terrains. `direction` must be unit length.
+    ///
+    /// CPU and brute force: fine for a click on a few thousand triangles, which is
+    /// what it is for. Cut-out cards count as solid.
+    pub fn raycast(&self, world: &[Mat4], origin: Vec3, direction: Vec3) -> Option<f32> {
+        let mut nearest: Option<f32> = None;
+        let mut consider = |distance: Option<f32>| {
+            if let Some(distance) = distance
+                && nearest.is_none_or(|best| distance < best)
+            {
+                nearest = Some(distance);
+            }
+        };
+
+        for (index, node) in self.nodes.iter().enumerate() {
+            let Some(mesh) = node.mesh.and_then(|mesh| self.meshes.get(mesh)) else {
+                continue;
+            };
+            let joints = node
+                .skin
+                .map(|skin| self.joint_matrices(world, skin, index))
+                .unwrap_or_default();
+            let model = world.get(index).copied().unwrap_or(Mat4::IDENTITY);
+
+            for primitive in &mesh.primitives {
+                let points: Vec<Vec3> = (0..primitive.vertex_count())
+                    .map(|vertex| {
+                        let position = Vec3::from_array(primitive.positions[vertex]);
+                        if joints.is_empty() {
+                            model.transform_point3(position)
+                        } else {
+                            skinned_position(&joints, primitive, vertex, position)
+                        }
+                    })
+                    .collect();
+                for triangle in primitive.indices.chunks_exact(3) {
+                    let [a, b, c] = [0, 1, 2].map(|i| points.get(triangle[i] as usize).copied());
+                    if let (Some(a), Some(b), Some(c)) = (a, b, c) {
+                        consider(ray_triangle(origin, direction, a, b, c));
+                    }
+                }
+            }
+        }
+
+        for terrain in &self.terrains {
+            let positions = &terrain.mesh.positions;
+            for triangle in terrain.mesh.indices.chunks_exact(3) {
+                let [a, b, c] = [0, 1, 2].map(|i| Vec3::from_array(positions[triangle[i] as usize]));
+                consider(ray_triangle(origin, direction, a, b, c));
+            }
+        }
+
+        nearest
+    }
+
     /// Everything the `--info` report needs, as label/value rows.
     pub fn summary(&self) -> Vec<(String, String)> {
         let bounds = if self.bounds.is_empty() {
@@ -377,6 +433,30 @@ fn listing<'a>(total: usize, names: impl Iterator<Item = &'a str>) -> String {
     }
 }
 
+/// Möller-Trumbore, double-sided (the renderer draws both faces too).
+fn ray_triangle(origin: Vec3, direction: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<f32> {
+    let edge1 = b - a;
+    let edge2 = c - a;
+    let p = direction.cross(edge2);
+    let determinant = edge1.dot(p);
+    if determinant.abs() < 1e-9 {
+        return None;
+    }
+    let inverse = 1.0 / determinant;
+    let s = origin - a;
+    let u = s.dot(p) * inverse;
+    if !(0.0..=1.0).contains(&u) {
+        return None;
+    }
+    let q = s.cross(edge1);
+    let v = direction.dot(q) * inverse;
+    if v < 0.0 || u + v > 1.0 {
+        return None;
+    }
+    let distance = edge2.dot(q) * inverse;
+    (distance > 1e-6).then_some(distance)
+}
+
 /// The same four-joint weighted sum the vertex shader performs.
 fn skinned_position(
     joints: &[Mat4],
@@ -427,6 +507,40 @@ mod tests {
             },
             ..Default::default()
         }
+    }
+
+    /// A 2x2 quad in the XZ plane at height `y`, as one mesh on one node.
+    fn floor_scene(y: f32, translation: Vec3) -> Scene {
+        let mut scene = Scene::default();
+        scene.meshes.push(Mesh {
+            name: String::from("floor"),
+            primitives: vec![Primitive {
+                positions: vec![[-1.0, y, -1.0], [1.0, y, -1.0], [1.0, y, 1.0], [-1.0, y, 1.0]],
+                indices: vec![0, 2, 1, 0, 3, 2],
+                ..Default::default()
+            }],
+        });
+        let mut floor = node("floor", translation);
+        floor.mesh = Some(0);
+        scene.nodes.push(floor);
+        scene.roots.push(0);
+        scene
+    }
+
+    #[test]
+    fn raycast_hits_a_transformed_mesh() {
+        let scene = floor_scene(0.0, Vec3::new(0.0, 2.0, 0.0));
+        let world = scene.world_transforms(&scene.default_pose());
+        let hit = scene.raycast(&world, Vec3::new(0.5, 10.0, 0.5), Vec3::NEG_Y);
+        assert_eq!(hit, Some(8.0));
+    }
+
+    #[test]
+    fn raycast_misses_beside_and_behind() {
+        let scene = floor_scene(0.0, Vec3::ZERO);
+        let world = scene.world_transforms(&scene.default_pose());
+        assert_eq!(scene.raycast(&world, Vec3::new(3.0, 5.0, 0.0), Vec3::NEG_Y), None);
+        assert_eq!(scene.raycast(&world, Vec3::new(0.0, 5.0, 0.0), Vec3::Y), None);
     }
 
     #[test]

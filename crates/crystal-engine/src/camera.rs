@@ -76,6 +76,33 @@ impl OrbitCamera {
         self.refresh_clip();
     }
 
+    /// A world-space ray through a point on screen, given in normalised device
+    /// coordinates (-1..1, +Y up). Returns `(origin, unit direction)`.
+    pub fn ray(&self, ndc_x: f32, ndc_y: f32, aspect: f32) -> (Vec3, Vec3) {
+        let inverse = crate::math::inverse_or_identity(self.view_projection(aspect));
+        // wgpu clip space: depth 0 is the near plane, 1 the far plane.
+        let near = inverse.project_point3(Vec3::new(ndc_x, ndc_y, 0.0));
+        let far = inverse.project_point3(Vec3::new(ndc_x, ndc_y, 1.0));
+        let direction = (far - near).normalize_or_zero();
+        (near, direction)
+    }
+
+    /// Makes `point` the orbit centre without moving the eye: the view turns to
+    /// look at it, and later orbiting and zooming happen around it.
+    pub fn focus_on(&mut self, point: Vec3) {
+        let offset = self.eye() - point;
+        let distance = offset.length();
+        if !distance.is_finite() || distance < 1e-5 {
+            self.target = point;
+            return;
+        }
+        self.target = point;
+        self.distance = distance;
+        self.pitch = (offset.y / distance).clamp(-1.0, 1.0).asin().clamp(-1.5, 1.5);
+        self.yaw = offset.x.atan2(offset.z);
+        self.refresh_clip();
+    }
+
     pub fn reset(&mut self) {
         self.yaw = std::f32::consts::FRAC_PI_4;
         self.pitch = 0.35;
@@ -148,6 +175,35 @@ impl OrbitCamera {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_centre_ray_points_at_the_target() {
+        let camera = OrbitCamera {
+            target: Vec3::new(1.0, 2.0, 3.0),
+            distance: 10.0,
+            ..Default::default()
+        };
+        let (origin, direction) = camera.ray(0.0, 0.0, 1.5);
+        let to_target = (camera.target - origin).normalize();
+        assert!(direction.dot(to_target) > 0.9999, "{direction} vs {to_target}");
+    }
+
+    #[test]
+    fn focusing_keeps_the_eye_and_looks_at_the_point() {
+        let mut camera = OrbitCamera {
+            distance: 10.0,
+            ..Default::default()
+        };
+        let eye = camera.eye();
+        let point = Vec3::new(2.0, -1.0, 0.5);
+        camera.focus_on(point);
+
+        assert!((camera.eye() - eye).length() < 1e-4, "the eye moved");
+        assert_eq!(camera.target, point);
+        assert!((camera.distance - (eye - point).length()).abs() < 1e-4);
+        let (_, direction) = camera.ray(0.0, 0.0, 1.0);
+        assert!(direction.dot((point - eye).normalize()) > 0.9999);
+    }
 
     #[test]
     fn framing_a_box_keeps_it_in_front_of_the_eye() {

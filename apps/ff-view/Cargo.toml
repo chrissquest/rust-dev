@@ -21,7 +21,8 @@ rfd = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 wgpu = "30"
-winit = "0.30"
+# `serde` gives KeyCode its names ("KeyF", "ArrowUp"), which key bindings are stored as.
+winit = { version = "0.30", features = ["serde"] }
 
 # Two binaries share this package's library and its window:
 #   ff-view     the viewer: one file, a folder picker, and the CLI

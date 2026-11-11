@@ -43,20 +43,24 @@ OPTIONS:
                             (degrees, metres; target x,y,z in world space)
     -h, --help              show this text
 
-CONTROLS:
+MOUSE:
     left drag               orbit
-    right / middle drag     pan
+    right / middle drag     pan (or shift + left drag)
     wheel                   zoom
-    space                   pause / resume the clip
-    n / p                   next / previous clip in this file
-    up / down               previous / next creature (folder panel)
-    left / right            previous / next clip (folder panel)
-    w                       toggle wireframe
-    f                       toggle camera follow (on by default)
-    r                       reset the camera angle
     drop a file or folder   load it (a folder opens the panel and is remembered)
-    esc                     quit
 ";
+
+/// The usage text plus the keys as currently bound, so `--help` never lies after a
+/// rebinding.
+fn usage() -> String {
+    let mut text = String::from(USAGE);
+    text.push_str("\nKEYS (rebind under \"key_bindings\" in the settings file, see --settings):\n");
+    for line in settings::key_bindings().help_lines() {
+        text.push_str(&line);
+        text.push('\n');
+    }
+    text
+}
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(
@@ -67,7 +71,7 @@ fn main() -> Result<()> {
     .init();
 
     let Some(options) = parse_args()? else {
-        print!("{USAGE}");
+        print!("{}", usage());
         return Ok(());
     };
 
@@ -101,6 +105,7 @@ fn main() -> Result<()> {
     launch.frames = options.frames;
     launch.screenshot = options.screenshot;
     launch.view = options.view;
+    launch.bindings = settings::key_bindings();
 
     ui::run(launch)
 }
@@ -230,7 +235,7 @@ fn parse_args() -> Result<Option<Options>> {
             "--view" => {
                 view = Some(parse_view(&args.next().context("--view needs six numbers")?)?);
             }
-            other if other.starts_with('-') => bail!("unknown option `{other}`\n\n{USAGE}"),
+            other if other.starts_with('-') => bail!("unknown option `{other}`\n\n{}", usage()),
             other => {
                 if model.is_some() {
                     bail!("only one model can be given at a time");

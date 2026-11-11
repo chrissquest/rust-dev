@@ -1,6 +1,6 @@
 //! What to reopen when `ff-view` is started without arguments.
 //!
-//! One setting today - the last export folder - stored as JSON next to the
+//! The last export folder and any key-binding overrides, stored as JSON next to the
 //! user's other application data: `%APPDATA%\ff-view\settings.json` on Windows,
 //! `$XDG_CONFIG_HOME/ff-view/settings.json` elsewhere. `serde_json` is already a
 //! dependency, so no config format had to be added for this.
@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::input::{BindingOverrides, Bindings};
+
 const FILE_NAME: &str = "settings.json";
 /// Used beside the executable when no profile location can be written.
 const PORTABLE_FILE_NAME: &str = "ff-view-settings.json";
@@ -26,6 +28,9 @@ const PORTABLE_FILE_NAME: &str = "ff-view-settings.json";
 pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_folder: Option<PathBuf>,
+    /// Key bindings that differ from the defaults (see `input::Bindings`).
+    #[serde(default, skip_serializing_if = "BindingOverrides::is_empty")]
+    pub key_bindings: BindingOverrides,
 }
 
 impl Settings {
@@ -168,6 +173,23 @@ pub fn path() -> Option<PathBuf> {
         .or_else(|| candidates.first().cloned())
 }
 
+/// The key bindings: defaults, plus whatever the settings file overrides. Bad
+/// entries are reported on stderr and skipped.
+pub fn key_bindings() -> Bindings {
+    let (bindings, problems) = Bindings::with_overrides(&Settings::load().key_bindings);
+    for problem in problems {
+        eprintln!("warning: key binding ignored: {problem}");
+    }
+    bindings
+}
+
+/// Stores `bindings` (only what differs from the defaults). For the rebinding UI.
+pub fn save_key_bindings(bindings: &Bindings) -> Option<PathBuf> {
+    let mut settings = Settings::load();
+    settings.key_bindings = bindings.overrides();
+    settings.save()
+}
+
 /// Remembers `folder` as what the next argument-less launch should open, and
 /// returns the file it was written to.
 pub fn remember_folder(folder: &Path) -> Option<PathBuf> {
@@ -200,13 +222,18 @@ mod tests {
     #[test]
     fn settings_round_trip_through_json() {
         let path = scratch("round-trip");
-        let settings = Settings {
+        let mut settings = Settings {
             last_folder: Some(PathBuf::from(r"C:\models\externals")),
+            ..Default::default()
         };
+        settings
+            .key_bindings
+            .insert(String::from("focus_cursor"), vec![String::from("Ctrl+KeyF")]);
         settings.write(&path).expect("write settings");
 
         let restored = Settings::read_if_present(&path).expect("read settings");
         assert_eq!(restored.last_folder, settings.last_folder);
+        assert_eq!(restored.key_bindings, settings.key_bindings);
 
         let _ = std::fs::remove_file(&path);
     }

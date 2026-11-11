@@ -51,7 +51,7 @@ target at the new creature instead of reframing it. **↑/↓** repeat while hel
 stop at the ends of the list rather than wrapping.
 
 The camera frames the rest pose and then follows the animated centre, so a lunge
-does not walk out of frame. **F**, or the *Follow animation* checkbox in the
+does not walk out of frame. **T**, or the *Follow animation* checkbox in the
 panel, turns that follow off (it is on by default). Near and far planes track the
 zoom level, so zooming a long way out never clips the model away.
 
@@ -168,17 +168,53 @@ texture, so both work on a machine with no visible desktop.
 | Input | Action |
 | --- | --- |
 | left drag | orbit |
-| middle drag, right drag | pan |
+| middle drag, right drag, shift + left drag | pan |
 | wheel | zoom |
-| space | pause / resume the clip |
-| n / p | next / previous clip in this file |
-| up / down | previous / next creature (folder panel) |
-| left / right | previous / next clip (folder panel) |
-| w | toggle wireframe |
-| f | toggle camera follow (on by default) |
-| r | reset camera and clip |
 | drop a file or folder | load it (a folder opens the panel and is remembered) |
-| esc | quit |
+
+Default keys (all rebindable, see below):
+
+| Key | Action (`settings id`) |
+| --- | --- |
+| F | orbit around the point under the cursor (`focus_cursor`) |
+| R | reset camera and restart the clip (`reset_camera`) |
+| T | toggle camera follow, on by default (`toggle_follow`) |
+| W | toggle wireframe (`toggle_wireframe`) |
+| Space | pause / resume the clip (`toggle_pause`) |
+| N / P | next / previous clip in this file (`next_clip_in_file`, `previous_clip_in_file`) |
+| Up / Down | previous / next creature, repeats while held (`previous_creature`, `next_creature`) |
+| Left / Right | previous / next clip in the folder panel (`previous_clip`, `next_clip`) |
+| Esc | quit (`quit`) |
+
+**F** casts a ray from the cursor into the scene (meshes as currently posed, and
+terrain) and makes the hit point the orbit centre *without moving the eye*: the
+view turns to it, and from then on orbit and zoom pivot there. Pointing at empty
+sky does nothing.
+
+### Rebinding keys
+
+Keys live in `input.rs` as `Action`s; the window only ever asks the bindings which
+action a key press means, so nothing else needs to change when keys do. The
+settings file (`ff-view --settings` prints where) stores only what differs from
+the defaults:
+
+```json
+{
+  "key_bindings": {
+    "focus_cursor": ["KeyF", "Ctrl+KeyF"],
+    "toggle_follow": ["KeyL"],
+    "toggle_wireframe": []
+  }
+}
+```
+
+Key names are winit's physical `KeyCode` names (`KeyA`, `Digit1`, `F5`, `Space`,
+`ArrowUp`, ...), so a binding stays in the same place on any keyboard layout;
+`Ctrl+`, `Shift+` and `Alt+` prefixes must match exactly. An empty list unbinds an
+action, an action left out keeps its default (so new actions arrive bound), and a
+bad entry is skipped with a warning. `ff-view --help` lists the keys as currently
+bound. A rebinding popup only needs `Bindings::set`, `Bindings::conflicts` and
+`settings::save_key_bindings`.
 
 The 3D area takes pointer input wherever the cursor happens to be over it - no
 click to give it focus first - and the edge between it and the panel is a hard

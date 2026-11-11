@@ -7,9 +7,10 @@
 //!
 //! The engine does the scene, the glTF loading and the drawing. What is left
 //! here is the app: `library` is the only module that knows what an export
-//! folder looks like, `settings` remembers the last one, and `ui` is the only
-//! one that opens a window.
+//! folder looks like, `settings` remembers the last one and the key bindings,
+//! `input` maps keys to actions, and `ui` is the only one that opens a window.
 
+pub mod input;
 pub mod library;
 pub mod settings;
 pub mod ui;

@@ -25,7 +25,9 @@ fn main() -> Result<()> {
         })
         .unwrap_or_default();
 
-    ui::run(Launch::browser(initial))
+    let mut launch = Launch::browser(initial);
+    launch.bindings = settings::key_bindings();
+    ui::run(launch)
 }
 
 fn default_folder() -> Option<PathBuf> {
