@@ -2,6 +2,8 @@
 name = "cycle-of-steel"
 version = "0.1.0"
 edition = "2024"
+# The code only; assets/ is excluded, see assets/LICENSE.md.
+license = "MIT OR Apache-2.0"
 description = "Cycle of Steel: top-down roguelike shooter, ported from Unity onto crystal-engine"
 publish = false
 

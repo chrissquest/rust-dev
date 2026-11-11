@@ -68,3 +68,8 @@ movement, for example, is derived from the old force, mass and drag values and
 tested against them (`sim/player.rs`): top speed about 1.82 units per second.
 
 Units are Unity's: sprites at 64 pixels per unit, tiles half a unit, rooms 16 by 9.
+
+## Licence
+
+The code is MIT or Apache-2.0 like the rest of the repository. The files under
+`assets/` are not: see [`assets/LICENSE.md`](assets/LICENSE.md).

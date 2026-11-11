@@ -55,3 +55,6 @@ crystal-engine = { path = "../../crates/crystal-engine" }
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+
+The game assets in [`apps/cycle-of-steel/assets`](apps/cycle-of-steel/assets) are excluded: they
+are not under either licence. See that folder's [`LICENSE.md`](apps/cycle-of-steel/assets/LICENSE.md).
