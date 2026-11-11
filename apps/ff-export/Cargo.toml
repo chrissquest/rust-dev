@@ -6,6 +6,12 @@ license = "MIT OR Apache-2.0"
 description = "Fossil Fighters (NDS) -> glTF/GLB asset exporter"
 publish = false
 
+# The window app is a separate package so that building the CLI does not build Slint.
+# `cargo build` here still means "the CLI"; `cargo run -p ff-export-gui` means "the window".
+[workspace]
+members = ["gui"]
+default-members = ["."]
+
 [dependencies]
 # Stage 1 (current): crates, to reach a confirmed-working .glb quickly.
 # Stage 2: replace with dependency-free implementations once the output is verified.

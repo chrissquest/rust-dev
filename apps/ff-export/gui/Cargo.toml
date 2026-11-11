@@ -1,0 +1,31 @@
+[package]
+name = "ff-export-gui"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "A window for ff-export: pick a ROM and a folder, export every creature"
+publish = false
+
+[dependencies]
+anyhow = "1"
+ff-export = { path = ".." }
+# Native file and folder pickers. Slint deliberately has no dialogs of its own.
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+slint = { version = "1", features = ["raw-window-handle-06"] }
+
+# Reaching the native window is only needed to accept files dragged onto it.
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Ole",
+    "Win32_UI_Shell",
+] }
+
+[build-dependencies]
+slint-build = "1"

@@ -66,6 +66,24 @@ cargo run --release -- export "Fossil Fighters (USA).nds" 30 1 .\out\breme_attac
 `export` needs a clip slot because each clip names its own mesh: `export <rom> 30 1 <file>` is Breme's
 attack, and the error message lists the slots a creature actually has.
 
+## Window app
+
+`gui/` is a small [Slint](https://slint.dev) window that does one job: give it a ROM, press
+**Export all**, and say where the files should go. Drag the `.nds` onto the window or use **Browse**;
+**Export all** asks for the output folder, and both pickers reopen where you left them (kept in
+`%APPDATA%\ff-export\settings.json`, or beside the app if `FF_EXPORT_SETTINGS` points somewhere
+else). It runs the same `export::export_all` the CLI runs, so the `glb/`, `textures/` and
+`manifest.json` it writes are the same files, and the log it shows is the same table the terminal
+prints.
+
+```powershell
+cargo run -p ff-export-gui
+```
+
+The GUI is a separate package (a workspace member) rather than a feature, so `cargo build` in this
+directory still builds only the CLI and never pulls Slint. It needs a network connection the first
+time, to fetch `slint`, `slint-build` and `rfd`; after that it builds offline like everything else.
+
 ## Clip names
 
 A creature's clips are named by slot. Slot 0 is always unused, and a creature carries between four
@@ -84,4 +102,7 @@ and seven of the remaining slots.
 ## Requirements
 
 Rust 2024 edition, and a ROM you obtained legally. No game data is committed to this repository.
+
+The CLI has no OS-level dependencies. The window app needs a desktop session and, the first time it
+is built, crates.io access for `slint` and `rfd`.
 

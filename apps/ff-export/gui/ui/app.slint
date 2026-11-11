@@ -1,0 +1,131 @@
+// The whole UI: two paths, one button, a progress bar and a log.
+//
+// All of the behaviour is in src/main.rs; this file only describes the shape and
+// the names the Rust side binds to.
+
+import { Button, LineEdit, ProgressIndicator, ScrollView } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "ff-export";
+    width: 760px;
+    height: 560px;
+    background: #17171b;
+
+    in-out property <string> rom-path;
+    in-out property <string> out-path;
+    in-out property <string> status: "Pick a ROM and an output folder.";
+    in-out property <string> log-text: "No export has run yet.";
+    in-out property <float> progress: 0.0;
+    in-out property <bool> busy: false;
+
+    callback browse-rom();
+    callback browse-out();
+    callback start();
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        Text {
+            text: "Fossil Fighters asset export";
+            color: #f2f2f4;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        // ROM
+        HorizontalLayout {
+            spacing: 8px;
+            min-height: 34px;
+
+            Text {
+                text: "ROM";
+                color: #a0a0aa;
+                width: 62px;
+                vertical-alignment: center;
+            }
+            LineEdit {
+                text <=> root.rom-path;
+                enabled: !root.busy;
+                placeholder-text: "Fossil Fighters (USA).nds";
+            }
+            Button {
+                text: "Browse…";
+                enabled: !root.busy;
+                clicked => { root.browse-rom(); }
+            }
+        }
+
+        Text {
+            text: "…or drop a .nds file anywhere in this window";
+            color: #6f6f7a;
+            font-size: 11px;
+        }
+
+        // Output folder
+        HorizontalLayout {
+            spacing: 8px;
+            min-height: 34px;
+
+            Text {
+                text: "Output";
+                color: #a0a0aa;
+                width: 62px;
+                vertical-alignment: center;
+            }
+            LineEdit {
+                text <=> root.out-path;
+                enabled: !root.busy;
+                placeholder-text: "where glb/, textures/ and manifest.json go";
+            }
+            Button {
+                text: "Browse…";
+                enabled: !root.busy;
+                clicked => { root.browse-out(); }
+            }
+        }
+
+        // Action + status
+        HorizontalLayout {
+            spacing: 12px;
+            min-height: 34px;
+
+            Button {
+                text: root.busy ? "Exporting…" : "Export all";
+                // Only the ROM is required: an empty output box means "ask me when
+                // I press this".
+                enabled: !root.busy && root.rom-path != "";
+                min-width: 150px;
+                max-width: 150px;
+                clicked => { root.start(); }
+            }
+            Text {
+                text: root.status;
+                color: #d0d0d6;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+
+        ProgressIndicator {
+            progress: root.progress;
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+
+            Text {
+                // Without an explicit width the wrapped text collapses to nothing
+                // inside a ScrollView - which is how an error message can be set
+                // and still never appear.
+                width: parent.content-width;
+                text: root.log-text;
+                color: #b6b6c0;
+                font-size: 12px;
+                font-family: "Consolas";
+                wrap: word-wrap;
+                vertical-alignment: top;
+            }
+        }
+    }
+}
