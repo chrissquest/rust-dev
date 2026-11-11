@@ -7,14 +7,57 @@ license = "MIT OR Apache-2.0"
 description = "Cycle of Steel: top-down roguelike shooter, ported from Unity onto crystal-engine"
 publish = false
 
+[lib]
+# `cdylib` is what Android loads; `rlib` is what the desktop binary and tests link.
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
 anyhow = "1"
 crystal-engine = { path = "../../crates/crystal-engine" }
-env_logger = "0.11"
-# Gamepads. On Linux this needs libudev's headers at build time (libudev-dev).
-gilrs = "0.11"
 log = "0.4"
 png = "0.17"
 pollster = "1"
 wgpu = "30"
 winit = "0.30"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+env_logger = "0.11"
+# Gamepads. On Linux this needs libudev's headers at build time (libudev-dev).
+# It has no Android backend, which is why it is not a dependency there.
+gilrs = "0.11"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Routes `log` to logcat, under the tag `cycle-of-steel`.
+android_logger = "0.15"
+# NativeActivity needs no Java code in the APK, so cargo-apk can build it alone.
+winit = { version = "0.30", features = ["android-native-activity"] }
+
+# Android packaging, read by `cargo apk build -p cycle-of-steel --lib --release`.
+# See README.md, "Android".
+[package.metadata.android]
+package = "com.chrissquest.cycleofsteel"
+apk_name = "cycle-of-steel"
+build_targets = ["aarch64-linux-android"]
+# Packed into the APK and read through `assets::AssetSource::Apk`.
+assets = "assets"
+
+[package.metadata.android.sdk]
+# Android 8.0. Vulkan support is common from there on.
+min_sdk_version = 26
+target_sdk_version = 33
+
+[package.metadata.android.application]
+label = "Cycle of Steel"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+
+[package.metadata.android.application.activity]
+orientation = "sensorLandscape"
+# Handle these in the running app rather than being restarted by Android.
+config_changes = "orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation"
+
+# Test builds are signed with a key that is committed on purpose, so that every
+# build, from any machine, can be installed over the previous one. It protects
+# nothing and must never sign a store release.
+[package.metadata.android.signing.release]
+path = "android/test-signing.keystore"
+keystore_password = "android"

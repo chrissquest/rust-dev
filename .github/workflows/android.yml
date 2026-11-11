@@ -1,0 +1,74 @@
+# Builds the Cycle of Steel test APK and publishes it where a phone can fetch it.
+#
+# Every run replaces the `android-latest` pre-release, so its APK link is stable:
+# open the release page on the phone, download `cycle-of-steel.apk`, install.
+name: Android APK
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "apps/cycle-of-steel/**"
+      - "crates/crystal-engine/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  # Needed to create the release and its tag.
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+env:
+  # cargo-apk 0.10 supports NDKs up to this line; r25c's highest platform is 33.
+  NDK_VERSION: "25.2.9519653"
+  ANDROID_PLATFORM: "33"
+  BUILD_TOOLS: "34.0.0"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust target for 64-bit ARM Android
+        run: rustup target add aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: true
+
+      - name: Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-$ANDROID_PLATFORM" \
+            "build-tools;$BUILD_TOOLS" \
+            "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: cargo-apk
+        run: command -v cargo-apk || cargo install cargo-apk --version 0.10.0 --locked
+
+      - name: Build the APK
+        run: cargo apk build -p cycle-of-steel --lib --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cycle-of-steel-apk
+          path: target/release/apk/cycle-of-steel.apk
+          if-no-files-found: error
+
+      - name: Publish as the android-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest target/release/apk/cycle-of-steel.apk \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Android test build" \
+            --notes "Test build of Cycle of Steel from \`${GITHUB_REF_NAME}\` at ${GITHUB_SHA::7}. Signed with the repository's test key: not a store release. Download \`cycle-of-steel.apk\` on an Android phone and open it to install."

@@ -8,9 +8,45 @@
 //! - `view` turns world state into sprites and owns the camera.
 //! - `assets` finds and loads the files under `assets/`.
 //! - `app` is the window, the frame loop and the screenshot mode.
+//!
+//! On desktop `main.rs` starts the game. On Android there is no `main`: the system
+//! loads this library and calls [`android_main`].
 
 pub mod app;
 pub mod assets;
 pub mod input;
 pub mod sim;
 pub mod view;
+
+/// Android's entry point, called on the app's main thread once the library loads.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+fn android_main(android_app: winit::platform::android::activity::AndroidApp) {
+    use winit::event_loop::EventLoop;
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    android_logger::init_once(
+        android_logger::Config::default()
+            .with_max_level(log::LevelFilter::Info)
+            .with_tag("cycle-of-steel"),
+    );
+
+    let result = EventLoop::builder()
+        .with_android_app(android_app.clone())
+        .build()
+        .map_err(anyhow::Error::from)
+        .and_then(|event_loop| {
+            app::run(
+                app::Launch {
+                    assets: assets::AssetSource::Apk(android_app),
+                    backends: wgpu::Backends::all(),
+                    frames: None,
+                },
+                event_loop,
+            )
+        });
+    if let Err(error) = result {
+        // There is no console on a phone: logcat is the only place this shows.
+        log::error!("cycle-of-steel stopped: {error:#}");
+    }
+}

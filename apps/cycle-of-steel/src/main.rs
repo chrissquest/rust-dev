@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use crystal_engine::glam::Vec2;
 use cycle_of_steel::app::{self, Launch, Screenshot};
+use cycle_of_steel::assets::AssetSource;
+use winit::event_loop::EventLoop;
 
 const USAGE: &str = "\
 cycle-of-steel - top-down roguelike shooter
@@ -21,6 +23,8 @@ OPTIONS:
     --size <WxH>            screenshot size in pixels (default: 1280x720)
     --ticks <n>             simulation steps to run before the screenshot (default: 0)
     --move <x,y>            direction held during those steps (default: 0,0)
+    --touch <x0,y0,x1,y1>   a finger held during those steps: down at x0,y0 and
+                            dragged to x1,y1, in pixels from the top-left
     -h, --help              show this text
 
 KEYS:
@@ -41,21 +45,26 @@ fn main() -> Result<()> {
         return Ok(());
     };
 
+    let assets = AssetSource::folder(options.assets.as_deref())?;
     match options.screenshot {
         Some(path) => app::screenshot(Screenshot {
             path,
-            assets: options.assets,
+            assets,
             backends: options.backends,
             width: options.size.0,
             height: options.size.1,
             ticks: options.ticks,
             movement: options.movement,
+            touch: options.touch,
         }),
-        None => app::run(Launch {
-            assets: options.assets,
-            backends: options.backends,
-            frames: options.frames,
-        }),
+        None => app::run(
+            Launch {
+                assets,
+                backends: options.backends,
+                frames: options.frames,
+            },
+            EventLoop::new().context("could not create the event loop")?,
+        ),
     }
 }
 
@@ -67,6 +76,7 @@ struct Options {
     size: (u32, u32),
     ticks: u32,
     movement: Vec2,
+    touch: Option<(Vec2, Vec2)>,
 }
 
 fn parse_args() -> Result<Option<Options>> {
@@ -78,6 +88,7 @@ fn parse_args() -> Result<Option<Options>> {
         size: (1280, 720),
         ticks: 0,
         movement: Vec2::ZERO,
+        touch: None,
     };
 
     let mut args = std::env::args().skip(1);
@@ -95,6 +106,7 @@ fn parse_args() -> Result<Option<Options>> {
             "--size" => options.size = parse_size(&value("WxH")?)?,
             "--ticks" => options.ticks = parse_number(&value("a count")?, "a step count")?,
             "--move" => options.movement = parse_direction(&value("x,y")?)?,
+            "--touch" => options.touch = Some(parse_touch(&value("x0,y0,x1,y1")?)?),
             other => bail!("unknown option `{other}`\n\n{USAGE}"),
         }
     }
@@ -132,6 +144,18 @@ fn parse_direction(text: &str) -> Result<Vec2> {
     ))
 }
 
+/// `200,500,260,440` -> down at (200, 500), dragged to (260, 440).
+fn parse_touch(text: &str) -> Result<(Vec2, Vec2)> {
+    let numbers = text
+        .split(',')
+        .map(|part| parse_number::<f32>(part, "a number"))
+        .collect::<Result<Vec<f32>>>()?;
+    match numbers[..] {
+        [x0, y0, x1, y1] => Ok((Vec2::new(x0, y0), Vec2::new(x1, y1))),
+        _ => bail!("`{text}` is not a touch like 200,500,260,440"),
+    }
+}
+
 fn parse_backends(value: &str) -> Result<wgpu::Backends> {
     Ok(match value.trim().to_ascii_lowercase().as_str() {
         "gl" | "opengl" | "gles" => wgpu::Backends::GL,
@@ -154,5 +178,10 @@ mod tests {
         assert!(parse_size("wide").is_err());
         assert_eq!(parse_direction("-1, 0.5").unwrap(), Vec2::new(-1.0, 0.5));
         assert!(parse_direction("1").is_err());
+        assert_eq!(
+            parse_touch("200,500,260,440").unwrap(),
+            (Vec2::new(200.0, 500.0), Vec2::new(260.0, 440.0))
+        );
+        assert!(parse_touch("1,2,3").is_err());
     }
 }

@@ -3,6 +3,11 @@
 //! The frame loop is a fixed-timestep loop: real time is added to an accumulator,
 //! the simulation steps once per `sim::DT` it holds, and the leftover fraction
 //! tells the view how far to blend towards the newest step.
+//!
+//! Everything that needs a window lives in [`Graphics`], which exists only between
+//! `resumed` and `suspended`. On desktop that is the whole run. On Android the
+//! system takes the drawing surface away whenever the app leaves the screen, so
+//! `Graphics` is dropped and rebuilt while the [`World`] carries on untouched.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,13 +19,13 @@ use crystal_engine::render2d::{self, Offscreen, Renderer2d, Target};
 use crystal_engine::surface::WindowSurface;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
-use crate::assets;
-use crate::input::{Action, Bindings, Gamepads, InputState};
+use crate::assets::AssetSource;
+use crate::input::{Action, Bindings, Gamepads, InputState, TouchStick};
 use crate::sim::room::Room;
 use crate::sim::{self, World};
 use crate::view::View;
@@ -32,25 +37,27 @@ const MAX_FRAME_SECONDS: f32 = 0.25;
 
 /// How to start the game.
 pub struct Launch {
-    pub assets: Option<PathBuf>,
+    pub assets: AssetSource,
     pub backends: wgpu::Backends,
     /// Draw this many frames, then exit. A smoke test.
     pub frames: Option<u32>,
 }
 
-/// Opens the window and runs until it closes.
-pub fn run(launch: Launch) -> Result<()> {
-    let assets_dir = assets::find_dir(launch.assets.as_deref())?;
-    let event_loop = EventLoop::new().context("could not create the event loop")?;
+/// Runs the game on `event_loop` until its window closes.
+///
+/// The caller builds the event loop because Android's needs the handle the system
+/// passes to `android_main`; on desktop it is a plain `EventLoop::new()`.
+pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = App {
-        assets_dir,
+        assets: launch.assets,
         backends: launch.backends,
         frames_left: launch.frames,
         bindings: Bindings::default(),
         input: InputState::default(),
         gamepads: Gamepads::new(),
+        touch_stick: TouchStick::default(),
         world: World::new(Room::test_room()),
         accumulator: 0.0,
         last_frame: None,
@@ -64,7 +71,7 @@ pub fn run(launch: Launch) -> Result<()> {
     }
 }
 
-/// Everything that exists only while there is a window.
+/// Everything that exists only while there is a surface to draw on.
 struct Graphics {
     window: Arc<Window>,
     surface: WindowSurface,
@@ -73,13 +80,14 @@ struct Graphics {
 }
 
 struct App {
-    assets_dir: PathBuf,
+    assets: AssetSource,
     backends: wgpu::Backends,
     frames_left: Option<u32>,
 
     bindings: Bindings,
     input: InputState,
     gamepads: Gamepads,
+    touch_stick: TouchStick,
 
     world: World,
     /// Real time not yet turned into simulation steps, in seconds.
@@ -93,6 +101,7 @@ struct App {
 
 impl App {
     fn create_graphics(&self, event_loop: &ActiveEventLoop) -> Result<Graphics> {
+        // Android ignores the title and sizes: the window is the whole screen.
         let attributes = Window::default_attributes()
             .with_title("Cycle of Steel")
             .with_inner_size(LogicalSize::new(1280.0, 720.0))
@@ -107,7 +116,7 @@ impl App {
         log::info!("drawing with {} ({:?})", surface.adapter_name(), surface.backend());
 
         let mut renderer = Renderer2d::new(surface.device(), surface.queue(), surface.format());
-        let mut view = View::new(&mut renderer, &self.assets_dir)?;
+        let mut view = View::new(&mut renderer, &self.assets)?;
         view.set_room(&mut renderer, &self.world.room);
 
         Ok(Graphics {
@@ -116,6 +125,17 @@ impl App {
             renderer,
             view,
         })
+    }
+
+    /// The size of what is being drawn into, in pixels.
+    fn screen_size(&self) -> Vec2 {
+        match &self.graphics {
+            Some(graphics) => {
+                let (width, height) = graphics.surface.size();
+                Vec2::new(width as f32, height as f32)
+            }
+            None => Vec2::ONE,
+        }
     }
 
     fn frame(&mut self) {
@@ -127,7 +147,9 @@ impl App {
             .min(MAX_FRAME_SECONDS);
         self.last_frame = Some(now);
 
+        let screen = self.screen_size();
         self.gamepads.poll(&mut self.input);
+        self.input.set_touch_movement(self.touch_stick.movement(screen));
         let input = self.input.sim_input();
 
         self.accumulator += frame_seconds;
@@ -160,6 +182,7 @@ impl App {
             &self.world,
             blend,
             frame_seconds,
+            self.touch_stick.visual(screen),
         );
         graphics.surface.present(frame, encoder);
     }
@@ -179,6 +202,13 @@ impl App {
             _ => {}
         }
     }
+
+    /// Lets go of everything held. The releases never arrive once the window has
+    /// lost focus or the app has left the screen.
+    fn release_input(&mut self) {
+        self.input.release_all();
+        self.touch_stick.release();
+    }
 }
 
 impl ApplicationHandler for App {
@@ -187,12 +217,26 @@ impl ApplicationHandler for App {
             return;
         }
         match self.create_graphics(event_loop) {
-            Ok(graphics) => self.graphics = Some(graphics),
+            Ok(graphics) => {
+                self.graphics = Some(graphics);
+                // Time spent away is not game time.
+                self.last_frame = None;
+                event_loop.set_control_flow(ControlFlow::Poll);
+            }
             Err(error) => {
                 self.error = Some(error);
                 event_loop.exit();
             }
         }
+    }
+
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        // The surface is about to become invalid: drop everything built on it. The
+        // world stays, so the game is exactly where it was on return.
+        self.graphics = None;
+        self.release_input();
+        // Nothing to draw and nothing to simulate: sleep until the system wakes us.
+        event_loop.set_control_flow(ControlFlow::Wait);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window: WindowId, event: WindowEvent) {
@@ -203,7 +247,7 @@ impl ApplicationHandler for App {
                     graphics.surface.resize(size);
                 }
             }
-            WindowEvent::Focused(false) => self.input.release_all(),
+            WindowEvent::Focused(false) => self.release_input(),
             WindowEvent::KeyboardInput { event, .. } => {
                 let PhysicalKey::Code(key) = event.physical_key else {
                     return;
@@ -212,6 +256,11 @@ impl ApplicationHandler for App {
                 if let Some(action) = self.input.key(&self.bindings, key, pressed) {
                     self.command(action, event_loop);
                 }
+            }
+            WindowEvent::Touch(touch) => {
+                let position = Vec2::new(touch.location.x as f32, touch.location.y as f32);
+                let screen = self.screen_size();
+                self.touch_stick.touch(touch.id, touch.phase, position, screen);
             }
             WindowEvent::RedrawRequested => {
                 self.frame();
@@ -236,7 +285,7 @@ impl ApplicationHandler for App {
 /// What `--screenshot` renders.
 pub struct Screenshot {
     pub path: PathBuf,
-    pub assets: Option<PathBuf>,
+    pub assets: AssetSource,
     pub backends: wgpu::Backends,
     pub width: u32,
     pub height: u32,
@@ -244,30 +293,49 @@ pub struct Screenshot {
     pub ticks: u32,
     /// The movement input held during those steps.
     pub movement: Vec2,
+    /// A finger held on the screen during those steps: where it went down and
+    /// where it was dragged to, in pixels from the top-left. Drives the on-screen
+    /// stick exactly as a real touch would.
+    pub touch: Option<(Vec2, Vec2)>,
 }
 
 /// Runs the game for a while with no window, draws one frame off-screen and saves
 /// it as a PNG. Needs a GPU or a software rasteriser, but no display.
 pub fn screenshot(options: Screenshot) -> Result<()> {
-    let assets_dir = assets::find_dir(options.assets.as_deref())?;
+    let screen = Vec2::new(options.width as f32, options.height as f32);
+
+    let mut touch_stick = TouchStick::default();
+    if let Some((down, dragged)) = options.touch {
+        touch_stick.touch(0, TouchPhase::Started, down, screen);
+        touch_stick.touch(0, TouchPhase::Moved, dragged, screen);
+    }
+    let mut input = InputState::default();
+    input.set_pad_movement(options.movement);
+    input.set_touch_movement(touch_stick.movement(screen));
+    let sim_input = input.sim_input();
 
     let mut world = World::new(Room::test_room());
-    let input = sim::Input {
-        movement: options.movement.clamp_length_max(1.0),
-    };
     for _ in 0..options.ticks {
-        world.step(&input);
+        world.step(&sim_input);
     }
 
     let (device, queue) = pollster::block_on(render2d::headless_device(options.backends))?;
     let mut renderer = Renderer2d::new(&device, &queue, render2d::OFFSCREEN_FORMAT);
-    let mut view = View::new(&mut renderer, &assets_dir)?;
+    let mut view = View::new(&mut renderer, &options.assets)?;
     view.set_room(&mut renderer, &world.room);
 
     let offscreen = Offscreen::new(&device, options.width, options.height);
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("screenshot") });
-    view.draw(&mut renderer, &mut encoder, offscreen.target(), &world, 1.0, 0.0);
+    view.draw(
+        &mut renderer,
+        &mut encoder,
+        offscreen.target(),
+        &world,
+        1.0,
+        0.0,
+        touch_stick.visual(screen),
+    );
     queue.submit(std::iter::once(encoder.finish()));
 
     let pixels = offscreen.read_rgba(&device, &queue)?;

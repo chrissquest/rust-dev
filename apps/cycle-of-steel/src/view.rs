@@ -4,15 +4,15 @@
 //! steps and blends between them, so drawing at 144 Hz shows motion between the
 //! 60 Hz steps instead of repeating them.
 
-use std::path::Path;
-
 use anyhow::Result;
 use crystal_engine::camera2d::Camera2d;
 use crystal_engine::glam::{Vec2, Vec3};
 use crystal_engine::render2d::{BatchId, DrawList, Pass, Renderer2d, Target, TextureId};
+use crystal_engine::scene::{Texture, TextureFilter};
 use crystal_engine::sprite::{Grid, Sheet, Sprite};
 
-use crate::assets::{self, PIXELS_PER_UNIT};
+use crate::assets::{AssetSource, PIXELS_PER_UNIT};
+use crate::input::StickVisual;
 use crate::sim::World;
 use crate::sim::player::Facing;
 use crate::sim::room::{self, Room};
@@ -31,6 +31,13 @@ const Z_TILES: f32 = 0.0;
 const Z_ENTITIES: f32 = 0.1;
 
 const CLEAR_COLOR: [f32; 4] = [0.012, 0.012, 0.016, 1.0];
+
+/// The on-screen stick: a faint base with a brighter knob a third of its size.
+const STICK_BASE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.16];
+const STICK_KNOB_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.42];
+const STICK_KNOB_SCALE: f32 = 0.38;
+/// Side of the generated disc texture, in pixels.
+const DISC_PIXELS: u32 = 128;
 
 const TILE_PIXELS: u32 = 32;
 const PLAYER_FRAME_PIXELS: u32 = 32;
@@ -55,18 +62,22 @@ pub struct View {
     /// False until the first frame, which places the camera without easing.
     camera_placed: bool,
     list: DrawList,
+
+    /// A soft white disc, for the touch stick.
+    disc: TextureId,
+    overlay: DrawList,
 }
 
 impl View {
     /// Loads the textures every room needs.
-    pub fn new(renderer: &mut Renderer2d, assets_dir: &Path) -> Result<Self> {
-        let tiles_texture = assets::load_sprite(assets_dir, "main_dark_compound")?;
+    pub fn new(renderer: &mut Renderer2d, assets: &AssetSource) -> Result<Self> {
+        let tiles_texture = assets.sprite("main_dark_compound")?;
         let tileset = Sheet::of(&tiles_texture, PIXELS_PER_UNIT).grid(TILE_PIXELS, TILE_PIXELS);
         let tiles = renderer.add_texture(&tiles_texture);
 
         let mut frames = None;
         let mut load_player = |name: &str| -> Result<TextureId> {
-            let texture = assets::load_sprite(assets_dir, name)?;
+            let texture = assets.sprite(name)?;
             frames.get_or_insert(
                 Sheet::of(&texture, PIXELS_PER_UNIT).grid(PLAYER_FRAME_PIXELS, PLAYER_FRAME_PIXELS),
             );
@@ -77,6 +88,7 @@ impl View {
         let left = load_player("player_run_left")?;
         let right = load_player("player_run_right")?;
         let frames = frames.expect("four sheets were loaded");
+        let disc = renderer.add_texture(&disc_texture(DISC_PIXELS));
 
         Ok(Self {
             tiles,
@@ -92,6 +104,8 @@ impl View {
             camera: Camera2d::new(Vec2::ZERO, VIEW_HEIGHT),
             camera_placed: false,
             list: DrawList::new(),
+            disc,
+            overlay: DrawList::new(),
         })
     }
 
@@ -112,6 +126,8 @@ impl View {
     ///
     /// `blend` is how far the frame is between the previous simulation step (0) and
     /// the current one (1); `frame_seconds` is the time since the last drawn frame.
+    /// `stick` is the on-screen stick to draw over the world, if a finger holds one.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
         renderer: &mut Renderer2d,
@@ -120,6 +136,7 @@ impl View {
         world: &World,
         blend: f32,
         frame_seconds: f32,
+        stick: Option<StickVisual>,
     ) {
         let aspect = target.width.max(1) as f32 / target.height.max(1) as f32;
         let player_position = world
@@ -160,6 +177,45 @@ impl View {
             },
             &self.list,
         );
+
+        if let Some(stick) = stick {
+            self.draw_stick(renderer, encoder, target, stick);
+        }
+    }
+
+    /// A second pass in pixel space, over the finished world.
+    fn draw_stick(
+        &mut self,
+        renderer: &mut Renderer2d,
+        encoder: &mut wgpu::CommandEncoder,
+        target: Target<'_>,
+        stick: StickVisual,
+    ) {
+        let (width, height) = (target.width as f32, target.height as f32);
+        // The stick is in window pixels (y down); the pixel camera's y points up.
+        let flip = |point: Vec2| Vec3::new(point.x, height - point.y, 0.0);
+        let full = [0.0, 0.0, 1.0, 1.0];
+        let base_size = stick.radius * 2.0;
+        let knob_size = base_size * STICK_KNOB_SCALE;
+
+        self.overlay.clear();
+        self.overlay.sprites(
+            self.disc,
+            &[
+                Sprite::new(flip(stick.base), [base_size, base_size], full).with_color(STICK_BASE_COLOR),
+                Sprite::new(flip(stick.knob), [knob_size, knob_size], full).with_color(STICK_KNOB_COLOR),
+            ],
+        );
+        renderer.draw(
+            encoder,
+            target,
+            &Pass {
+                view_projection: Camera2d::pixels(width, height).view_projection(),
+                clear: None,
+                viewport: None,
+            },
+            &self.overlay,
+        );
     }
 
     /// Moves the camera towards the player, kept inside the room. Same rule as
@@ -175,5 +231,42 @@ impl View {
             self.camera.center = wanted.center;
             self.camera_placed = true;
         }
+    }
+}
+
+/// A white disc with a soft edge on a transparent background, sampled smoothly so
+/// it stays round at any size.
+fn disc_texture(size: u32) -> Texture {
+    let radius = size as f32 * 0.5;
+    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
+            let offset = Vec2::new(x as f32 + 0.5 - radius, y as f32 + 0.5 - radius);
+            // Opaque inside, fading out over the last two pixels before the rim.
+            let alpha = ((radius - offset.length()) / 2.0).clamp(0.0, 1.0);
+            rgba.extend_from_slice(&[255, 255, 255, (alpha * 255.0).round() as u8]);
+        }
+    }
+    Texture {
+        name: "disc".to_string(),
+        width: size,
+        height: size,
+        rgba,
+        filter: TextureFilter::Linear,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disc_is_solid_in_the_middle_and_clear_in_the_corners() {
+        let disc = disc_texture(32);
+        let alpha = |x: u32, y: u32| disc.rgba[((y * 32 + x) * 4 + 3) as usize];
+        assert_eq!(alpha(16, 16), 255);
+        assert_eq!(alpha(0, 0), 0);
+        assert_eq!(alpha(31, 31), 0);
+        assert_eq!(disc.rgba.len(), 32 * 32 * 4);
     }
 }

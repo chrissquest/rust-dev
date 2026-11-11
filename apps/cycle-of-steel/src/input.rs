@@ -6,6 +6,7 @@
 //! per step. Bindings are data so that a rebinding screen can edit them later.
 
 use crystal_engine::glam::Vec2;
+use winit::event::TouchPhase;
 use winit::keyboard::KeyCode;
 
 use crate::sim;
@@ -82,6 +83,8 @@ pub struct InputState {
     down: Vec<KeyCode>,
     /// The gamepad's contribution to movement, already dead-zoned.
     pad_movement: Vec2,
+    /// The on-screen stick's contribution to movement.
+    touch_movement: Vec2,
 }
 
 impl InputState {
@@ -110,6 +113,11 @@ impl InputState {
         self.held = [0; Action::COUNT];
         self.down.clear();
         self.pad_movement = Vec2::ZERO;
+        self.touch_movement = Vec2::ZERO;
+    }
+
+    pub fn set_touch_movement(&mut self, movement: Vec2) {
+        self.touch_movement = movement.clamp_length_max(1.0);
     }
 
     pub fn set_pad_movement(&mut self, stick: Vec2) {
@@ -129,9 +137,11 @@ impl InputState {
             axis(Action::MoveRight, Action::MoveLeft),
             axis(Action::MoveUp, Action::MoveDown),
         );
-        // Keys give a full-speed direction; the stick can also walk slowly.
+        // Keys give a full-speed direction; the sticks can also walk slowly.
         let movement = if keys != Vec2::ZERO {
             keys.normalize()
+        } else if self.touch_movement != Vec2::ZERO {
+            self.touch_movement
         } else {
             self.pad_movement
         };
@@ -150,12 +160,103 @@ fn apply_deadzone(stick: Vec2) -> Vec2 {
     stick / length * scaled
 }
 
+/// The on-screen stick's radius, as a fraction of the screen's height.
+const TOUCH_STICK_RADIUS: f32 = 0.14;
+/// Drags shorter than this fraction of the radius do not move the player, so a
+/// resting thumb does not creep.
+const TOUCH_STICK_DEADZONE: f32 = 0.12;
+
+/// Where to draw the on-screen stick, in pixels from the screen's top-left.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StickVisual {
+    /// Where the finger first went down: the middle of the stick.
+    pub base: Vec2,
+    /// The knob, held within `radius` of the base.
+    pub knob: Vec2,
+    pub radius: f32,
+}
+
+/// A floating virtual stick for movement.
+///
+/// The first finger to land on the left half of the screen becomes the stick: where
+/// it lands is the centre, and dragging away from there is the direction. Other
+/// fingers are ignored, and the right half is left free for aiming later.
+#[derive(Default)]
+pub struct TouchStick {
+    /// The finger driving the stick: its id, where it landed and where it is now,
+    /// in pixels from the top-left.
+    held: Option<(u64, Vec2, Vec2)>,
+}
+
+impl TouchStick {
+    /// Feeds one touch event. `position` and `screen` are in pixels.
+    pub fn touch(&mut self, finger: u64, phase: TouchPhase, position: Vec2, screen: Vec2) {
+        match phase {
+            TouchPhase::Started => {
+                if self.held.is_none() && position.x < screen.x * 0.5 {
+                    self.held = Some((finger, position, position));
+                }
+            }
+            TouchPhase::Moved => {
+                if let Some((held, _, current)) = self.held.as_mut()
+                    && *held == finger
+                {
+                    *current = position;
+                }
+            }
+            TouchPhase::Ended | TouchPhase::Cancelled => {
+                if self.held.is_some_and(|(held, _, _)| held == finger) {
+                    self.held = None;
+                }
+            }
+        }
+    }
+
+    /// Lets go of the stick, e.g. when the app is sent to the background.
+    pub fn release(&mut self) {
+        self.held = None;
+    }
+
+    /// The movement the stick asks for: length 0..=1, y up.
+    pub fn movement(&self, screen: Vec2) -> Vec2 {
+        let Some((_, base, current)) = self.held else {
+            return Vec2::ZERO;
+        };
+        let radius = stick_radius(screen);
+        // Screen y grows downwards; the game's y grows upwards.
+        let drag = Vec2::new(current.x - base.x, base.y - current.y) / radius;
+        let length = drag.length();
+        if length <= TOUCH_STICK_DEADZONE {
+            return Vec2::ZERO;
+        }
+        let scaled = ((length - TOUCH_STICK_DEADZONE) / (1.0 - TOUCH_STICK_DEADZONE)).min(1.0);
+        drag / length * scaled
+    }
+
+    /// Where to draw the stick, or `None` while no finger holds it.
+    pub fn visual(&self, screen: Vec2) -> Option<StickVisual> {
+        let (_, base, current) = self.held?;
+        let radius = stick_radius(screen);
+        Some(StickVisual {
+            base,
+            knob: base + (current - base).clamp_length_max(radius),
+            radius,
+        })
+    }
+}
+
+fn stick_radius(screen: Vec2) -> f32 {
+    (screen.y * TOUCH_STICK_RADIUS).max(1.0)
+}
+
 /// Connected gamepads. Missing controller support on a machine is not an error:
 /// the game simply runs on the keyboard.
 pub struct Gamepads {
+    #[cfg(not(target_os = "android"))]
     gilrs: Option<gilrs::Gilrs>,
 }
 
+#[cfg(not(target_os = "android"))]
 impl Gamepads {
     pub fn new() -> Self {
         let gilrs = match gilrs::Gilrs::new() {
@@ -193,6 +294,17 @@ impl Gamepads {
         }
         state.set_pad_movement(movement);
     }
+}
+
+/// gilrs has no Android backend. Controllers there will come through Android's own
+/// key and stick events; until that is wired up, Android plays by touch.
+#[cfg(target_os = "android")]
+impl Gamepads {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn poll(&mut self, _state: &mut InputState) {}
 }
 
 impl Default for Gamepads {
@@ -278,5 +390,62 @@ mod tests {
         // The key can be pressed again afterwards.
         press(&mut state, KeyCode::KeyW);
         assert_eq!(state.sim_input().movement, Vec2::new(0.0, 1.0));
+    }
+
+    const SCREEN: Vec2 = Vec2::new(2000.0, 1000.0);
+
+    #[test]
+    fn touch_stick_starts_on_the_left_half_only() {
+        let mut stick = TouchStick::default();
+        stick.touch(1, TouchPhase::Started, Vec2::new(1500.0, 500.0), SCREEN);
+        assert_eq!(stick.visual(SCREEN), None, "right half is not the stick");
+
+        stick.touch(2, TouchPhase::Started, Vec2::new(300.0, 700.0), SCREEN);
+        assert_eq!(stick.movement(SCREEN), Vec2::ZERO, "no drag yet");
+        assert!(stick.visual(SCREEN).is_some());
+    }
+
+    #[test]
+    fn dragging_up_and_right_moves_up_and_right() {
+        let mut stick = TouchStick::default();
+        stick.touch(7, TouchPhase::Started, Vec2::new(300.0, 700.0), SCREEN);
+        // Radius is 140 px. Screen y shrinks going up.
+        stick.touch(7, TouchPhase::Moved, Vec2::new(370.0, 630.0), SCREEN);
+        let movement = stick.movement(SCREEN);
+        assert!(movement.x > 0.0 && movement.y > 0.0);
+        assert!((movement.x - movement.y).abs() < 1e-6);
+        assert!(movement.length() < 1.0, "a partial drag walks slower");
+
+        // Far past the rim is still full speed, and the knob stays on the rim.
+        stick.touch(7, TouchPhase::Moved, Vec2::new(300.0, 100.0), SCREEN);
+        assert_eq!(stick.movement(SCREEN), Vec2::new(0.0, 1.0));
+        let visual = stick.visual(SCREEN).unwrap();
+        assert_eq!(visual.knob, Vec2::new(300.0, 700.0 - visual.radius));
+    }
+
+    #[test]
+    fn only_the_holding_finger_moves_or_releases_the_stick() {
+        let mut stick = TouchStick::default();
+        stick.touch(1, TouchPhase::Started, Vec2::new(300.0, 700.0), SCREEN);
+        stick.touch(1, TouchPhase::Moved, Vec2::new(440.0, 700.0), SCREEN);
+        // A second finger elsewhere changes nothing, whatever it does.
+        stick.touch(2, TouchPhase::Started, Vec2::new(100.0, 100.0), SCREEN);
+        stick.touch(2, TouchPhase::Moved, Vec2::new(100.0, 900.0), SCREEN);
+        stick.touch(2, TouchPhase::Ended, Vec2::new(100.0, 900.0), SCREEN);
+        assert_eq!(stick.movement(SCREEN), Vec2::new(1.0, 0.0));
+
+        stick.touch(1, TouchPhase::Ended, Vec2::new(440.0, 700.0), SCREEN);
+        assert_eq!(stick.movement(SCREEN), Vec2::ZERO);
+        assert_eq!(stick.visual(SCREEN), None);
+    }
+
+    #[test]
+    fn touch_beats_the_pad_and_keys_beat_touch() {
+        let mut state = InputState::default();
+        state.set_pad_movement(Vec2::new(1.0, 0.0));
+        state.set_touch_movement(Vec2::new(0.0, 0.5));
+        assert_eq!(state.sim_input().movement, Vec2::new(0.0, 0.5));
+        press(&mut state, KeyCode::KeyA);
+        assert_eq!(state.sim_input().movement, Vec2::new(-1.0, 0.0));
     }
 }

@@ -39,8 +39,10 @@ impl Camera2d {
         }
     }
 
-    /// A camera whose world units are pixels with the origin top-left and y down:
-    /// the usual space for HUD and menu drawing.
+    /// A camera whose world units are the target's pixels, origin bottom-left and y
+    /// up: the space for HUD and menu drawing. y points up, as in the world, so
+    /// sprites are the right way up; a position that came from the window (y down)
+    /// is flipped with `height - y`.
     pub fn pixels(width: f32, height: f32) -> PixelCamera {
         PixelCamera { width, height }
     }
@@ -96,8 +98,7 @@ pub struct PixelCamera {
 
 impl PixelCamera {
     pub fn view_projection(&self) -> Mat4 {
-        // top = 0 and bottom = height flips y so it grows downwards.
-        Mat4::orthographic_rh(0.0, self.width.max(1.0), self.height.max(1.0), 0.0, -1.0, 1.0)
+        Mat4::orthographic_rh(0.0, self.width.max(1.0), 0.0, self.height.max(1.0), -1.0, 1.0)
     }
 }
 
@@ -147,11 +148,11 @@ mod tests {
     }
 
     #[test]
-    fn pixel_camera_puts_the_origin_top_left() {
+    fn pixel_camera_puts_the_origin_bottom_left() {
         let matrix = Camera2d::pixels(200.0, 100.0).view_projection();
-        let top_left = matrix * Vec4::new(0.0, 0.0, 0.0, 1.0);
-        assert!((top_left.x + 1.0).abs() < 1e-6 && (top_left.y - 1.0).abs() < 1e-6);
-        let bottom_right = matrix * Vec4::new(200.0, 100.0, 0.0, 1.0);
-        assert!((bottom_right.x - 1.0).abs() < 1e-6 && (bottom_right.y + 1.0).abs() < 1e-6);
+        let bottom_left = matrix * Vec4::new(0.0, 0.0, 0.0, 1.0);
+        assert!((bottom_left.x + 1.0).abs() < 1e-6 && (bottom_left.y + 1.0).abs() < 1e-6);
+        let top_right = matrix * Vec4::new(200.0, 100.0, 0.0, 1.0);
+        assert!((top_right.x - 1.0).abs() < 1e-6 && (top_right.y - 1.0).abs() < 1e-6);
     }
 }
