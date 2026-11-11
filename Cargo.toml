@@ -5,17 +5,17 @@
 [workspace]
 resolver = "3"
 members = [
+    "apps/crystal-engine",
     "apps/ff-export",
-    "apps/ff-export/gui",
+    "apps/ff-export-gui",
     "apps/ff-view",
-    "apps/rust-wgpu",
 ]
 # A plain `cargo build` skips the Slint GUI, as building ff-export's CLI always has.
 # Build it with `cargo build -p ff-export-gui`.
 default-members = [
+    "apps/crystal-engine",
     "apps/ff-export",
     "apps/ff-view",
-    "apps/rust-wgpu",
 ]
 
 [profile.release]

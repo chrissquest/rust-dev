@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 description = "Fossil Fighters (NDS) -> glTF/GLB asset exporter"
 publish = false
 
-# The window app (`gui/`) is a separate package so that building the CLI does not build Slint.
+# The window app (`apps/ff-export-gui`) is a separate package so that building the CLI does not build Slint.
 # The root workspace lists it as a member but leaves it out of `default-members`.
 
 [dependencies]

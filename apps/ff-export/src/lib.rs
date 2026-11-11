@@ -11,7 +11,8 @@
 //! ```
 //!
 //! Every layer is validated against the corpora produced earlier in the companion
-//! `chris-wgpu` project, so "done" is a byte comparison rather than an opinion.
+//! `chris-wgpu` project (now `apps/crystal-engine`), so "done" is a byte comparison
+//! rather than an opinion.
 //!
 //! Note on provenance: this is an independent implementation. The formats were
 //! derived from byte-level analysis of this ROM, from the Nintendo DS hardware

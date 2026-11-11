@@ -5,7 +5,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use application::{App};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Starting chris-wgpu application");
+    println!("Starting crystal-engine");
     // Create the event loop
     let event_loop = EventLoop::new()?;
 
@@ -18,6 +18,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Run the application by passing a mutable reference to your handler
     event_loop.run_app(&mut app)?;
 
-    println!("Stopped chris-wgpu application");
+    println!("Stopped crystal-engine");
     Ok(())
 }

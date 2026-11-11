@@ -253,5 +253,5 @@ used to test this viewer had 62 of its 71 joints in exactly that state.
 ## Workspace
 
 This crate is a member of the `rust-dev` workspace at the repository root,
-alongside `ff-export` and `rust-wgpu`; see the root README. Shared code (a common
+alongside `ff-export` and `crystal-engine`; see the root README. Shared code (a common
 format library, for example) goes in `crates/` when there is something to share.

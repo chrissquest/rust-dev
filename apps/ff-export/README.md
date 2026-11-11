@@ -68,7 +68,7 @@ attack, and the error message lists the slots a creature actually has.
 
 ## Window app
 
-`gui/` is a small [Slint](https://slint.dev) window that does one job: give it a ROM, press
+[`ff-export-gui`](../ff-export-gui) is a small [Slint](https://slint.dev) window that does one job: give it a ROM, press
 **Export all**, and say where the files should go. Drag the `.nds` onto the window or use **Browse**;
 **Export all** asks for the output folder, and both pickers reopen where you left them (kept in
 `%APPDATA%\ff-export\settings.json`, or beside the app if `FF_EXPORT_SETTINGS` points somewhere
@@ -80,8 +80,8 @@ prints.
 cargo run -p ff-export-gui
 ```
 
-The GUI is a separate package (a workspace member) rather than a feature, so `cargo build` in this
-directory still builds only the CLI and never pulls Slint. It needs a network connection the first
+The GUI is a separate package rather than a feature, so building `ff-export` (`cargo build` in this
+directory, or a plain `cargo build` at the repo root) builds only the CLI and never pulls Slint. It needs a network connection the first
 time, to fetch `slint`, `slint-build` and `rfd`; after that it builds offline like everything else.
 
 ## Clip names

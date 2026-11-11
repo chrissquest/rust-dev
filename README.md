@@ -5,13 +5,16 @@ All of them share one Cargo workspace, one lockfile and one `target/`.
 
 | App | Package | What it is |
 | --- | --- | --- |
-| [`apps/ff-export`](apps/ff-export) | `ff-export`, `ff-export-gui` | Fossil Fighters (NDS) -> glTF/GLB asset exporter, CLI plus a Slint window |
+| [`apps/crystal-engine`](apps/crystal-engine) | `crystal-engine` | General-purpose rendering engine on wgpu + winit (currently a triangle demo) |
+| [`apps/ff-export`](apps/ff-export) | `ff-export` | Fossil Fighters (NDS) -> glTF/GLB asset exporter (CLI and library) |
+| [`apps/ff-export-gui`](apps/ff-export-gui) | `ff-export-gui` | Slint window for `ff-export`: pick a ROM, export everything |
 | [`apps/ff-view`](apps/ff-view) | `ff-view` | Low-poly glTF model viewer and browser on wgpu |
-| [`apps/rust-wgpu`](apps/rust-wgpu) | `chris-wgpu` | wgpu + winit rendering playground |
 
-`ff-export` and `rust-wgpu` used to be their own repositories
-(`chrissquest/ff-export`, `chrissquest/rust-wgpu`). Their full commit history was
-merged in here, so `git log --follow apps/ff-export/src/lib.rs` goes all the way back.
+Each folder under `apps/` is named after the package it holds.
+
+`ff-export` and `crystal-engine` (then `rust-wgpu`/`chris-wgpu`) used to be their own
+repositories (`chrissquest/ff-export`, `chrissquest/rust-wgpu`). Their full commit history
+was merged in here, so `git log --follow apps/ff-export/src/lib.rs` goes all the way back.
 
 ## Building
 
@@ -20,7 +23,7 @@ cargo build                      # every app except the Slint GUI
 cargo run -p ff-export -- --help
 cargo run -p ff-export-gui       # the exporter's window
 cargo run -p ff-view
-cargo run -p chris-wgpu
+cargo run -p crystal-engine
 ```
 
 ## Layout

@@ -1,6 +1,6 @@
-# chris-wgpu
+# crystal-engine
 
-Experimenting with rendering APIs in Rust using
+A general-purpose rendering engine, growing out of experiments with rendering APIs in Rust using
 [`wgpu`](https://wgpu.rs/).
 
 ## Libraries
@@ -35,7 +35,6 @@ cargo build --release
 ```
 .
 ├── Cargo.toml
-├── Cargo.lock
 └── src
     ├── main.rs                 # Entry point: creates the EventLoop, sets ControlFlow::Wait, runs the App
     ├── application.rs          # winit ApplicationHandler impl: window creation + event routing
