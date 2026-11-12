@@ -129,6 +129,8 @@ pub struct View {
     gun_sprites: Vec<Option<ResolvedSprite>>,
     bullet_sprites: Vec<Option<ResolvedSprite>>,
     effect_sprites: Vec<Option<ResolvedSprite>>,
+    /// Per gun: a laser's start cap, middle stretch and end cap.
+    laser_sprites: Vec<[Option<ResolvedSprite>; 3]>,
     shadow: ResolvedSprite,
     /// The player standing still. The run sheets are used only while moving.
     standing: ResolvedSprite,
@@ -137,7 +139,10 @@ pub struct View {
 
     /// The camera shake in progress.
     shake: ShakeFile,
-    shake_elapsed: f32,
+    /// Seconds of shaking left.
+    shake_left: f32,
+    /// Runs on through every shake: where the wobble is in its cycle.
+    shake_clock: f32,
 }
 
 impl View {
@@ -192,13 +197,15 @@ impl View {
             gun_sprites: Vec::new(),
             bullet_sprites: Vec::new(),
             effect_sprites: Vec::new(),
+            laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
             shadow: ResolvedSprite::EMPTY,
             standing: ResolvedSprite::EMPTY,
             left_hand: ResolvedSprite::EMPTY,
             right_hand: ResolvedSprite::EMPTY,
             shake: ShakeFile::default(),
-            shake_elapsed: 0.0,
+            shake_left: 0.0,
+            shake_clock: 0.0,
         };
 
         view.shadow = view.sprite(renderer, "shadow")?;
@@ -210,6 +217,15 @@ impl View {
             view.optional_sprites(renderer, defs.bullets.iter().map(|bullet| bullet.sprite.as_deref()))?;
         view.effect_sprites =
             view.optional_sprites(renderer, defs.effects.iter().map(|effect| effect.sprite.as_deref()))?;
+        for gun in &defs.guns {
+            let mut pieces = [None, None, None];
+            for (piece, name) in pieces.iter_mut().zip(&gun.laser_sprites) {
+                if let Some(name) = name {
+                    *piece = Some(view.sprite(renderer, name)?);
+                }
+            }
+            view.laser_sprites.push(pieces);
+        }
         Ok(view)
     }
 
@@ -223,10 +239,13 @@ impl View {
             .collect()
     }
 
-    /// Starts a camera shake, replacing any in progress.
+    /// Starts a camera shake, replacing any in progress. As in Unity's
+    /// `CameraController.Shake`, this sets how hard and how much longer the camera
+    /// shakes without restarting the wobble, so a laser asking every step shakes
+    /// smoothly instead of holding the camera at the wobble's first instant.
     pub fn start_shake(&mut self, shake: ShakeFile) {
         self.shake = shake;
-        self.shake_elapsed = 0.0;
+        self.shake_left = shake.time;
     }
 
     /// The world position under a point of the screen, as the camera stood on the
@@ -420,6 +439,20 @@ impl View {
                 self.list.sprite(sprite.texture, placed);
             }
         }
+        if let (Some(beam), Some(gun)) = (&world.combat.beam, world.current_gun()) {
+            // The beam leaves the gun, so it moves with the blended player.
+            let origin = beam.origin + (player_position - world.player.position);
+            let pieces = &self.laser_sprites[gun.def.0 as usize];
+            for (sprite, placed) in pieces.iter().zip(beam_pieces(origin, beam.direction, beam.length)) {
+                if let Some(sprite) = sprite {
+                    let (position, stretch) = placed;
+                    // Drawn pointing left, like bullets.
+                    let rotation = (-beam.direction).to_angle();
+                    let placed = sprite.placed(position.extend(Z_BULLETS), [stretch, 1.0], rotation, [false, false]);
+                    self.list.sprite(sprite.texture, placed);
+                }
+            }
+        }
         for effect in &world.combat.effects {
             let def = world.defs.effect(effect.def);
             if let Some(sprite) = &self.effect_sprites[effect.def.0 as usize] {
@@ -509,11 +542,14 @@ impl View {
 
     /// How far to move the camera this frame for the shake in progress.
     fn shake_offset(&mut self, frame_seconds: f32) -> Vec2 {
-        if self.shake_elapsed >= self.shake.time {
+        if self.shake_left <= 0.0 {
             return Vec2::ZERO;
         }
-        self.shake_elapsed += frame_seconds.max(0.0);
-        let phase = self.shake_elapsed * self.shake.frequency.max(0.1) * SHAKE_RATE * std::f32::consts::TAU;
+        let frame_seconds = frame_seconds.max(0.0);
+        self.shake_left -= frame_seconds;
+        // Kept small so the sines below stay precise however long the game runs.
+        self.shake_clock = (self.shake_clock + frame_seconds) % 1000.0;
+        let phase = self.shake_clock * self.shake.frequency.max(0.1) * SHAKE_RATE * std::f32::consts::TAU;
         // Two unrelated wobbles per axis, so it does not read as a circle.
         let wobble = Vec2::new(
             phase.sin() + 0.5 * (phase * 2.3 + 1.3).sin(),
@@ -661,6 +697,18 @@ struct ResolvedSprite {
     pivot: [f32; 2],
 }
 
+/// Where a laser's start cap, middle stretch and end cap go, and how much each is
+/// stretched along the beam. From `LaserGun.updateFire`: the caps sit on the two
+/// ends at their own size, and the middle, a quarter of a unit long, is scaled by
+/// four times the length so that it spans the whole beam.
+fn beam_pieces(origin: Vec2, direction: Vec2, length: f32) -> [(Vec2, f32); 3] {
+    [
+        (origin, 1.0),
+        (origin + direction * (length * 0.5), length * 4.0),
+        (origin + direction * length, 1.0),
+    ]
+}
+
 /// Which way the gun arm points, in radians, and whether it is mirrored.
 ///
 /// Unity's `PlayerAnimations`: while aiming, the arm's -x axis points along the
@@ -771,5 +819,13 @@ mod tests {
         assert_eq!(alpha(0, 0), 0);
         assert_eq!(alpha(31, 31), 0);
         assert_eq!(disc.rgba.len(), 32 * 32 * 4);
+    }
+    #[test]
+    fn a_beam_is_two_caps_with_the_middle_stretched_between_them() {
+        let pieces = beam_pieces(Vec2::new(1.0, 2.0), Vec2::new(0.0, 1.0), 3.0);
+        assert_eq!(pieces[0], (Vec2::new(1.0, 2.0), 1.0));
+        // The middle sprite is a quarter of a unit long: twelve of them make three units.
+        assert_eq!(pieces[1], (Vec2::new(1.0, 3.5), 12.0));
+        assert_eq!(pieces[2], (Vec2::new(1.0, 5.0), 1.0));
     }
 }

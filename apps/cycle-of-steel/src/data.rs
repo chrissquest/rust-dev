@@ -200,6 +200,16 @@ pub struct GunFile {
     /// A key of `bullets`. Lasers have none.
     #[serde(default)]
     pub bullet: Option<String>,
+    /// Lasers: seconds between the beam's hits.
+    #[serde(default)]
+    pub damage_delay: f32,
+    /// Lasers: the sprites of the beam's two caps and of the stretch between them.
+    #[serde(default)]
+    pub laser_start: Option<String>,
+    #[serde(default)]
+    pub laser_middle: Option<String>,
+    #[serde(default)]
+    pub laser_end: Option<String>,
 }
 
 /// A camera shake: how long, how far and how fast.

@@ -182,6 +182,42 @@ impl Room {
         (min.1..=max.1).any(|y| (min.0..=max.0).any(|x| self.blocks_walker(x, y)))
     }
 
+    /// How far a ray from `origin` along the unit vector `direction` travels before
+    /// it enters a wall, if it does within `max_distance`. Ledges do not stop it.
+    /// A ray that starts inside a wall stops at once.
+    pub fn ray_hits_wall(&self, origin: Vec2, direction: Vec2, max_distance: f32) -> Option<f32> {
+        // Walk the grid one cell border at a time: `next` holds how far along the
+        // ray the next border is on each axis, `per_cell` how far apart borders are.
+        let scaled = origin / self.cell;
+        let mut cell = (scaled.x.floor() as i32, scaled.y.floor() as i32);
+        let step = (direction.x.signum() as i32, direction.y.signum() as i32);
+        let per_cell = Vec2::new(self.cell / direction.x.abs(), self.cell / direction.y.abs());
+        let to_border = |position: f32, direction: f32| {
+            let inside = position - position.floor();
+            if direction > 0.0 { 1.0 - inside } else { inside }
+        };
+        let mut next = Vec2::new(
+            if direction.x == 0.0 { f32::INFINITY } else { to_border(scaled.x, direction.x) * per_cell.x },
+            if direction.y == 0.0 { f32::INFINITY } else { to_border(scaled.y, direction.y) * per_cell.y },
+        );
+        let mut distance = 0.0;
+        while distance <= max_distance {
+            if self.cell_at(cell.0, cell.1) == Cell::Wall {
+                return Some(distance);
+            }
+            if next.x < next.y {
+                distance = next.x;
+                next.x += per_cell.x;
+                cell.0 += step.0;
+            } else {
+                distance = next.y;
+                next.y += per_cell.y;
+                cell.1 += step.1;
+            }
+        }
+        None
+    }
+
     /// The inclusive range of cells a box touches, as `((min_x, min_y), (max_x, max_y))`.
     /// A box edge lying exactly on a cell border does not count as touching the far cell.
     pub(crate) fn cell_range(&self, center: Vec2, half: Vec2) -> ((i32, i32), (i32, i32)) {
@@ -262,5 +298,36 @@ mod tests {
         let room = Room::from_file(file(&layers, ""));
         assert_eq!(room.spawn, Vec2::new(1.25, 0.75));
         assert!(!room.box_hits_solid(room.spawn, Vec2::splat(0.2)));
+    }
+    #[test]
+    fn a_ray_stops_at_the_first_wall() {
+        let room = Room::test_room();
+        // From the middle of the room the right-hand wall starts at x = 15.5.
+        let hit = room.ray_hits_wall(Vec2::new(8.0, 4.4), Vec2::X, 20.0).unwrap();
+        assert!((hit - 7.5).abs() < 1e-4, "{hit}");
+        // Straight up from there is the block in the middle of the room, at y = 5.
+        let hit = room.ray_hits_wall(Vec2::new(8.0, 4.4), Vec2::Y, 20.0).unwrap();
+        assert!((hit - 0.6).abs() < 1e-4, "{hit}");
+        // Diagonally down-left from further left it slips past the corner block
+        // and reaches the left-hand wall (x = 0.5).
+        let direction = Vec2::new(-1.0, -1.0).normalize();
+        let hit = room.ray_hits_wall(Vec2::new(4.0, 4.4), direction, 20.0).unwrap();
+        assert!((hit - 3.5 * 2f32.sqrt()).abs() < 1e-3, "{hit}");
+    }
+
+    #[test]
+    fn a_ray_gives_up_at_its_range_and_stops_at_once_inside_a_wall() {
+        let room = Room::test_room();
+        assert_eq!(room.ray_hits_wall(Vec2::new(8.0, 4.4), Vec2::X, 5.0), None);
+        assert_eq!(room.ray_hits_wall(Vec2::new(0.2, 0.2), Vec2::X, 5.0), Some(0.0));
+    }
+
+    #[test]
+    fn a_ray_passes_over_ledges() {
+        let mut room = Room::test_room();
+        let ledge = (20, 8);
+        room.cells[(ledge.1 * room.columns + ledge.0) as usize] = Cell::Ledge;
+        let hit = room.ray_hits_wall(Vec2::new(8.0, 4.4), Vec2::X, 20.0).unwrap();
+        assert!((hit - 7.5).abs() < 1e-4, "{hit}");
     }
 }

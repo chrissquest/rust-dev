@@ -18,6 +18,8 @@ use crate::data::GunKind;
 const BULLET_CAPACITY: usize = 512;
 const EFFECT_CAPACITY: usize = 256;
 
+/// How far a laser reaches when nothing is in its way (`LaserGun.updateFire`).
+pub const LASER_RANGE: f32 = 20.0;
 /// A crit does this many times the gun's damage.
 const CRIT_MULTIPLIER: f32 = 2.0;
 
@@ -48,6 +50,17 @@ pub struct Effect {
     /// Splashes take the colour of the bullet that made them.
     pub color: [f32; 4],
     pub time_left: f32,
+}
+
+/// A laser's beam as it is this step. It exists only while the laser fires.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Beam {
+    /// The gun's muzzle.
+    pub origin: Vec2,
+    /// A unit vector.
+    pub direction: Vec2,
+    /// From the muzzle to whatever stops the beam, at most [`LASER_RANGE`].
+    pub length: f32,
 }
 
 /// Something bullets hit and hurt.
@@ -96,6 +109,8 @@ pub struct Combat {
     pub targets: Vec<Target>,
     pub pickups: Vec<Pickup>,
     pub teleports: Vec<Teleport>,
+    /// The player's laser beam, while it fires.
+    pub beam: Option<Beam>,
 }
 
 impl Combat {
@@ -106,6 +121,7 @@ impl Combat {
             targets: Vec::new(),
             pickups: Vec::new(),
             teleports: Vec::new(),
+            beam: None,
         }
     }
 
@@ -162,6 +178,50 @@ impl Combat {
                 crit: rng.chance(crit_chance),
                 hit: Vec::new(),
             });
+        }
+    }
+
+    /// Shines `gun`'s laser from `muzzle` along the unit vector `aim` for one step,
+    /// as Unity's `LaserGun.updateFire` does every frame the trigger is held.
+    ///
+    /// The beam stops at the first wall or target; ledges do not stop it. While it
+    /// touches either, it heats the gun every `damage_delay`, and hurts the target
+    /// if that is what it touches. The caller has checked the gun is not locked.
+    #[allow(clippy::too_many_arguments)]
+    pub fn fire_laser(
+        &mut self,
+        gun: &mut Gun,
+        def: &GunDef,
+        room: &Room,
+        muzzle: Vec2,
+        aim: Vec2,
+        crit_chance: f32,
+        now: f64,
+        rng: &mut Rng,
+        events: &mut Vec<Event>,
+    ) {
+        if def.shake.time > 0.0 {
+            events.push(Event::Shake(def.shake));
+        }
+        let mut length = room.ray_hits_wall(muzzle, aim, LASER_RANGE);
+        let mut touched = None;
+        for (index, target) in self.targets.iter().enumerate() {
+            let limit = length.unwrap_or(LASER_RANGE);
+            if let Some(distance) = ray_hits_box(muzzle, aim, target.position, target.half).filter(|&distance| distance < limit) {
+                length = Some(distance);
+                touched = Some(index);
+            }
+        }
+        self.beam = Some(Beam { origin: muzzle, direction: aim, length: length.unwrap_or(LASER_RANGE) });
+        if length.is_none() || !gun.try_laser_hit(def, now) {
+            return;
+        }
+        if let Some(index) = touched {
+            // Unity rolls the crit on every hit of the beam, not once per trigger pull.
+            let damage = if rng.chance(crit_chance) { def.damage * CRIT_MULTIPLIER } else { def.damage };
+            let target = &mut self.targets[index];
+            target.health -= damage;
+            target.last_hit = now;
         }
     }
 
@@ -251,6 +311,26 @@ impl Combat {
 fn bullet_hits_wall(room: &Room, center: Vec2, half: Vec2) -> bool {
     let (min, max) = room.cell_range(center, half);
     (min.1..=max.1).any(|y| (min.0..=max.0).any(|x| room.cell_at(x, y) == Cell::Wall))
+}
+
+/// How far along a ray from `origin` in the unit vector `direction` a box is first
+/// touched. A ray starting inside the box touches it at once.
+fn ray_hits_box(origin: Vec2, direction: Vec2, center: Vec2, half: Vec2) -> Option<f32> {
+    let mut enter = 0.0_f32;
+    let mut leave = f32::INFINITY;
+    for axis in 0..2 {
+        let (low, high) = (center[axis] - half[axis] - origin[axis], center[axis] + half[axis] - origin[axis]);
+        if direction[axis] == 0.0 {
+            if low > 0.0 || high < 0.0 {
+                return None;
+            }
+            continue;
+        }
+        let (a, b) = (low / direction[axis], high / direction[axis]);
+        enter = enter.max(a.min(b));
+        leave = leave.min(a.max(b));
+    }
+    (enter <= leave).then_some(enter)
 }
 
 fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {

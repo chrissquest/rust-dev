@@ -492,6 +492,22 @@ mod tests {
     }
 
     #[test]
+    fn the_real_lasers_shine_a_beam_and_have_their_sprites() {
+        for name in ["laser_2", "debug_laser"] {
+            let mut world = hub();
+            let gun = world.defs.gun_named(name).expect(name);
+            let def = world.defs.gun(gun);
+            assert!(def.damage_delay > 0.0, "{name}");
+            assert!(def.laser_sprites.iter().all(Option::is_some), "{name}");
+            world.give(gun);
+            let input = sim::Input { aim: Some(Vec2::X), ..Default::default() };
+            world.step(&input);
+            let beam = world.combat.beam.expect(name);
+            assert!(beam.length > 0.1 && beam.length < 16.0, "{name}: stops at the hub's wall, {beam:?}");
+        }
+    }
+
+    #[test]
     fn the_hidden_spot_leads_into_the_gun_room_and_back_out() {
         let mut world = hub();
         assert_eq!(world.combat.teleports.len(), 2);

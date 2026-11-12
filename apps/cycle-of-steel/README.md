@@ -18,11 +18,15 @@ Steps 1 and 2 of the port are in, and step 3 (combat) is under way:
   and fired. Single-shot and spray guns work with Unity's numbers, including the
   heat mechanic, spread, bullets carrying the player's speed, splashes where they
   hit, and camera shake. Bullets stop at walls, fly over ledges and hurt targets.
+  Lasers (`laser_2` and `debug_laser` in the gun room) shine a beam up to 20 units
+  long that stops at the first wall or target and passes over ledges; it hurts
+  every `damage_delay` and heats the gun each time it does, even against a wall,
+  as in Unity.
 
 The hub's hidden gun room is reachable: stand at the right-hand end of the rack
 where you spawn and interact. Interact again on the spot inside to leave.
 
-Not in yet: lasers, homing, explosions and elemental effects; damage numbers;
+Not in yet: homing, explosions and elemental effects; damage numbers;
 enemies, chests and drops; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
@@ -52,6 +56,7 @@ off-screen and saves it. It needs a GPU or a software rasteriser but no display:
 cargo run -p cycle-of-steel -- --screenshot room.png --ticks 120 --move 1,0
 cargo run -p cycle-of-steel -- --screenshot ns1.png --room ns1 --whole-room
 cargo run -p cycle-of-steel -- --screenshot fire.png --give shotgun_1 --aim 1,0 --ticks 8
+cargo run -p cycle-of-steel -- --screenshot beam.png --give laser_2 --aim -1,0.6 --ticks 8
 ```
 
 `--room` picks any file under `assets/rooms`; `--whole-room` frames all of it, for

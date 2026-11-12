@@ -37,6 +37,10 @@ pub struct GunDef {
     pub spray_angle: f32,
     pub random_speed: f32,
     pub bullet: Option<BulletId>,
+    /// Lasers: seconds between the beam's hits.
+    pub damage_delay: f32,
+    /// Lasers: the beam's start cap, middle stretch and end cap.
+    pub laser_sprites: [Option<String>; 3],
 }
 
 #[derive(Clone, Debug)]
@@ -143,6 +147,8 @@ impl Defs {
                 spray_angle: gun.spray_angle.to_radians(),
                 random_speed: gun.random_speed,
                 bullet,
+                damage_delay: gun.damage_delay,
+                laser_sprites: [gun.laser_start.clone(), gun.laser_middle.clone(), gun.laser_end.clone()],
             });
         }
 
@@ -181,7 +187,12 @@ pub(crate) mod tests {
                            "damage": 75, "knockback": 5, "fire_delay": 0.4, "bullet_speed": 10, "bullet": "round"},
                 "shotgun": {"id": 1, "kind": "spray", "heat_capacity": 1, "heat_cooldown": 1.5,
                            "damage": 150, "knockback": 4, "fire_delay": 1.5, "bullet_speed": 5,
-                           "bullet_count": 3, "spray_angle": 20, "random_speed": 1.2, "bullet": "pellet"}
+                           "bullet_count": 3, "spray_angle": 20, "random_speed": 1.2, "bullet": "pellet"},
+                "laser":  {"id": 8, "kind": "laser", "heat_capacity": 20, "heat_cooldown": 10,
+                           "damage": 100, "knockback": 1, "damage_delay": 0.1,
+                           "shake": {"time": 0.05, "amplitude": 0.25, "frequency": 1}},
+                "endless_laser": {"id": 13, "kind": "laser", "heat_capacity": 0, "heat_cooldown": 0,
+                           "damage": 100, "knockback": 1, "damage_delay": 0.02}
               },
               "bullets": {
                 "round":  {"sprite": "b", "time_to_live": 2, "effect": "splash"},
@@ -197,15 +208,15 @@ pub(crate) mod tests {
     #[test]
     fn names_resolve_to_ids_in_name_order() {
         let defs = test_defs();
-        assert_eq!(defs.gun_named("pistol"), Some(GunId(0)));
-        assert_eq!(defs.gun_named("shotgun"), Some(GunId(2)));
+        assert_eq!(defs.gun_named("pistol"), Some(GunId(2)));
+        assert_eq!(defs.gun_named("shotgun"), Some(GunId(4)));
         assert_eq!(defs.gun_named("nope"), None);
 
-        let pistol = defs.gun(GunId(0));
+        let pistol = defs.gun(GunId(2));
         let round = defs.bullet(pistol.bullet.unwrap());
         assert_eq!(round.half, [0.0625, 0.0625], "default size is an eighth of a unit");
         assert!(round.effect.is_some());
-        assert!((defs.gun(GunId(2)).spray_angle - 20f32.to_radians()).abs() < 1e-6);
+        assert!((defs.gun(GunId(4)).spray_angle - 20f32.to_radians()).abs() < 1e-6);
     }
 
     #[test]

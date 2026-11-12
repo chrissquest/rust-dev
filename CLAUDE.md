@@ -26,11 +26,12 @@ upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on th
 owner's phone.
 
 Step 3 so far: guns picked up into a four-slot inventory, single and spray guns
-with Unity's heat mechanic, bullets, splashes, targets, camera shake, placeholder
-HUD, twin touch sticks, the hub's hidden gun room.
+with Unity's heat mechanic, lasers (`Combat::fire_laser`, `Room::ray_hits_wall`),
+bullets, splashes, targets, camera shake, placeholder HUD, twin touch sticks, the
+hub's hidden gun room. Laser knockback and its looping sound wait for enemies
+(step 4) and audio (step 6).
 
-**Next, the rest of step 3:** lasers (`LaserGun.cs`: a beam raycast up to 20 units
-that ignores ledges, damage every `damage_delay`), homing bullets, explosions
+**Next, the rest of step 3:** homing bullets, explosions
 (`Explosion 1` effect: damage in a radius), burn and freeze (`ElementalEffectHandler.cs`,
 `Bullet_Burn`, `Bullet_Freeze`; bullets already carry `burn`/`freeze` in `guns.json`
 but `data.rs` does not read them yet), damage numbers (needs text drawing: bake the

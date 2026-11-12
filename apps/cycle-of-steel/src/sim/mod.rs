@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use crystal_engine::glam::Vec2;
 
-use crate::data::ShakeFile;
+use crate::data::{GunKind, ShakeFile};
 use combat::{Combat, Interaction, Pickup, Target, Teleport};
 use defs::{Defs, GunId};
 use guns::Gun;
@@ -213,9 +213,25 @@ impl World {
             pickup.gun.cool(defs.gun(pickup.gun.def), now);
         }
 
+        // The beam lasts only as long as the laser keeps firing.
+        self.combat.beam = None;
         if let (Some(aim), Some(gun)) = (self.player.aim, self.inventory[self.selected_slot].as_mut()) {
             let def = defs.gun(gun.def);
-            if gun.try_fire(def, now) {
+            if def.kind == GunKind::Laser {
+                if !gun.is_locked(now) {
+                    self.combat.fire_laser(
+                        gun,
+                        def,
+                        &self.room,
+                        self.player.muzzle(aim),
+                        aim,
+                        self.player.crit_chance,
+                        now,
+                        &mut self.rng,
+                        &mut self.events,
+                    );
+                }
+            } else if gun.try_fire(def, now) {
                 self.combat.fire(
                     &defs,
                     def,
@@ -451,5 +467,107 @@ mod tests {
         });
         assert_eq!(world.drain_events().count(), 1);
         assert_eq!(world.drain_events().count(), 0);
+    }
+    fn aiming(aim: Vec2) -> Input {
+        Input {
+            aim: Some(aim),
+            ..Input::default()
+        }
+    }
+
+    /// A target `distance` to the right of the player, on the line of a shot.
+    fn target_to_the_right(world: &mut World, distance: f32, health: f32) {
+        world.combat.targets.push(Target {
+            id: 7,
+            position: world.player.pivot() + Vec2::new(distance, 0.0),
+            half: Vec2::splat(0.25),
+            health,
+            max_health: health,
+            last_hit: f64::NEG_INFINITY,
+        });
+    }
+
+    #[test]
+    fn a_laser_reaches_the_wall_and_stops_when_the_trigger_is_let_go() {
+        let mut world = world();
+        world.give(world.defs.gun_named("laser").unwrap());
+        world.step(&aiming(Vec2::X));
+        let beam = world.combat.beam.expect("the laser fires on the first step");
+        assert_eq!(beam.origin, world.player.muzzle(Vec2::X));
+        // The right-hand wall of the test room starts at x = 15.5.
+        assert!((beam.origin.x + beam.length - 15.5).abs() < 1e-3, "{beam:?}");
+        assert!(world.combat.bullets.is_empty(), "a laser fires no bullets");
+        assert!(world.drain_events().any(|event| matches!(event, Event::Shake(_))));
+
+        world.step(&Input::default());
+        assert_eq!(world.combat.beam, None);
+    }
+
+    #[test]
+    fn a_laser_stops_at_a_target_and_hurts_it_every_damage_delay() {
+        let mut world = world();
+        world.give(world.defs.gun_named("laser").unwrap());
+        target_to_the_right(&mut world, 3.0, 1.0e6);
+        // Damage 100 every 0.1 s: the first hit at once, then one every 7 steps,
+        // the first step on which more than 0.1 s has passed.
+        run(&mut world, aiming(Vec2::X), 1.0);
+        let beam = world.combat.beam.unwrap();
+        assert!((beam.length - (3.0 - 0.25 - player::MUZZLE_DISTANCE)).abs() < 1e-3, "{beam:?}");
+        let hits = (1.0e6 - world.combat.targets[0].health) / 100.0;
+        assert!((8.0..=10.0).contains(&hits), "{hits} hits in a second");
+    }
+
+    #[test]
+    fn a_laser_passes_through_where_a_dead_target_stood() {
+        let mut world = world();
+        world.give(world.defs.gun_named("laser").unwrap());
+        target_to_the_right(&mut world, 3.0, 150.0);
+        run(&mut world, aiming(Vec2::X), 0.5);
+        assert!(world.combat.targets.is_empty(), "two hits of 100 kill it");
+        assert!(world.combat.beam.unwrap().length > 5.0);
+    }
+
+    #[test]
+    fn a_laser_overheats_after_twenty_hits_and_comes_back_by_itself() {
+        let mut world = world();
+        world.give(world.defs.gun_named("laser").unwrap());
+        // Heat comes from the beam touching anything, a wall included: 20 hits
+        // 0.1 s apart overheat it in about two seconds.
+        run(&mut world, aiming(Vec2::X), 1.5);
+        assert!(world.combat.beam.is_some());
+        assert!(world.current_gun().unwrap().heat >= 13.0);
+        run(&mut world, aiming(Vec2::X), 1.0);
+        assert_eq!(world.combat.beam, None, "overheated: no beam though the trigger is held");
+        assert!(world.current_gun().unwrap().is_locked(world.time()));
+        // The cooldown is 10 s; still holding the trigger, the beam returns.
+        run(&mut world, aiming(Vec2::X), 9.0);
+        assert_eq!(world.combat.beam, None);
+        run(&mut world, aiming(Vec2::X), 1.5);
+        assert!(world.combat.beam.is_some());
+    }
+
+    #[test]
+    fn a_laser_without_heat_never_stops() {
+        let mut world = world();
+        world.give(world.defs.gun_named("endless_laser").unwrap());
+        target_to_the_right(&mut world, 3.0, 1.0e6);
+        for _ in 0..(5 * TICK_RATE) {
+            world.step(&aiming(Vec2::X));
+            assert!(world.combat.beam.is_some());
+        }
+        assert_eq!(world.current_gun().unwrap().heat, 0.0);
+        // Its 0.02 s delay is longer than one step, so it hits every other step.
+        let hits = (1.0e6 - world.combat.targets[0].health) / 100.0;
+        assert!((140.0..=160.0).contains(&hits), "{hits} hits in five seconds");
+    }
+
+    #[test]
+    fn every_hit_of_a_laser_is_a_crit_when_the_chance_is_certain() {
+        let mut world = world();
+        world.give(world.defs.gun_named("laser").unwrap());
+        world.player.crit_chance = 1.0;
+        target_to_the_right(&mut world, 3.0, 1000.0);
+        world.step(&aiming(Vec2::X));
+        assert_eq!(world.combat.targets[0].health, 800.0);
     }
 }

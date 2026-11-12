@@ -26,6 +26,8 @@ pub struct Gun {
     cooling_down: bool,
     /// The next time idle cooling may take a step.
     next_idle_tick: f64,
+    /// Lasers: when the beam last did its damage.
+    last_damage: f64,
 }
 
 impl Gun {
@@ -39,6 +41,7 @@ impl Gun {
             locked_until: f64::NEG_INFINITY,
             cooling_down: false,
             next_idle_tick: 0.0,
+            last_damage: f64::NEG_INFINITY,
         }
     }
 
@@ -95,6 +98,18 @@ impl Gun {
             return false;
         }
         self.last_fire = now;
+        self.add_heat(def, now);
+        true
+    }
+
+    /// Lasers: asks whether a beam that is touching something at `now` does its
+    /// damage this step. It does once every `damage_delay`, and each time adds one
+    /// unit of heat, as `LaserGun.updateFire` calls `TickHeat`.
+    pub fn try_laser_hit(&mut self, def: &GunDef, now: f64) -> bool {
+        if now - self.last_damage <= def.damage_delay as f64 {
+            return false;
+        }
+        self.last_damage = now;
         self.add_heat(def, now);
         true
     }
