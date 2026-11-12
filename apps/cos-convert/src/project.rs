@@ -159,6 +159,37 @@ impl Project {
         Some(documents)
     }
 
+    /// Every `.prefab` under a folder (relative to `Assets`), in a stable order.
+    pub fn prefabs_under(&self, folder: &str) -> Result<Vec<PathBuf>> {
+        let mut found = Vec::new();
+        let mut pending = vec![self.assets.join(folder)];
+        while let Some(current) = pending.pop() {
+            let entries =
+                std::fs::read_dir(&current).with_context(|| format!("could not list {}", current.display()))?;
+            for entry in entries {
+                let path = entry?.path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path.extension().is_some_and(|extension| extension == "prefab") {
+                    found.push(path.strip_prefix(&self.assets).unwrap_or(&path).to_path_buf());
+                }
+            }
+        }
+        found.sort();
+        Ok(found)
+    }
+
+    /// The one sprite of a texture imported in "Single" mode, by the texture's path
+    /// relative to `Assets`.
+    pub fn sprite_at(&self, texture: &str) -> Result<SpriteInfo> {
+        let sprites = self.read_texture_sprites(Path::new(texture))?;
+        sprites
+            .by_file_id
+            .get(&SINGLE_SPRITE_FILE_ID)
+            .cloned()
+            .with_context(|| format!("{texture} is a sliced sheet, not a single sprite"))
+    }
+
     /// Resolves a `{fileID, guid}` sprite reference.
     pub fn sprite(&self, reference: &Value) -> Result<Option<SpriteInfo>> {
         let guid = reference.get("guid").str();

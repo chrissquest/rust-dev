@@ -26,6 +26,12 @@ pub const RESPONSE: f32 = 9.922_546;
 /// bounding box, so corners are squarer than they were.
 pub const HALF_SIZE: Vec2 = Vec2::new(0.095, 0.24);
 
+/// The gun arm turns about this point, relative to the player's position. Unity:
+/// the `Pivot` child of the player.
+pub const PIVOT_OFFSET: Vec2 = Vec2::new(0.0, 0.15);
+/// Bullets leave from this far along the aim from the pivot.
+pub const MUZZLE_DISTANCE: f32 = 0.35;
+
 /// The run animations play at 12 frames per second and have 12 frames.
 pub const ANIMATION_FPS: f32 = 12.0;
 pub const ANIMATION_FRAMES: u32 = 12;
@@ -50,6 +56,14 @@ pub struct Player {
     pub running: bool,
     /// Seconds into the current run animation.
     pub animation_time: f32,
+    /// Where the trigger is being held towards, as a unit vector; `None` when it
+    /// is not held.
+    pub aim: Option<Vec2>,
+    /// Whether the last sideways movement was to the right. It decides which side
+    /// the gun is carried on while not aiming.
+    pub moved_right: bool,
+    /// Chance of a shot doing double damage, 0..=1. Raised by upgrades later.
+    pub crit_chance: f32,
 }
 
 impl Player {
@@ -61,13 +75,31 @@ impl Player {
             facing: Facing::Front,
             running: false,
             animation_time: 0.0,
+            aim: None,
+            moved_right: false,
+            crit_chance: 0.0,
         }
+    }
+
+    /// The point the gun arm turns about, in world space.
+    pub fn pivot(&self) -> Vec2 {
+        self.position + PIVOT_OFFSET
+    }
+
+    /// Where a bullet fired along `aim` starts.
+    pub fn muzzle(&self, aim: Vec2) -> Vec2 {
+        self.pivot() + aim * MUZZLE_DISTANCE
     }
 
     pub fn step(&mut self, input: &Input, room: &Room) {
         self.previous_position = self.position;
 
+        self.aim = input.aim.and_then(Vec2::try_normalize);
         let movement = input.movement.clamp_length_max(1.0);
+        // Unity only re-evaluates the carry side while there is movement input.
+        if movement != Vec2::ZERO {
+            self.moved_right = movement.x > 0.0;
+        }
         let target_velocity = movement * TOP_SPEED;
         self.velocity = target_velocity + (self.velocity - target_velocity) * (-RESPONSE * DT).exp();
 
@@ -128,7 +160,7 @@ mod tests {
 
     fn step_for(player: &mut Player, room: &Room, movement: Vec2, seconds: f32) {
         for _ in 0..(seconds * TICK_RATE as f32).round() as u32 {
-            player.step(&Input { movement }, room);
+            player.step(&Input { movement, ..Input::default() }, room);
         }
     }
 

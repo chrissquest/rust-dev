@@ -18,11 +18,13 @@ use crystal_engine::scene::{Texture, TextureFilter};
 use crystal_engine::sprite::{Grid, Sheet, Sprite};
 
 use crate::assets::{AssetSource, PIXELS_PER_UNIT};
-use crate::data::{DecorationFile, RoomFile, SortingLayer, SpriteCatalogue};
+use crate::data::{DecorationFile, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
+use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
-use crate::sim::World;
-use crate::sim::player::Facing;
+use crate::sim::defs::Defs;
+use crate::sim::player::{Facing, Player};
 use crate::sim::room::Room;
+use crate::sim::{INVENTORY_SLOTS, World};
 
 /// World units from the bottom of the screen to the top: Unity's orthographic
 /// size of 2.11506, doubled. A 16:9 window shows about 7.5 of a room's 16 units.
@@ -39,7 +41,31 @@ const CAMERA_BLOCK: Vec2 = Vec2::new(16.0, 9.0);
 /// order matters; they are real heights so a tilted camera can use them later.
 const Z_BELOW: f32 = 0.0;
 const Z_ENTITIES: f32 = 0.1;
+const Z_BULLETS: f32 = 0.15;
 const Z_ABOVE: f32 = 0.2;
+
+/// The gun arm's parts, relative to the pivot it turns about, as in the Unity
+/// player prefab: where each sits and how far it is turned, in degrees.
+const GUN_IN_HAND: (Vec2, f32) = (Vec2::new(-0.2, 0.0), 0.0);
+const RIGHT_HAND: (Vec2, f32) = (Vec2::new(-0.066, -0.068), -90.0);
+const LEFT_HAND: (Vec2, f32) = (Vec2::new(-0.125, 0.025), -70.0);
+/// The shadow under the player's feet, relative to the player.
+const SHADOW_OFFSET: Vec2 = Vec2::new(0.0, -0.182);
+/// How the arm hangs when not aiming: down to the left, or mirrored to the right.
+const CARRY_ANGLE: f32 = 50.0;
+
+/// World units of camera movement per unit of a gun's shake amplitude, and how
+/// many wobbles per second per unit of its frequency. Unity used a Cinemachine
+/// noise profile here; these numbers are an approximation of its feel.
+const SHAKE_DISTANCE: f32 = 0.06;
+const SHAKE_RATE: f32 = 22.0;
+
+const HUD_SLOT_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.45];
+const HUD_SELECTED_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.85];
+const HUD_HEAT_BACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.45];
+const HUD_HEAT_COOL_COLOR: [f32; 4] = [1.0, 0.85, 0.2, 0.9];
+const HUD_HEAT_HOT_COLOR: [f32; 4] = [1.0, 0.2, 0.1, 0.95];
+const HUD_BUTTON_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.28];
 
 const CLEAR_COLOR: [f32; 4] = [0.012, 0.012, 0.016, 1.0];
 
@@ -89,14 +115,30 @@ pub struct View {
     overview: bool,
     list: DrawList,
 
-    /// A soft white disc, for the touch stick.
+    /// A soft white disc, for the touch sticks and round buttons.
     disc: TextureId,
+    /// One white pixel, for flat rectangles.
+    white: TextureId,
     overlay: DrawList,
+
+    /// Sprites of the things defined in `guns.json`, by their ids. `None` where a
+    /// definition names no sprite.
+    gun_sprites: Vec<Option<ResolvedSprite>>,
+    bullet_sprites: Vec<Option<ResolvedSprite>>,
+    effect_sprites: Vec<Option<ResolvedSprite>>,
+    shadow: ResolvedSprite,
+    left_hand: ResolvedSprite,
+    right_hand: ResolvedSprite,
+
+    /// The camera shake in progress.
+    shake: ShakeFile,
+    shake_elapsed: f32,
 }
 
 impl View {
-    /// Loads what every room needs: the sprite catalogue and the player's sheets.
-    pub fn new(renderer: &mut Renderer2d, assets: &AssetSource) -> Result<Self> {
+    /// Loads what every room needs: the sprite catalogue, the player's sheets and
+    /// the sprites of every gun, bullet and effect.
+    pub fn new(renderer: &mut Renderer2d, assets: &AssetSource, defs: &Defs) -> Result<Self> {
         let catalogue = SpriteCatalogue::load(assets)?;
 
         let mut frames = None;
@@ -113,8 +155,15 @@ impl View {
         let right = load_player("player_run_right")?;
         let frames = frames.expect("four sheets were loaded");
         let disc = renderer.add_texture(&disc_texture(DISC_PIXELS));
+        let white = renderer.add_texture(&Texture {
+            name: "white".to_string(),
+            width: 1,
+            height: 1,
+            rgba: vec![255; 4],
+            filter: TextureFilter::Nearest,
+        });
 
-        Ok(Self {
+        let mut view = Self {
             assets: assets.clone(),
             catalogue,
             textures: HashMap::new(),
@@ -133,8 +182,50 @@ impl View {
             overview: false,
             list: DrawList::new(),
             disc,
+            white,
             overlay: DrawList::new(),
-        })
+            gun_sprites: Vec::new(),
+            bullet_sprites: Vec::new(),
+            effect_sprites: Vec::new(),
+            // Placeholders until the catalogue is consulted just below.
+            shadow: ResolvedSprite::EMPTY,
+            left_hand: ResolvedSprite::EMPTY,
+            right_hand: ResolvedSprite::EMPTY,
+            shake: ShakeFile::default(),
+            shake_elapsed: 0.0,
+        };
+
+        view.shadow = view.sprite(renderer, "shadow")?;
+        view.left_hand = view.sprite(renderer, "left_hand")?;
+        view.right_hand = view.sprite(renderer, "right_hand")?;
+        view.gun_sprites = view.optional_sprites(renderer, defs.guns.iter().map(|gun| gun.sprite.as_deref()))?;
+        view.bullet_sprites =
+            view.optional_sprites(renderer, defs.bullets.iter().map(|bullet| bullet.sprite.as_deref()))?;
+        view.effect_sprites =
+            view.optional_sprites(renderer, defs.effects.iter().map(|effect| effect.sprite.as_deref()))?;
+        Ok(view)
+    }
+
+    fn optional_sprites<'a>(
+        &mut self,
+        renderer: &mut Renderer2d,
+        names: impl Iterator<Item = Option<&'a str>>,
+    ) -> Result<Vec<Option<ResolvedSprite>>> {
+        names
+            .map(|name| name.map(|name| self.sprite(renderer, name)).transpose())
+            .collect()
+    }
+
+    /// Starts a camera shake, replacing any in progress.
+    pub fn start_shake(&mut self, shake: ShakeFile) {
+        self.shake = shake;
+        self.shake_elapsed = 0.0;
+    }
+
+    /// The world position under a point of the screen, as the camera stood on the
+    /// last drawn frame. `point` and `screen` are in pixels.
+    pub fn screen_to_world(&self, point: Vec2, screen: Vec2) -> Vec2 {
+        self.camera.screen_to_world(point, screen)
     }
 
     /// Frames the whole room instead of following the player, to check a room
@@ -278,7 +369,7 @@ impl View {
     ///
     /// `blend` is how far the frame is between the previous simulation step (0) and
     /// the current one (1); `frame_seconds` is the time since the last drawn frame.
-    /// `stick` is the on-screen stick to draw over the world, if a finger holds one.
+    /// `sticks` are the on-screen sticks fingers are holding, to draw over the HUD.
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
@@ -288,22 +379,94 @@ impl View {
         world: &World,
         blend: f32,
         frame_seconds: f32,
-        stick: Option<StickVisual>,
+        sticks: &[StickVisual],
     ) {
+        let blend = blend.clamp(0.0, 1.0);
         let aspect = target.width.max(1) as f32 / target.height.max(1) as f32;
-        let player_position = world
-            .player
-            .previous_position
-            .lerp(world.player.position, blend.clamp(0.0, 1.0));
+        let player_position = world.player.previous_position.lerp(world.player.position, blend);
 
         self.follow(player_position, aspect, frame_seconds);
+        let shake = self.shake_offset(frame_seconds);
 
         self.list.clear();
         for &batch in &self.below {
             self.list.batch(batch);
         }
 
-        let sheet = match world.player.facing {
+        // Guns on the floor lie under the characters.
+        for pickup in &world.combat.pickups {
+            if let Some(sprite) = &self.gun_sprites[pickup.gun.def.0 as usize] {
+                let placed = sprite.placed(pickup.position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]);
+                self.list.sprite(sprite.texture, placed);
+            }
+        }
+
+        self.draw_player(world, player_position);
+
+        for bullet in &world.combat.bullets {
+            let def = world.defs.bullet(bullet.def);
+            if let Some(sprite) = &self.bullet_sprites[bullet.def.0 as usize] {
+                let position = bullet.previous_position.lerp(bullet.position, blend);
+                let placed = sprite
+                    .placed(position.extend(Z_BULLETS), def.scale, bullet.rotation, [false, false])
+                    .with_color(def.color);
+                self.list.sprite(sprite.texture, placed);
+            }
+        }
+        for effect in &world.combat.effects {
+            let def = world.defs.effect(effect.def);
+            if let Some(sprite) = &self.effect_sprites[effect.def.0 as usize] {
+                let placed = sprite
+                    .placed(effect.position.extend(Z_BULLETS), def.scale, effect.rotation, [false, false])
+                    .with_color(effect.color);
+                self.list.sprite(sprite.texture, placed);
+            }
+        }
+
+        for &batch in &self.above {
+            self.list.batch(batch);
+        }
+
+        let mut camera = self.camera;
+        camera.center += shake;
+        renderer.begin_frame();
+        renderer.draw(
+            encoder,
+            target,
+            &Pass {
+                view_projection: camera.view_projection(aspect),
+                clear: Some(CLEAR_COLOR),
+                viewport: None,
+            },
+            &self.list,
+        );
+
+        self.draw_hud(renderer, encoder, target, world, sticks);
+    }
+
+    /// The player: shadow, the hand behind, the body, the gun and the hand in front.
+    fn draw_player(&mut self, world: &World, position: Vec2) {
+        let player = &world.player;
+        let (angle, mirrored) = arm_pose(player);
+        let pivot = position + crate::sim::player::PIVOT_OFFSET;
+        // A part of the arm: its offset is turned with the arm, and mirrored
+        // top-to-bottom when the arm points right so the gun is never upside down.
+        let part = |sprite: &ResolvedSprite, (offset, degrees): (Vec2, f32)| {
+            let side = if mirrored { -1.0 } else { 1.0 };
+            let offset = Vec2::from_angle(angle).rotate(Vec2::new(offset.x, offset.y * side));
+            sprite.placed(
+                (pivot + offset).extend(Z_ENTITIES),
+                [1.0, 1.0],
+                angle + side * degrees.to_radians(),
+                [false, mirrored],
+            )
+        };
+
+        let shadow = self.shadow.placed((position + SHADOW_OFFSET).extend(Z_ENTITIES), [1.0, 1.0], 0.0, [false, false]);
+        self.list.sprite(self.shadow.texture, shadow);
+        self.list.sprite(self.left_hand.texture, part(&self.left_hand, LEFT_HAND));
+
+        let sheet = match player.facing {
             Facing::Front => self.player.front,
             Facing::Back => self.player.back,
             Facing::Left => self.player.left,
@@ -312,61 +475,126 @@ impl View {
         self.list.sprite(
             sheet,
             Sprite::new(
-                player_position.extend(Z_ENTITIES),
+                position.extend(Z_ENTITIES),
                 self.player.frames.cell_size(),
-                self.player.frames.uv(world.player.animation_frame()),
+                self.player.frames.uv(player.animation_frame()),
             ),
         );
 
-        for &batch in &self.above {
-            self.list.batch(batch);
+        if let Some(sprite) = world
+            .current_gun()
+            .and_then(|gun| self.gun_sprites[gun.def.0 as usize].as_ref())
+        {
+            self.list.sprite(sprite.texture, part(sprite, GUN_IN_HAND));
         }
-
-        renderer.begin_frame();
-        renderer.draw(
-            encoder,
-            target,
-            &Pass {
-                view_projection: self.camera.view_projection(aspect),
-                clear: Some(CLEAR_COLOR),
-                viewport: None,
-            },
-            &self.list,
-        );
-
-        if let Some(stick) = stick {
-            self.draw_stick(renderer, encoder, target, stick);
-        }
+        self.list.sprite(self.right_hand.texture, part(&self.right_hand, RIGHT_HAND));
     }
 
-    /// A second pass in pixel space, over the finished world.
-    fn draw_stick(
+    /// How far to move the camera this frame for the shake in progress.
+    fn shake_offset(&mut self, frame_seconds: f32) -> Vec2 {
+        if self.shake_elapsed >= self.shake.time {
+            return Vec2::ZERO;
+        }
+        self.shake_elapsed += frame_seconds.max(0.0);
+        let phase = self.shake_elapsed * self.shake.frequency.max(0.1) * SHAKE_RATE * std::f32::consts::TAU;
+        // Two unrelated wobbles per axis, so it does not read as a circle.
+        let wobble = Vec2::new(
+            phase.sin() + 0.5 * (phase * 2.3 + 1.3).sin(),
+            (phase * 1.3 + 0.7).cos() + 0.5 * (phase * 1.9 + 2.1).sin(),
+        );
+        wobble * self.shake.amplitude * SHAKE_DISTANCE
+    }
+
+    /// A second pass in pixel space, over the finished world: inventory slots, the
+    /// heat bar, the pick-up button and any on-screen sticks.
+    fn draw_hud(
         &mut self,
         renderer: &mut Renderer2d,
         encoder: &mut wgpu::CommandEncoder,
         target: Target<'_>,
-        stick: StickVisual,
+        world: &World,
+        sticks: &[StickVisual],
     ) {
-        let (width, height) = (target.width as f32, target.height as f32);
-        // The stick is in window pixels (y down); the pixel camera's y points up.
-        let flip = |point: Vec2| Vec3::new(point.x, height - point.y, 0.0);
+        let screen = Vec2::new(target.width as f32, target.height as f32);
+        let hud = HudLayout::new(screen);
+        // The HUD is laid out in window pixels (y down); the pixel camera's y points up.
+        let flip = |point: Vec2| Vec3::new(point.x, screen.y - point.y, 0.0);
         let full = [0.0, 0.0, 1.0, 1.0];
-        let base_size = stick.radius * 2.0;
-        let knob_size = base_size * STICK_KNOB_SCALE;
+        let rect = |rect: Rect, color: [f32; 4]| {
+            Sprite::new(flip(rect.center()), rect.size().to_array(), full).with_color(color)
+        };
+        // A gun's picture fitted inside a square of `side` pixels around `center`.
+        let icon = |sprite: &ResolvedSprite, center: Vec2, side: f32| {
+            let scale = side / sprite.size[0].max(sprite.size[1]).max(1e-6);
+            Sprite::new(flip(center), [sprite.size[0] * scale, sprite.size[1] * scale], sprite.uv)
+        };
 
         self.overlay.clear();
-        self.overlay.sprites(
-            self.disc,
-            &[
-                Sprite::new(flip(stick.base), [base_size, base_size], full).with_color(STICK_BASE_COLOR),
-                Sprite::new(flip(stick.knob), [knob_size, knob_size], full).with_color(STICK_KNOB_COLOR),
-            ],
-        );
+
+        for (index, slot) in hud.slots.iter().enumerate().take(INVENTORY_SLOTS) {
+            if index == world.selected_slot {
+                let border = slot.size().x * 0.07;
+                let outline = Rect {
+                    min: slot.min - Vec2::splat(border),
+                    max: slot.max + Vec2::splat(border),
+                };
+                self.overlay.sprite(self.white, rect(outline, HUD_SELECTED_COLOR));
+            }
+            self.overlay.sprite(self.white, rect(*slot, HUD_SLOT_COLOR));
+            if let Some(sprite) = world.inventory[index]
+                .as_ref()
+                .and_then(|gun| self.gun_sprites[gun.def.0 as usize].as_ref())
+            {
+                self.overlay.sprite(sprite.texture, icon(sprite, slot.center(), slot.size().x * 0.8));
+            }
+        }
+
+        if let Some(gun) = world.current_gun() {
+            let heat = gun.heat_fraction(world.defs.gun(gun.def));
+            self.overlay.sprite(self.white, rect(hud.heat_bar, HUD_HEAT_BACK_COLOR));
+            if heat > 0.0 {
+                let mut filled = hud.heat_bar;
+                filled.max.x = filled.min.x + hud.heat_bar.size().x * heat;
+                let color = std::array::from_fn(|channel| {
+                    HUD_HEAT_COOL_COLOR[channel] + (HUD_HEAT_HOT_COLOR[channel] - HUD_HEAT_COOL_COLOR[channel]) * heat
+                });
+                self.overlay.sprite(self.white, rect(filled, color));
+            }
+        }
+
+        // The pick-up button shows what would be picked up.
+        if let Some(index) = world
+            .combat
+            .pickup_in_reach(&world.defs, world.player.position, crate::sim::player::HALF_SIZE)
+        {
+            let diameter = hud.interact_radius * 2.0;
+            self.overlay.sprite(
+                self.disc,
+                Sprite::new(flip(hud.interact_center), [diameter, diameter], full).with_color(HUD_BUTTON_COLOR),
+            );
+            if let Some(sprite) = &self.gun_sprites[world.combat.pickups[index].gun.def.0 as usize] {
+                self.overlay
+                    .sprite(sprite.texture, icon(sprite, hud.interact_center, hud.interact_radius * 1.2));
+            }
+        }
+
+        for stick in sticks {
+            let base_size = stick.radius * 2.0;
+            let knob_size = base_size * STICK_KNOB_SCALE;
+            self.overlay.sprites(
+                self.disc,
+                &[
+                    Sprite::new(flip(stick.base), [base_size, base_size], full).with_color(STICK_BASE_COLOR),
+                    Sprite::new(flip(stick.knob), [knob_size, knob_size], full).with_color(STICK_KNOB_COLOR),
+                ],
+            );
+        }
+
         renderer.draw(
             encoder,
             target,
             &Pass {
-                view_projection: Camera2d::pixels(width, height).view_projection(),
+                view_projection: Camera2d::pixels(screen.x, screen.y).view_projection(),
                 clear: None,
                 viewport: None,
             },
@@ -416,7 +644,28 @@ struct ResolvedSprite {
     pivot: [f32; 2],
 }
 
+/// Which way the gun arm points, in radians, and whether it is mirrored.
+///
+/// Unity's `PlayerAnimations`: while aiming, the arm's -x axis points along the
+/// aim and the arm is mirrored when aiming right; otherwise it hangs to the side
+/// last walked towards.
+fn arm_pose(player: &Player) -> (f32, bool) {
+    match player.aim {
+        Some(aim) => ((-aim).to_angle(), aim.x >= 0.0),
+        None if player.moved_right => ((180.0 - CARRY_ANGLE).to_radians(), true),
+        None => (CARRY_ANGLE.to_radians(), false),
+    }
+}
+
 impl ResolvedSprite {
+    /// Stands in for a sprite that has not been looked up yet. Draws nothing useful.
+    const EMPTY: Self = Self {
+        texture: TextureId::PLACEHOLDER,
+        uv: [0.0; 4],
+        size: [0.0; 2],
+        pivot: [0.5; 2],
+    };
+
     /// The sprite with its pivot at `position`, scaled, turned counter-clockwise by
     /// `rotation` radians about the pivot, and optionally mirrored in place.
     fn placed(&self, position: Vec3, scale: [f32; 2], rotation: f32, flip: [bool; 2]) -> Sprite {
@@ -466,7 +715,7 @@ mod tests {
     #[test]
     fn mirroring_a_sprite_moves_its_pivot_with_the_picture() {
         let sprite = ResolvedSprite {
-            texture: TextureId::default(),
+            texture: TextureId::PLACEHOLDER,
             uv: [0.0, 0.25, 0.5, 0.75],
             size: [1.0, 2.0],
             pivot: [0.25, 0.0],
@@ -477,6 +726,24 @@ mod tests {
         let mirrored = sprite.placed(Vec3::ZERO, [1.0, 1.0], 0.0, [true, true]);
         assert_eq!(mirrored.uv, [0.5, 0.75, 0.0, 0.25]);
         assert_eq!(mirrored.pivot, [0.75, 1.0]);
+    }
+
+    #[test]
+    fn the_arm_points_along_the_aim_and_mirrors_when_aiming_right() {
+        let mut player = Player::new(Vec2::ZERO);
+        // Carried: down to the left until the player has walked right.
+        assert_eq!(arm_pose(&player), (50f32.to_radians(), false));
+        player.moved_right = true;
+        assert_eq!(arm_pose(&player), (130f32.to_radians(), true));
+
+        // The gun sits on the arm's -x axis, so that axis must lie along the aim.
+        for aim in [Vec2::X, Vec2::NEG_X, Vec2::Y, Vec2::new(0.6, -0.8)] {
+            player.aim = Some(aim);
+            let (angle, mirrored) = arm_pose(&player);
+            let gun_direction = Vec2::from_angle(angle).rotate(Vec2::NEG_X);
+            assert!(gun_direction.distance(aim) < 1e-5, "aiming {aim}: gun at {gun_direction}");
+            assert_eq!(mirrored, aim.x >= 0.0);
+        }
     }
 
     #[test]

@@ -1,0 +1,434 @@
+{
+  "bullets": {
+    "Bullet_Homing": {
+      "color": [0.8679, 0.8662, 0.5199, 1.0],
+      "effect": "Bullet Splash",
+      "homing": 500.0,
+      "piercing": false,
+      "size": [0.125, 0.125],
+      "sprite": "Bullet_6",
+      "time_to_live": 2.0
+    },
+    "Bullet_Homing 2": {
+      "color": [0.8679, 0.8662, 0.5199, 1.0],
+      "effect": "Bullet Splash",
+      "homing": 500.0,
+      "piercing": false,
+      "size": [0.125, 0.125],
+      "sprite": "Priest_Bullet_3",
+      "time_to_live": 2.0
+    },
+    "Bullet_Pistol_1": {
+      "color": [0.8774, 0.5967, 0.12, 1.0],
+      "effect": "Bullet Splash",
+      "piercing": false,
+      "size": [0.125, 0.125],
+      "sprite": "Bullet_1",
+      "time_to_live": 2.0
+    },
+    "Bullet_Pistol_2": {
+      "color": [0.1273, 0.4008, 0.4906, 1.0],
+      "effect": "Bullet Splash",
+      "freeze": 5.0,
+      "piercing": false,
+      "size": [0.125, 0.125],
+      "sprite": "Bullet_5",
+      "time_to_live": 2.0
+    },
+    "Bullet_Rifle": {
+      "color": [0.6038, 0.1509, 0.1732, 1.0],
+      "effect": "Bullet Splash",
+      "piercing": false,
+      "size": [0.125, 0.125],
+      "sprite": "Bullet_4",
+      "time_to_live": 2.0
+    },
+    "Bullet_Shotgun": {
+      "color": [0.8113, 0.5899, 0.2181, 1.0],
+      "effect": "Bullet Splash",
+      "piercing": true,
+      "size": [0.125, 0.125],
+      "sprite": "Bullet_2",
+      "time_to_live": 0.25
+    },
+    "Enemy Bullet": {
+      "color": [0.9811, 0.199, 0.199, 1.0],
+      "effect": "Bullet Splash Small",
+      "enemy_damage": 0.0,
+      "piercing": false,
+      "size": [0.0625, 0.0625],
+      "sprite": "Bullet_3",
+      "time_to_live": 2.0
+    },
+    "Low_Tier_Bullet": {
+      "color": [0.9811, 0.199, 0.199, 1.0],
+      "effect": "Explosion 1",
+      "enemy_damage": 50.0,
+      "piercing": false,
+      "size": [0.0625, 0.0625],
+      "sprite": "Bullet_3",
+      "time_to_live": 2.0
+    },
+    "flames": {
+      "color": [0.8208, 0.6398, 0.3678, 1.0],
+      "piercing": false,
+      "scale": [0.4, 0.4],
+      "size": [0.5, 0.5],
+      "sprite": "Flame",
+      "time_to_live": 0.5
+    },
+    "missile_1": {
+      "effect": "Explosion 1",
+      "piercing": false,
+      "size": [0.25, 0.1151],
+      "sprite": "missile_1",
+      "time_to_live": 3.0
+    }
+  },
+  "effects": {
+    "Bullet Splash": {
+      "sprite": "Splash_1",
+      "time_to_live": 0.2
+    },
+    "Bullet Splash Small": {
+      "sprite": "Splash_8x8",
+      "time_to_live": 0.2
+    },
+    "Explosion 1": {
+      "color": [0.934, 0.5143, 0.2071, 1.0],
+      "explosion": {
+        "damage": 200.0,
+        "radius": 0.4422
+      },
+      "sprite": "explosion",
+      "time_to_live": 0.3
+    }
+  },
+  "guns": {
+    "Flamethrower": {
+      "bullet": "flames",
+      "bullet_count": 3,
+      "bullet_speed": 2.0,
+      "damage": 50.0,
+      "fire_delay": 0.2,
+      "heat_capacity": 15.0,
+      "heat_cooldown": 4.0,
+      "id": 4,
+      "kind": "spray",
+      "knockback": 1.0,
+      "pickup_size": [0.375, 0.375],
+      "random_speed": 2.0,
+      "shake": {
+        "amplitude": 0.0,
+        "frequency": 1.0,
+        "time": 0.0
+      },
+      "sound": "Flamethrower_Shoot",
+      "spray_angle": 30.0,
+      "sprite": "flamethrower_1"
+    },
+    "Low_tier_Gun": {
+      "bullet": "Low_Tier_Bullet",
+      "bullet_speed": -7.0,
+      "color": [0.7642, 0.0613, 0.0613, 1.0],
+      "damage": 30.0,
+      "fire_delay": 2.0,
+      "heat_capacity": 15.0,
+      "heat_cooldown": 5.0,
+      "id": 8,
+      "kind": "single",
+      "knockback": 3.0,
+      "pickup_size": [0.375, 0.375],
+      "shake": {
+        "amplitude": 0.0,
+        "frequency": 0.0,
+        "time": 0.0
+      },
+      "sound": "Low_Tier_Gun_Lightning",
+      "sprite": "gun_3"
+    },
+    "Test_LowTier": {
+      "bullet": "Enemy Bullet",
+      "bullet_speed": -1.0,
+      "color": [0.7736, 0.1788, 0.1788, 1.0],
+      "damage": 30.0,
+      "fire_delay": 0.0,
+      "heat_capacity": 0.0,
+      "heat_cooldown": 0.0,
+      "id": 8,
+      "kind": "single",
+      "knockback": 0.0,
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.03,
+        "frequency": 1.0,
+        "time": 0.03
+      },
+      "sound": "Low_Tier_Gun_Lightning",
+      "sprite": "gun_3"
+    },
+    "bazooka_1": {
+      "bullet": "missile_1",
+      "bullet_speed": 7.0,
+      "damage": 0.0,
+      "fire_delay": 2.0,
+      "heat_capacity": 1.0,
+      "heat_cooldown": 2.0,
+      "id": 7,
+      "kind": "single",
+      "knockback": 3.0,
+      "pickup_size": [0.375, 0.375],
+      "shake": {
+        "amplitude": 0.0,
+        "frequency": 0.0,
+        "time": 0.0
+      },
+      "sprite": "bazooka_1"
+    },
+    "debug_laser": {
+      "damage": 100.0,
+      "damage_delay": 0.02,
+      "heat_capacity": 0.0,
+      "heat_cooldown": 0.0,
+      "id": 13,
+      "kind": "laser",
+      "knockback": 1.0,
+      "laser_end": "laser_3",
+      "laser_middle": "laser_2",
+      "laser_start": "laser_1",
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.5,
+        "frequency": 1.0,
+        "time": 0.1
+      },
+      "sound": "laser_loop",
+      "sprite": "gun_5"
+    },
+    "laser_2": {
+      "damage": 100.0,
+      "damage_delay": 0.1,
+      "heat_capacity": 20.0,
+      "heat_cooldown": 10.0,
+      "id": 8,
+      "kind": "laser",
+      "knockback": 1.0,
+      "laser_end": "laser_3",
+      "laser_middle": "laser_2",
+      "laser_start": "laser_1",
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.25,
+        "frequency": 1.0,
+        "time": 0.05
+      },
+      "sound": "laser_loop",
+      "sprite": "gun_5"
+    },
+    "lmg_red": {
+      "bullet": "Bullet_Homing",
+      "bullet_count": 1,
+      "bullet_speed": 3.0,
+      "damage": 20.0,
+      "fire_delay": 0.07,
+      "heat_capacity": 4.0,
+      "heat_cooldown": 0.6,
+      "id": 12,
+      "kind": "spray",
+      "knockback": 1.0,
+      "pickup_size": [0.25, 0.25],
+      "random_speed": 1.0,
+      "shake": {
+        "amplitude": 0.15,
+        "frequency": 1.0,
+        "time": 0.15
+      },
+      "sound": "Gunshot",
+      "spray_angle": 30.0,
+      "sprite": "lmg_red"
+    },
+    "minigun_1": {
+      "bullet": "Bullet_Pistol_2",
+      "bullet_count": 1,
+      "bullet_speed": 8.0,
+      "damage": 25.0,
+      "fire_delay": 0.15,
+      "heat_capacity": 12.0,
+      "heat_cooldown": 2.0,
+      "id": 5,
+      "kind": "spray",
+      "knockback": 3.0,
+      "pickup_size": [0.25, 0.25],
+      "random_speed": 1.1,
+      "shake": {
+        "amplitude": 0.07,
+        "frequency": 1.0,
+        "time": 0.07
+      },
+      "sound": "Gunshot",
+      "spray_angle": 7.0,
+      "sprite": "lmg_purple"
+    },
+    "pistol_1": {
+      "bullet": "Bullet_Pistol_1",
+      "bullet_speed": 6.0,
+      "damage": 100.0,
+      "fire_delay": 1.0,
+      "heat_capacity": 1.0,
+      "heat_cooldown": 1.0,
+      "id": 0,
+      "kind": "single",
+      "knockback": 1.0,
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.4,
+        "frequency": 1.0,
+        "time": 0.05
+      },
+      "sound": "Gunshot",
+      "sprite": "gun_1"
+    },
+    "pistol_2": {
+      "bullet": "Bullet_Pistol_2",
+      "bullet_speed": 6.0,
+      "damage": 125.0,
+      "fire_delay": 0.75,
+      "heat_capacity": 1.0,
+      "heat_cooldown": 0.75,
+      "id": 3,
+      "kind": "single",
+      "knockback": 1.0,
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.2,
+        "frequency": 1.0,
+        "time": 0.2
+      },
+      "sound": "BluePistolShoot",
+      "sprite": "gun_2"
+    },
+    "rifle_1": {
+      "bullet": "Bullet_Rifle",
+      "bullet_speed": 10.0,
+      "damage": 75.0,
+      "fire_delay": 0.4,
+      "heat_capacity": 15.0,
+      "heat_cooldown": 2.0,
+      "id": 6,
+      "kind": "single",
+      "knockback": 5.0,
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.1,
+        "frequency": 1.0,
+        "time": 0.1
+      },
+      "sound": "laserRifleShoot",
+      "sprite": "gun_6"
+    },
+    "rifle_2": {
+      "bullet": "Bullet_Rifle",
+      "bullet_speed": 10.0,
+      "damage": 75.0,
+      "fire_delay": 0.1,
+      "heat_capacity": 6.0,
+      "heat_cooldown": 2.0,
+      "id": 9,
+      "kind": "single",
+      "knockback": 5.0,
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.1,
+        "frequency": 1.0,
+        "time": 0.1
+      },
+      "sound": "laser_shoot_2",
+      "sprite": "rifle_blue"
+    },
+    "rifle_3": {
+      "bullet": "Bullet_Homing 2",
+      "bullet_speed": 10.0,
+      "damage": 100.0,
+      "fire_delay": 0.2,
+      "heat_capacity": 12.0,
+      "heat_cooldown": 2.0,
+      "id": 14,
+      "kind": "single",
+      "knockback": 5.0,
+      "pickup_size": [0.25, 0.25],
+      "shake": {
+        "amplitude": 0.1,
+        "frequency": 1.0,
+        "time": 0.1
+      },
+      "sound": "laser_shoot_2",
+      "sprite": "hand_of_bishop"
+    },
+    "shotgun_1": {
+      "bullet": "Bullet_Shotgun",
+      "bullet_count": 3,
+      "bullet_speed": 5.0,
+      "damage": 150.0,
+      "fire_delay": 1.5,
+      "heat_capacity": 1.0,
+      "heat_cooldown": 1.5,
+      "id": 1,
+      "kind": "spray",
+      "knockback": 4.0,
+      "pickup_size": [0.25, 0.25],
+      "random_speed": 1.2,
+      "shake": {
+        "amplitude": 0.5,
+        "frequency": 1.0,
+        "time": 0.1
+      },
+      "sound": "Gunshot",
+      "spray_angle": 20.0,
+      "sprite": "shotgun_orange"
+    },
+    "smg_1": {
+      "bullet": "Bullet_Pistol_2",
+      "bullet_count": 1,
+      "bullet_speed": 8.0,
+      "damage": 20.0,
+      "fire_delay": 0.07,
+      "heat_capacity": 6.0,
+      "heat_cooldown": 1.0,
+      "id": 2,
+      "kind": "spray",
+      "knockback": 3.0,
+      "pickup_size": [0.25, 0.25],
+      "random_speed": 1.2,
+      "shake": {
+        "amplitude": 0.07,
+        "frequency": 1.0,
+        "time": 0.07
+      },
+      "sound": "Gunshot",
+      "spray_angle": 15.0,
+      "sprite": "smg_cyan"
+    },
+    "smg_red": {
+      "bullet": "Bullet_Rifle",
+      "bullet_count": 1,
+      "bullet_speed": 8.0,
+      "damage": 40.0,
+      "fire_delay": 0.07,
+      "heat_capacity": 7.0,
+      "heat_cooldown": 1.0,
+      "id": 11,
+      "kind": "spray",
+      "knockback": 1.0,
+      "pickup_size": [0.25, 0.25],
+      "random_speed": 1.2,
+      "shake": {
+        "amplitude": 0.07,
+        "frequency": 1.0,
+        "time": 0.07
+      },
+      "sound": "Gunshot",
+      "spray_angle": 20.0,
+      "sprite": "smg_red"
+    }
+  }
+}

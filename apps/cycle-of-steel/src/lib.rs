@@ -4,7 +4,8 @@
 //!
 //! - `sim` is the game: world state and one fixed-rate `step`. It knows nothing
 //!   about winit, wgpu or wall-clock time, so tests can step it directly.
-//! - `input` turns keys and gamepads into the `sim::Input` a step consumes.
+//! - `input` turns keys, mouse, gamepads and touch into the `sim::Input` a step
+//!   consumes; `hud` is where the on-screen controls sit.
 //! - `view` turns world state into sprites and owns the camera.
 //! - `assets` finds and reads the files under `assets/`; `data` is their formats.
 //! - `app` is the window, the frame loop and the screenshot mode.
@@ -15,6 +16,7 @@
 pub mod app;
 pub mod assets;
 pub mod data;
+pub mod hud;
 pub mod input;
 pub mod sim;
 pub mod view;

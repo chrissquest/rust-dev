@@ -21,7 +21,8 @@ any warnings, and overwrites what is there.
 
 ```text
 rooms/<room>.json     one per prefab under Assets/Prefabs/Generatable Rooms
-sprites.json          every sprite those rooms use: texture, rectangle, pivot, scale
+guns.json             every gun, the bullets they fire and the effects those leave
+sprites.json          every sprite the above use: texture, rectangle, pivot, scale
 sprites/<name>.png    the textures themselves, copied unchanged
 ```
 
@@ -44,6 +45,12 @@ A tile is one number: -1 for empty, otherwise `palette index * 8 + transform`. T
 transform's low two bits are quarter turns counter-clockwise; adding 4 mirrors the
 tile left-to-right first. Each layer's tiles are written one row per line, top row
 first, so a room reads the way it looks.
+
+`guns.json` has three tables keyed by Unity prefab name. `guns` holds each gun's
+numbers (kind, damage, fire delay, heat capacity and cooldown, spread, camera
+shake) and names its bullet; `bullets` holds a bullet's sprite, colour, size,
+lifetime and whether it pierces, and names the effect it leaves; `effects` holds
+the splash or explosion. Only bullets and effects that some gun reaches are written.
 
 ## What it decides on the way
 
@@ -69,7 +76,8 @@ src/
   yaml.rs      a reader for the subset of YAML that Unity writes
   project.rs   GUID -> asset path, sprite rectangles from .meta files, tile colliders
   room.rs      one room prefab -> one room file
+  guns.rs      gun, bullet and effect prefabs -> guns.json
   json.rs      JSON output that keeps a row of tiles on one line
 ```
 
-Not converted yet: animations, gun and enemy stats, and audio.
+Not converted yet: animations, enemy stats, and audio.

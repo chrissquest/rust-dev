@@ -25,6 +25,8 @@ OPTIONS:
     --size <WxH>            screenshot size in pixels (default: 1280x720)
     --ticks <n>             simulation steps to run before the screenshot (default: 0)
     --move <x,y>            direction held during those steps (default: 0,0)
+    --aim <x,y>             direction the trigger is held towards during those steps
+    --give <gun[,gun]>      start with these guns: names from assets/guns.json
     --whole-room            frame the whole room in the screenshot instead of
                             following the player
     --touch <x0,y0,x1,y1>   a finger held during those steps: down at x0,y0 and
@@ -32,7 +34,10 @@ OPTIONS:
     -h, --help              show this text
 
 KEYS:
-    W A S D / arrows        move (or a gamepad's left stick / d-pad)
+    W A S D                 move (or a gamepad's left stick / d-pad)
+    arrows / mouse button   shoot that way (or a gamepad's right stick)
+    Space                   pick up (gamepad: A or X)
+    1 2 3 4 / Q E / wheel   choose an inventory slot (gamepad: shoulder buttons)
     F11                     toggle fullscreen
     Escape                  quit
 ";
@@ -60,6 +65,8 @@ fn main() -> Result<()> {
             height: options.size.1,
             ticks: options.ticks,
             movement: options.movement,
+            aim: options.aim,
+            give: options.give,
             touch: options.touch,
             whole_room: options.whole_room,
         }),
@@ -84,6 +91,8 @@ struct Options {
     size: (u32, u32),
     ticks: u32,
     movement: Vec2,
+    aim: Option<Vec2>,
+    give: Vec<String>,
     touch: Option<(Vec2, Vec2)>,
     whole_room: bool,
 }
@@ -98,6 +107,8 @@ fn parse_args() -> Result<Option<Options>> {
         size: (1280, 720),
         ticks: 0,
         movement: Vec2::ZERO,
+        aim: None,
+        give: Vec::new(),
         touch: None,
         whole_room: false,
     };
@@ -118,6 +129,8 @@ fn parse_args() -> Result<Option<Options>> {
             "--size" => options.size = parse_size(&value("WxH")?)?,
             "--ticks" => options.ticks = parse_number(&value("a count")?, "a step count")?,
             "--move" => options.movement = parse_direction(&value("x,y")?)?,
+            "--aim" => options.aim = Some(parse_direction(&value("x,y")?)?),
+            "--give" => options.give = value("gun names")?.split(',').map(str::to_string).collect(),
             "--whole-room" => options.whole_room = true,
             "--touch" => options.touch = Some(parse_touch(&value("x0,y0,x1,y1")?)?),
             other => bail!("unknown option `{other}`\n\n{USAGE}"),

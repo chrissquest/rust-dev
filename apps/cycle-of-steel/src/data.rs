@@ -4,9 +4,8 @@
 //! now the source of truth. Everything is in room space: x right, y up, origin at
 //! the room's bottom-left corner, in world units.
 //!
-//! Only what the game uses so far is read. A room file also lists `objects`
-//! (enemies, chests, hazards), `lights`, `barriers` and `markers`; those are
-//! skipped here until the steps that need them.
+//! Only what the game uses so far is read. A room file also lists `lights` and
+//! `barriers`; those are skipped here until the steps that need them.
 
 use std::collections::HashMap;
 
@@ -55,6 +54,9 @@ pub struct RoomFile {
     /// Loose sprites, in draw order.
     #[serde(default)]
     pub decorations: Vec<DecorationFile>,
+    /// Prefabs placed in the room: guns to pick up, enemies, chests, hazards.
+    #[serde(default)]
+    pub objects: Vec<ObjectFile>,
     #[serde(default)]
     pub markers: Vec<MarkerFile>,
 }
@@ -97,12 +99,163 @@ pub struct DecorationFile {
     pub color: [f32; 4],
 }
 
+/// A prefab placed in the room. What it is depends on its name: a key of
+/// `guns.json` is a gun lying on the floor, and so on.
+#[derive(Clone, Debug, Deserialize)]
+pub struct ObjectFile {
+    pub prefab: String,
+    pub position: [f32; 2],
+}
+
 /// An object that carried one of the Unity game's scripts.
 #[derive(Clone, Debug, Deserialize)]
 pub struct MarkerFile {
     pub name: String,
     pub scripts: Vec<String>,
     pub position: [f32; 2],
+    /// Its box collider, if it had one.
+    #[serde(default, rename = "box")]
+    pub bounds: Option<BoxFile>,
+    /// Settings typed into the Unity inspector, as `Script.field` -> text.
+    #[serde(default)]
+    pub fields: HashMap<String, String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct BoxFile {
+    pub center: [f32; 2],
+    pub size: [f32; 2],
+}
+
+impl MarkerFile {
+    pub fn has_script(&self, script: &str) -> bool {
+        self.scripts.iter().any(|name| name == script)
+    }
+
+    /// A numeric setting, e.g. `number("Killable.maxHealth")`.
+    pub fn number(&self, field: &str) -> Option<f32> {
+        self.fields.get(field)?.parse().ok()
+    }
+}
+
+/// `guns.json`: every gun, the bullets they fire and the effects those leave.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct GunsFile {
+    pub guns: HashMap<String, GunFile>,
+    pub bullets: HashMap<String, BulletFile>,
+    pub effects: HashMap<String, EffectFile>,
+}
+
+impl GunsFile {
+    pub fn load(assets: &AssetSource) -> Result<Self> {
+        let bytes = assets.read("guns.json")?;
+        serde_json::from_slice(&bytes).context("could not parse guns.json")
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GunKind {
+    /// One bullet per shot, straight along the aim.
+    Single,
+    /// Several bullets per shot, each off-aim by a random angle and speed.
+    Spray,
+    /// A continuous beam.
+    Laser,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct GunFile {
+    /// The number save files know the gun by.
+    pub id: i32,
+    pub kind: GunKind,
+    #[serde(default)]
+    pub sprite: Option<String>,
+    /// The box the player must touch to pick the gun up, in world units.
+    #[serde(default = "quarter")]
+    pub pickup_size: [f32; 2],
+    /// Shots (or laser ticks) until the gun overheats. 0 with a 0 cooldown means
+    /// it never does.
+    pub heat_capacity: f32,
+    /// Seconds an overheated gun is locked while it cools.
+    pub heat_cooldown: f32,
+    pub damage: f32,
+    pub knockback: f32,
+    #[serde(default)]
+    pub shake: ShakeFile,
+    /// Seconds between shots.
+    #[serde(default)]
+    pub fire_delay: f32,
+    /// World units per second.
+    #[serde(default)]
+    pub bullet_speed: f32,
+    #[serde(default = "one_bullet")]
+    pub bullet_count: u32,
+    /// Spray guns: each bullet leaves up to this many degrees either side of the aim.
+    #[serde(default)]
+    pub spray_angle: f32,
+    /// Spray guns: each bullet's speed is multiplied by a random 1..=this.
+    #[serde(default = "unit")]
+    pub random_speed: f32,
+    /// A key of `bullets`. Lasers have none.
+    #[serde(default)]
+    pub bullet: Option<String>,
+}
+
+/// A camera shake: how long, how far and how fast.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize)]
+pub struct ShakeFile {
+    pub time: f32,
+    pub amplitude: f32,
+    pub frequency: f32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct BulletFile {
+    #[serde(default)]
+    pub sprite: Option<String>,
+    #[serde(default = "white")]
+    pub color: [f32; 4],
+    #[serde(default = "one")]
+    pub scale: [f32; 2],
+    /// Collision box, in world units.
+    #[serde(default = "eighth")]
+    pub size: [f32; 2],
+    /// Seconds before it disappears by itself.
+    pub time_to_live: f32,
+    /// Carries on through what it hits instead of stopping at the first.
+    #[serde(default)]
+    pub piercing: bool,
+    /// A key of `effects`: what is left where it hits.
+    #[serde(default)]
+    pub effect: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct EffectFile {
+    #[serde(default)]
+    pub sprite: Option<String>,
+    #[serde(default = "white")]
+    pub color: [f32; 4],
+    #[serde(default = "one")]
+    pub scale: [f32; 2],
+    pub time_to_live: f32,
+}
+
+fn quarter() -> [f32; 2] {
+    [0.25, 0.25]
+}
+
+fn eighth() -> [f32; 2] {
+    [0.125, 0.125]
+}
+
+fn one_bullet() -> u32 {
+    1
+}
+
+fn unit() -> f32 {
+    1.0
 }
 
 fn one() -> [f32; 2] {

@@ -4,6 +4,7 @@
 //! It is meant to be run once per kind of asset: after that, the files it wrote are
 //! the source of truth and are edited directly (or by the room editor, later).
 
+mod guns;
 mod json;
 mod project;
 mod room;
@@ -28,12 +29,19 @@ USAGE:
 
 WRITES:
     rooms/<room>.json     one file per prefab under Assets/Prefabs/Generatable Rooms
-    sprites.json          every sprite those rooms use: texture, rectangle, pivot
+    guns.json             every gun, the bullets they fire and the effects those leave
+    sprites.json          every sprite the above use: texture, rectangle, pivot
     sprites/<name>.png    the textures themselves, copied
 ";
 
 /// Where the room prefabs live, relative to the Unity `Assets` folder.
 const ROOMS_FOLDER: &str = "Prefabs/Generatable Rooms";
+/// Sprites the game draws that no room or gun refers to: the player's parts.
+const EXTRA_SPRITES: [&str; 3] = [
+    "Sprites/Guns/right_hand.png",
+    "Sprites/Guns/left_hand.png",
+    "Sprites/shadow.png",
+];
 /// The one room the dungeon generator never places. It is larger than a dungeon
 /// room: the hub, the exit corridor beside it and the debug room above it.
 const OFF_GRID_ROOM: &str = "Hub Room";
@@ -50,7 +58,7 @@ fn main() -> Result<()> {
     let output = PathBuf::from(output);
 
     let project = Project::open(Path::new(unity_root))?;
-    let room_paths = find_prefabs(&project.assets_dir().join(ROOMS_FOLDER), project.assets_dir())?;
+    let room_paths = project.prefabs_under(ROOMS_FOLDER)?;
     if room_paths.is_empty() {
         bail!("no room prefabs under {ROOMS_FOLDER}");
     }
@@ -95,24 +103,30 @@ fn main() -> Result<()> {
         warning_count += converted.warnings.len();
 
         for sprite in converted.sprites {
-            match catalogue.get(&sprite.name) {
-                Some(existing) if *existing != sprite => bail!(
-                    "two different sprites are both named `{}` ({} and {})",
-                    sprite.name,
-                    existing.texture.display(),
-                    sprite.texture.display()
-                ),
-                Some(_) => {}
-                None => {
-                    catalogue.insert(sprite.name.clone(), sprite);
-                }
-            }
+            add_sprite(&mut catalogue, sprite)?;
         }
+    }
+
+    let guns = guns::convert(&project)?;
+    let guns_path = output.join("guns.json");
+    std::fs::write(&guns_path, json::to_string(&guns.json))
+        .with_context(|| format!("could not write {}", guns_path.display()))?;
+    println!("\n{} guns, {} bullets, {} hit effects", guns.guns, guns.bullets, guns.effects);
+    for warning in &guns.warnings {
+        println!("    warning: {warning}");
+    }
+    warning_count += guns.warnings.len();
+    for sprite in guns.sprites {
+        add_sprite(&mut catalogue, sprite)?;
+    }
+
+    for path in EXTRA_SPRITES {
+        add_sprite(&mut catalogue, project.sprite_at(path)?)?;
     }
 
     let texture_count = write_sprites(&project, &output, &catalogue)?;
     println!(
-        "\n{} rooms, {} sprites from {} textures, {} warnings -> {}",
+        "{} rooms, {} sprites from {} textures, {} warnings -> {}",
         room_paths.len(),
         catalogue.len(),
         texture_count,
@@ -122,24 +136,21 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Every `.prefab` under `folder`, relative to `assets`, in a stable order.
-fn find_prefabs(folder: &Path, assets: &Path) -> Result<Vec<PathBuf>> {
-    let mut found = Vec::new();
-    let mut pending = vec![folder.to_path_buf()];
-    while let Some(current) = pending.pop() {
-        let entries =
-            std::fs::read_dir(&current).with_context(|| format!("could not list {}", current.display()))?;
-        for entry in entries {
-            let path = entry?.path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "prefab") {
-                found.push(path.strip_prefix(assets).unwrap_or(&path).to_path_buf());
-            }
+/// Adds a sprite to the catalogue, refusing two different sprites with one name.
+fn add_sprite(catalogue: &mut BTreeMap<String, SpriteInfo>, sprite: SpriteInfo) -> Result<()> {
+    match catalogue.get(&sprite.name) {
+        Some(existing) if *existing != sprite => bail!(
+            "two different sprites are both named `{}` ({} and {})",
+            sprite.name,
+            existing.texture.display(),
+            sprite.texture.display()
+        ),
+        Some(_) => {}
+        None => {
+            catalogue.insert(sprite.name.clone(), sprite);
         }
     }
-    found.sort();
-    Ok(found)
+    Ok(())
 }
 
 /// `Hub Room` -> `hub_room`: a file name with no spaces or capitals to trip over.

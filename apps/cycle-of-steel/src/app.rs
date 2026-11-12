@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use crystal_engine::glam::Vec2;
@@ -19,16 +19,17 @@ use crystal_engine::render2d::{self, Offscreen, Renderer2d, Target};
 use crystal_engine::surface::WindowSurface;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, TouchPhase, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::assets::AssetSource;
-use crate::data::RoomFile;
-use crate::input::{Action, Bindings, Gamepads, InputState, TouchStick};
+use crate::data::{GunsFile, RoomFile};
+use crate::input::{Action, Bindings, Gamepads, InputState, StickVisual, TouchControls};
+use crate::sim::defs::Defs;
 use crate::sim::room::Room;
-use crate::sim::{self, World};
+use crate::sim::{self, Event, World};
 use crate::view::View;
 
 /// A frame longer than this is treated as this long. After a stall (a dragged
@@ -55,7 +56,7 @@ pub struct Launch {
 /// passes to `android_main`; on desktop it is a plain `EventLoop::new()`.
 pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
-    let room = Room::from_file(RoomFile::load(&launch.assets, &launch.room)?);
+    let world = load_world(&launch.assets, &launch.room, clock_seed())?;
 
     let mut app = App {
         assets: launch.assets,
@@ -64,8 +65,10 @@ pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
         bindings: Bindings::default(),
         input: InputState::default(),
         gamepads: Gamepads::new(),
-        touch_stick: TouchStick::default(),
-        world: World::new(room),
+        touch: TouchControls::default(),
+        cursor: Vec2::ZERO,
+        mouse_held: false,
+        world,
         accumulator: 0.0,
         last_frame: None,
         graphics: None,
@@ -94,7 +97,11 @@ struct App {
     bindings: Bindings,
     input: InputState,
     gamepads: Gamepads,
-    touch_stick: TouchStick,
+    touch: TouchControls,
+    /// Where the mouse cursor is, in pixels from the window's top-left, and
+    /// whether its fire button is down.
+    cursor: Vec2,
+    mouse_held: bool,
 
     world: World,
     /// Real time not yet turned into simulation steps, in seconds.
@@ -123,7 +130,7 @@ impl App {
         log::info!("drawing with {} ({:?})", surface.adapter_name(), surface.backend());
 
         let mut renderer = Renderer2d::new(surface.device(), surface.queue(), surface.format());
-        let mut view = View::new(&mut renderer, &self.assets)?;
+        let mut view = View::new(&mut renderer, &self.assets, &self.world.defs)?;
         view.set_room(&mut renderer, &self.world.room)?;
 
         Ok(Graphics {
@@ -156,19 +163,36 @@ impl App {
 
         let screen = self.screen_size();
         self.gamepads.poll(&mut self.input);
-        self.input.set_touch_movement(self.touch_stick.movement(screen));
-        let input = self.input.sim_input();
+        self.touch.apply(&mut self.input, screen);
+        // The mouse aims from the gun arm towards the point under the cursor.
+        let mouse_aim = match (&self.graphics, self.mouse_held) {
+            (Some(graphics), true) => {
+                Some(graphics.view.screen_to_world(self.cursor, screen) - self.world.player.pivot())
+            }
+            _ => None,
+        };
+        self.input.set_mouse_aim(mouse_aim);
 
         self.accumulator += frame_seconds;
-        while self.accumulator >= sim::DT {
-            self.world.step(&input);
-            self.accumulator -= sim::DT;
+        if self.accumulator >= sim::DT {
+            // Presses are handed over once, to the first step that can act on them.
+            let mut input = self.input.take_sim_input();
+            while self.accumulator >= sim::DT {
+                self.world.step(&input);
+                input = input.held_only();
+                self.accumulator -= sim::DT;
+            }
         }
         let blend = self.accumulator / sim::DT;
 
         let Some(graphics) = self.graphics.as_mut() else {
             return;
         };
+        for event in self.world.drain_events() {
+            match event {
+                Event::Shake(shake) => graphics.view.start_shake(shake),
+            }
+        }
         let frame = match graphics.surface.acquire() {
             Ok(frame) => frame,
             // Nothing to draw into this time (minimised, mid-resize): try next frame.
@@ -189,7 +213,7 @@ impl App {
             &self.world,
             blend,
             frame_seconds,
-            self.touch_stick.visual(screen),
+            &stick_visuals(&self.touch, screen),
         );
         graphics.surface.present(frame, encoder);
     }
@@ -214,7 +238,8 @@ impl App {
     /// lost focus or the app has left the screen.
     fn release_input(&mut self) {
         self.input.release_all();
-        self.touch_stick.release();
+        self.touch.release();
+        self.mouse_held = false;
     }
 }
 
@@ -264,10 +289,32 @@ impl ApplicationHandler for App {
                     self.command(action, event_loop);
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor = Vec2::new(position.x as f32, position.y as f32);
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => self.mouse_held = state == ElementState::Pressed,
+            WindowEvent::MouseWheel { delta, .. } => {
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(position) => position.y as f32,
+                };
+                // Scrolling up goes to the previous slot, as in the Unity build.
+                if lines > 0.0 {
+                    self.input.press(Action::PreviousSlot);
+                } else if lines < 0.0 {
+                    self.input.press(Action::NextSlot);
+                }
+            }
             WindowEvent::Touch(touch) => {
                 let position = Vec2::new(touch.location.x as f32, touch.location.y as f32);
                 let screen = self.screen_size();
-                self.touch_stick.touch(touch.id, touch.phase, position, screen);
+                let can_interact = self.world.can_interact();
+                self.touch
+                    .touch(&mut self.input, touch.id, touch.phase, position, screen, can_interact);
             }
             WindowEvent::RedrawRequested => {
                 self.frame();
@@ -289,6 +336,30 @@ impl ApplicationHandler for App {
     }
 }
 
+/// Loads the game's definitions and a room, and builds the world in it.
+fn load_world(assets: &AssetSource, room: &str, seed: u32) -> Result<World> {
+    let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?);
+    let room = Room::from_file(RoomFile::load(assets, room)?);
+    Ok(World::new(room, defs, seed))
+}
+
+/// A seed that differs from launch to launch. The simulation itself never reads
+/// the clock; this is the one place randomness comes in from outside.
+fn clock_seed() -> u32 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.subsec_nanos() ^ elapsed.as_secs() as u32)
+        .unwrap_or(1)
+}
+
+/// The on-screen sticks that fingers are holding.
+fn stick_visuals(touch: &TouchControls, screen: Vec2) -> Vec<StickVisual> {
+    [touch.movement.visual(screen), touch.aim.visual(screen)]
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
 /// What `--screenshot` renders.
 pub struct Screenshot {
     pub path: PathBuf,
@@ -302,9 +373,13 @@ pub struct Screenshot {
     pub ticks: u32,
     /// The movement input held during those steps.
     pub movement: Vec2,
+    /// The direction the trigger is held towards during those steps.
+    pub aim: Option<Vec2>,
+    /// Guns to start with in the inventory: keys of `guns.json`.
+    pub give: Vec<String>,
     /// A finger held on the screen during those steps: where it went down and
     /// where it was dragged to, in pixels from the top-left. Drives the on-screen
-    /// stick exactly as a real touch would.
+    /// sticks exactly as a real touch would.
     pub touch: Option<(Vec2, Vec2)>,
     /// Frame the whole room instead of following the player.
     pub whole_room: bool,
@@ -315,24 +390,33 @@ pub struct Screenshot {
 pub fn screenshot(options: Screenshot) -> Result<()> {
     let screen = Vec2::new(options.width as f32, options.height as f32);
 
-    let mut touch_stick = TouchStick::default();
-    if let Some((down, dragged)) = options.touch {
-        touch_stick.touch(0, TouchPhase::Started, down, screen);
-        touch_stick.touch(0, TouchPhase::Moved, dragged, screen);
-    }
     let mut input = InputState::default();
-    input.set_pad_movement(options.movement);
-    input.set_touch_movement(touch_stick.movement(screen));
+    let mut touch = TouchControls::default();
+    if let Some((down, dragged)) = options.touch {
+        touch.touch(&mut input, 0, TouchPhase::Started, down, screen, false);
+        touch.touch(&mut input, 0, TouchPhase::Moved, dragged, screen, false);
+    }
+    touch.apply(&mut input, screen);
+    input.set_pad(options.movement, Vec2::ZERO);
+    input.set_mouse_aim(options.aim);
     let sim_input = input.sim_input();
 
-    let mut world = World::new(Room::from_file(RoomFile::load(&options.assets, &options.room)?));
+    // A fixed seed: the same command always gives the same picture.
+    let mut world = load_world(&options.assets, &options.room, 1)?;
+    for name in &options.give {
+        let gun = world
+            .defs
+            .gun_named(name)
+            .with_context(|| format!("`{name}` is not a gun in guns.json"))?;
+        world.give(gun);
+    }
     for _ in 0..options.ticks {
         world.step(&sim_input);
     }
 
     let (device, queue) = pollster::block_on(render2d::headless_device(options.backends))?;
     let mut renderer = Renderer2d::new(&device, &queue, render2d::OFFSCREEN_FORMAT);
-    let mut view = View::new(&mut renderer, &options.assets)?;
+    let mut view = View::new(&mut renderer, &options.assets, &world.defs)?;
     view.set_room(&mut renderer, &world.room)?;
     view.set_overview(options.whole_room);
 
@@ -346,7 +430,7 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
         &world,
         1.0,
         0.0,
-        touch_stick.visual(screen),
+        &stick_visuals(&touch, screen),
     );
     queue.submit(std::iter::once(encoder.finish()));
 
@@ -355,13 +439,15 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
 
     let position = world.player.position;
     println!(
-        "wrote {} ({}x{}), tick {}, player at ({:.3}, {:.3})",
+        "wrote {} ({}x{}), tick {}, player at ({:.3}, {:.3}), {} bullets, {} effects",
         options.path.display(),
         options.width,
         options.height,
         world.tick,
         position.x,
-        position.y
+        position.y,
+        world.combat.bullets.len(),
+        world.combat.effects.len()
     );
     Ok(())
 }

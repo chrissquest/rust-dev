@@ -60,21 +60,21 @@ pub struct Summary {
 
 /// Position, rotation about z and scale: all a 2D game's transforms carry.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Placement {
-    position: [f32; 2],
+pub(crate) struct Placement {
+    pub(crate) position: [f32; 2],
     /// Counter-clockwise, in radians.
-    rotation: f32,
-    scale: [f32; 2],
+    pub(crate) rotation: f32,
+    pub(crate) scale: [f32; 2],
 }
 
 impl Placement {
-    const IDENTITY: Self = Self {
+    pub(crate) const IDENTITY: Self = Self {
         position: [0.0, 0.0],
         rotation: 0.0,
         scale: [1.0, 1.0],
     };
 
-    fn from_transform(transform: &Value) -> Self {
+    pub(crate) fn from_transform(transform: &Value) -> Self {
         let position = transform.get("m_LocalPosition");
         let rotation = transform.get("m_LocalRotation");
         let scale = transform.get("m_LocalScale");
@@ -90,7 +90,7 @@ impl Placement {
     }
 
     /// Maps a point from this object's local space to its parent's.
-    fn apply(&self, point: [f32; 2]) -> [f32; 2] {
+    pub(crate) fn apply(&self, point: [f32; 2]) -> [f32; 2] {
         let (sin, cos) = self.rotation.sin_cos();
         let x = point[0] * self.scale[0];
         let y = point[1] * self.scale[1];
@@ -101,7 +101,7 @@ impl Placement {
     }
 
     /// `self` as the parent of `child`: the child's placement in `self`'s parent space.
-    fn then(&self, child: &Placement) -> Placement {
+    pub(crate) fn then(&self, child: &Placement) -> Placement {
         Placement {
             position: self.apply(child.position),
             rotation: self.rotation + child.rotation,
@@ -116,13 +116,13 @@ fn z_angle(z: f32, w: f32) -> f32 {
 }
 
 /// The objects of one prefab file, indexed by file id.
-struct Prefab<'a> {
+pub(crate) struct Prefab<'a> {
     documents: &'a [Document],
     by_id: HashMap<i64, usize>,
 }
 
 impl<'a> Prefab<'a> {
-    fn new(documents: &'a [Document]) -> Self {
+    pub(crate) fn new(documents: &'a [Document]) -> Self {
         let by_id = documents
             .iter()
             .enumerate()
@@ -131,12 +131,12 @@ impl<'a> Prefab<'a> {
         Self { documents, by_id }
     }
 
-    fn get(&self, file_id: i64) -> Option<&'a Document> {
+    pub(crate) fn get(&self, file_id: i64) -> Option<&'a Document> {
         self.by_id.get(&file_id).map(|&index| &self.documents[index])
     }
 
     /// The components attached to a GameObject.
-    fn components(&self, object: &'a Document) -> impl Iterator<Item = &'a Document> + '_ {
+    pub(crate) fn components(&self, object: &'a Document) -> impl Iterator<Item = &'a Document> + '_ {
         object
             .body
             .get("m_Component")
@@ -145,25 +145,25 @@ impl<'a> Prefab<'a> {
             .filter_map(|entry| self.get(entry.get("component").get("fileID").i64()))
     }
 
-    fn component(&self, object: &'a Document, class: &str) -> Option<&'a Document> {
+    pub(crate) fn component(&self, object: &'a Document, class: &str) -> Option<&'a Document> {
         self.components(object).find(|component| component.class == class)
     }
 
-    fn transform_of(&self, object: &'a Document) -> Option<&'a Document> {
+    pub(crate) fn transform_of(&self, object: &'a Document) -> Option<&'a Document> {
         self.components(object)
             .find(|component| component.class == "Transform" || component.class == "RectTransform")
     }
 
-    fn object_of(&self, component: &Document) -> Option<&'a Document> {
+    pub(crate) fn object_of(&self, component: &Document) -> Option<&'a Document> {
         self.get(component.body.get("m_GameObject").get("fileID").i64())
     }
 
-    fn parent_transform(&self, transform: &Document) -> Option<&'a Document> {
+    pub(crate) fn parent_transform(&self, transform: &Document) -> Option<&'a Document> {
         self.get(transform.body.get("m_Father").get("fileID").i64())
     }
 
     /// A transform's placement in room space: its own, under all its ancestors'.
-    fn world(&self, transform: &Document) -> Placement {
+    pub(crate) fn world(&self, transform: &Document) -> Placement {
         let local = Placement::from_transform(&transform.body);
         match self.parent_transform(transform) {
             Some(parent) if !parent.stripped => self.world(parent).then(&local),
@@ -171,14 +171,14 @@ impl<'a> Prefab<'a> {
         }
     }
 
-    fn world_of_object(&self, object: &'a Document) -> Placement {
+    pub(crate) fn world_of_object(&self, object: &'a Document) -> Placement {
         self.transform_of(object)
             .map(|transform| self.world(transform))
             .unwrap_or(Placement::IDENTITY)
     }
 
     /// Whether an object and all its ancestors are switched on.
-    fn is_active(&self, object: &'a Document) -> bool {
+    pub(crate) fn is_active(&self, object: &'a Document) -> bool {
         if !object.body.get("m_IsActive").bool() {
             return false;
         }
@@ -194,14 +194,14 @@ impl<'a> Prefab<'a> {
     }
 
     /// The name of the object a transform belongs to.
-    fn name_of_transform(&self, transform: &Document) -> String {
+    pub(crate) fn name_of_transform(&self, transform: &Document) -> String {
         self.object_of(transform)
             .map(|object| object.body.get("m_Name").str().to_string())
             .unwrap_or_default()
     }
 
     /// The root transform: the one with no parent.
-    fn root_transform(&self) -> Option<&'a Document> {
+    pub(crate) fn root_transform(&self) -> Option<&'a Document> {
         self.documents.iter().find(|document| {
             !document.stripped
                 && (document.class == "Transform" || document.class == "RectTransform")
@@ -421,11 +421,11 @@ fn painted_size(documents: &[Document]) -> (i64, i64) {
     size
 }
 
-fn script_guid(document: &Document) -> &str {
+pub(crate) fn script_guid(document: &Document) -> &str {
     document.body.get("m_Script").get("guid").str()
 }
 
-fn color_of(value: &Value) -> [f32; 4] {
+pub(crate) fn color_of(value: &Value) -> [f32; 4] {
     [
         value.get("r").f32(),
         value.get("g").f32(),

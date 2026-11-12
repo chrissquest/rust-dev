@@ -1,5 +1,71 @@
 {
   "sprites": {
+    "Bullet_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 8, 8],
+      "texture": "Bullet_1"
+    },
+    "Bullet_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 8, 8],
+      "texture": "Bullet_2"
+    },
+    "Bullet_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 4, 4],
+      "texture": "Bullet_3"
+    },
+    "Bullet_4": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 8, 8],
+      "texture": "Bullet_4"
+    },
+    "Bullet_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 8, 8],
+      "texture": "Bullet_5"
+    },
+    "Bullet_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 8, 8],
+      "texture": "Bullet_6"
+    },
+    "Flame": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "Flame"
+    },
+    "Priest_Bullet_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 10],
+      "texture": "Priest_Bullet_3"
+    },
+    "Splash_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "Splash_1"
+    },
+    "Splash_8x8": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 8, 8],
+      "texture": "Splash_8x8"
+    },
+    "bazooka_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "bazooka_1"
+    },
     "bossFloorDesign_4_firstExport": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
@@ -276,11 +342,59 @@
       "rect": [0, 0, 96, 17],
       "texture": "emptyRack"
     },
+    "explosion": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 64, 64],
+      "texture": "explosion"
+    },
+    "flamethrower_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "flamethrower_1"
+    },
     "fullyFormedOnRack": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 96, 64],
       "texture": "fullyFormedOnRack"
+    },
+    "gun_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "gun_1"
+    },
+    "gun_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "gun_2"
+    },
+    "gun_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "gun_3"
+    },
+    "gun_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "gun_5"
+    },
+    "gun_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "gun_6"
+    },
+    "hand_of_bishop": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "hand_of_bishop"
     },
     "horizontalDeadRobot": {
       "pivot": [0.5, 0.5],
@@ -299,6 +413,30 @@
       "pixels_per_unit": 64.0,
       "rect": [96, 0, 32, 32],
       "texture": "labs_tileset"
+    },
+    "laser_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 4, 16],
+      "texture": "laser_1"
+    },
+    "laser_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "laser_2"
+    },
+    "laser_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 5, 16],
+      "texture": "laser_3"
+    },
+    "left_hand": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 3, 13],
+      "texture": "left_hand"
     },
     "liquidsAndTheirWallsTileSet_1_0": {
       "pivot": [0.5, 0.5],
@@ -323,6 +461,18 @@
       "pixels_per_unit": 64.0,
       "rect": [32, 64, 32, 32],
       "texture": "liquidsAndTheirWallsTileSet_1"
+    },
+    "lmg_purple": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "lmg_purple"
+    },
+    "lmg_red": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "lmg_red"
     },
     "main_dark_compound_0": {
       "pivot": [0.5, 0.5],
@@ -576,6 +726,12 @@
       "rect": [32, 32, 32, 32],
       "texture": "main_dark_compound"
     },
+    "missile_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "missile_1"
+    },
     "partiallyFormedOnRack": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
@@ -756,17 +912,53 @@
       "rect": [224, 32, 32, 32],
       "texture": "postReviewTileSetCeiling_1"
     },
+    "rifle_blue": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "rifle_blue"
+    },
+    "right_hand": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 3, 13],
+      "texture": "right_hand"
+    },
     "sadHeadlessEnemy": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 32, 64],
       "texture": "sadHeadlessEnemy"
     },
+    "shadow": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "shadow"
+    },
     "shotUpEnemy": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 32, 32],
       "texture": "shotUpEnemy"
+    },
+    "shotgun_orange": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 24, 24],
+      "texture": "shotgun_orange"
+    },
+    "smg_cyan": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "smg_cyan"
+    },
+    "smg_red": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "smg_red"
     },
     "test_dummy": {
       "pivot": [0.5, 0.5],

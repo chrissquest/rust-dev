@@ -6,18 +6,22 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 and 2 of the port are in:
+Steps 1 and 2 of the port are in, and step 3 (combat) is under way:
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
-  animations, collision, a camera that follows inside the room, keyboard and
-  gamepad input, and an Android build with an on-screen stick.
+  animations, collision, a camera that follows inside the room, keyboard, mouse
+  and gamepad input, and an Android build with on-screen sticks.
 - **Real rooms.** All 34 rooms of the Unity project, converted by
   [`cos-convert`](../cos-convert) into `assets/rooms`, load and draw: tile layers,
   decorations, walls and ledges. The game starts in the hub.
+- **Guns.** The guns lying in the hub can be picked up into a four-slot inventory
+  and fired. Single-shot and spray guns work with Unity's numbers, including the
+  heat mechanic, spread, bullets carrying the player's speed, splashes where they
+  hit, and camera shake. Bullets stop at walls, fly over ledges and hurt targets.
 
-The rooms are not lit yet, so they look flatter and brighter than in Unity. Enemies,
-chests, lights and triggers are in the room files but not used yet. Guns, enemies,
-the dungeon, lighting, audio and menus come in later steps.
+Not in yet: lasers, homing, explosions and elemental effects; damage numbers;
+enemies, chests and drops; lighting (rooms look flatter and brighter than in
+Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
 
@@ -29,8 +33,14 @@ cargo run -p cycle-of-steel -- --help       # every option
 cargo test -p cycle-of-steel                # simulation and input tests, no GPU needed
 ```
 
-Keys: WASD or the arrows to move (or a gamepad's left stick or d-pad), F11 for
-fullscreen, Escape to quit.
+| | Keyboard and mouse | Gamepad | Touch |
+| --- | --- | --- | --- |
+| Move | W A S D | left stick or d-pad | drag on the left half |
+| Shoot | arrows, or hold the mouse button | right stick | drag on the right half |
+| Pick up | Space | A or X | the round button that appears |
+| Choose a slot | 1 to 4, Q and E, or the wheel | shoulder buttons | tap the slot |
+
+F11 toggles fullscreen and Escape quits.
 
 `--screenshot` runs the game with no window, steps the simulation, draws one frame
 off-screen and saves it. It needs a GPU or a software rasteriser but no display:
@@ -38,6 +48,7 @@ off-screen and saves it. It needs a GPU or a software rasteriser but no display:
 ```powershell
 cargo run -p cycle-of-steel -- --screenshot room.png --ticks 120 --move 1,0
 cargo run -p cycle-of-steel -- --screenshot ns1.png --room ns1 --whole-room
+cargo run -p cycle-of-steel -- --screenshot fire.png --give shotgun_1 --aim 1,0 --ticks 8
 ```
 
 `--room` picks any file under `assets/rooms`; `--whole-room` frames all of it, for
@@ -50,7 +61,7 @@ On Linux, building needs libudev's headers for gamepad support
 
 The same game builds as an APK for 64-bit ARM phones, Android 8.0 and up. It runs
 in landscape and is played with an on-screen stick: touch the left half of the
-screen and drag.
+screen and drag to move, drag on the right half to aim and shoot.
 
 **Getting a build onto a phone.** Every push that touches the game runs the
 `Android APK` workflow, which replaces the `android-latest` pre-release on GitHub.
@@ -82,7 +93,8 @@ How Android differs from desktop, and where that lives:
   `resumed`; the world is untouched, so the game is where you left it.
 - **Assets.** They are entries inside the APK, read through `AssetSource::Apk`
   (`src/assets.rs`). Nothing else in the game knows where bytes come from.
-- **Input.** Touch events drive `input::TouchStick`. Controllers are not wired up
+- **Input.** Touch events drive `input::TouchControls`: two floating sticks and
+  taps on the HUD. Controllers are not wired up
   on Android yet: the desktop gamepad library has no Android backend.
 
 **The signing key in `android/` is not a secret.** It is committed, with its
@@ -96,17 +108,23 @@ the repository.
 src/
   main.rs        command line
   app.rs         window, fixed-timestep frame loop, screenshot mode
-  input.rs       keys, gamepads and the touch stick -> sim::Input
+  input.rs       keys, mouse, gamepads and touch sticks -> sim::Input
+  hud.rs         where the on-screen slots, heat bar and buttons sit
   view.rs        world state -> sprites; the camera
   assets.rs      loads assets from a folder, or from inside the APK on Android
   data.rs        the room and sprite catalogue file formats
   sim/           the game itself: no window, GPU or clock
-    mod.rs       World, Input, the 60 Hz step
+    mod.rs       World, Input, the 60 Hz step, the inventory
+    defs.rs      guns, bullets and effects as loaded data
+    guns.rs      one gun's fire timer and heat
+    combat.rs    bullets, hit effects, targets, guns on the floor
+    rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
     collide.rs   moving a box through solid cells
     player.rs    movement, facing, animation
 assets/
   rooms/         one JSON file per room (format: see apps/cos-convert/README.md)
+  guns.json      every gun, bullet and hit effect, with their numbers
   sprites.json   every sprite by name: texture, rectangle, pivot
   sprites/       PNGs copied from the Unity project
 android/
