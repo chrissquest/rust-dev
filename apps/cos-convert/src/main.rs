@@ -37,7 +37,8 @@ WRITES:
 /// Where the room prefabs live, relative to the Unity `Assets` folder.
 const ROOMS_FOLDER: &str = "Prefabs/Generatable Rooms";
 /// Sprites the game draws that no room or gun refers to: the player's parts.
-const EXTRA_SPRITES: [&str; 3] = [
+const EXTRA_SPRITES: [&str; 4] = [
+    "Sprites/player/player_no_hands.png",
     "Sprites/Guns/right_hand.png",
     "Sprites/Guns/left_hand.png",
     "Sprites/shadow.png",

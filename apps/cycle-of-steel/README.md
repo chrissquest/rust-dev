@@ -19,6 +19,9 @@ Steps 1 and 2 of the port are in, and step 3 (combat) is under way:
   heat mechanic, spread, bullets carrying the player's speed, splashes where they
   hit, and camera shake. Bullets stop at walls, fly over ledges and hurt targets.
 
+The hub's hidden gun room is reachable: stand at the right-hand end of the rack
+where you spawn and interact. Interact again on the spot inside to leave.
+
 Not in yet: lasers, homing, explosions and elemental effects; damage numbers;
 enemies, chests and drops; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.

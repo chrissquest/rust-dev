@@ -26,9 +26,46 @@ pub const RESPONSE: f32 = 9.922_546;
 /// bounding box, so corners are squarer than they were.
 pub const HALF_SIZE: Vec2 = Vec2::new(0.095, 0.24);
 
-/// The gun arm turns about this point, relative to the player's position. Unity:
-/// the `Pivot` child of the player.
-pub const PIVOT_OFFSET: Vec2 = Vec2::new(0.0, 0.15);
+/// Where the gun arm attaches and where its hands sit, all relative: the pivot to
+/// the player's position, the hands to the pivot (before the arm is turned).
+///
+/// These come from the Unity player prefab and its three pivot animations. The
+/// body sprites have no arms; the arm is drawn separately, so it has to follow
+/// the shoulder as the body turns side-on and bobs with each stride.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Arm {
+    pub pivot: Vec2,
+    pub left_hand: Vec2,
+    pub right_hand: Vec2,
+}
+
+/// Standing still: the prefab's own placement.
+const ARM_STANDING: Arm = Arm {
+    pivot: Vec2::new(0.0, 0.15),
+    left_hand: Vec2::new(-0.125, 0.025),
+    right_hand: Vec2::new(-0.066, -0.068),
+};
+/// Running towards or away from the camera (`player_pivot.anim`).
+const ARM_RUNNING_FACING: Arm = Arm {
+    pivot: Vec2::new(0.0, 0.12),
+    ..ARM_STANDING
+};
+/// Running left (`player_pivot_left.anim`): the shoulder is off-centre on a
+/// side-on body and the hands sit closer in.
+const ARM_RUNNING_LEFT: Arm = Arm {
+    pivot: Vec2::new(-0.088, 0.10),
+    left_hand: Vec2::new(-0.089, 0.02),
+    right_hand: Vec2::new(-0.034, -0.027),
+};
+/// Running right (`player_pivot_right.anim`).
+const ARM_RUNNING_RIGHT: Arm = Arm {
+    pivot: Vec2::new(0.078, 0.10),
+    ..ARM_RUNNING_LEFT
+};
+/// How far the shoulder rises and falls over a stride: one value per animation
+/// frame, repeating every half second.
+const STRIDE_BOB: [f32; 6] = [0.0, 0.02, 0.01, 0.0, -0.02, -0.01];
+
 /// Bullets leave from this far along the aim from the pivot.
 pub const MUZZLE_DISTANCE: f32 = 0.35;
 
@@ -81,9 +118,24 @@ impl Player {
         }
     }
 
+    /// Where the gun arm attaches right now, and where its hands sit on it.
+    pub fn arm(&self) -> Arm {
+        if !self.running {
+            return ARM_STANDING;
+        }
+        let mut arm = match self.facing {
+            Facing::Front | Facing::Back => ARM_RUNNING_FACING,
+            Facing::Left => ARM_RUNNING_LEFT,
+            Facing::Right => ARM_RUNNING_RIGHT,
+        };
+        let frame = (self.animation_time * ANIMATION_FPS) as usize % STRIDE_BOB.len();
+        arm.pivot.y += STRIDE_BOB[frame];
+        arm
+    }
+
     /// The point the gun arm turns about, in world space.
     pub fn pivot(&self) -> Vec2 {
-        self.position + PIVOT_OFFSET
+        self.position + self.arm().pivot
     }
 
     /// Where a bullet fired along `aim` starts.
@@ -192,6 +244,30 @@ mod tests {
         let mut player = Player::new(Vec2::new(4.0, 2.0));
         step_for(&mut player, &room, Vec2::new(1.0, 1.0), 2.0);
         assert!((player.velocity.length() - TOP_SPEED).abs() < 1e-3);
+    }
+
+    #[test]
+    fn the_arm_follows_the_shoulder_while_running_and_returns_when_standing() {
+        let room = Room::test_room();
+        let mut player = Player::new(Vec2::new(4.0, 4.5));
+        assert_eq!(player.arm(), ARM_STANDING);
+
+        // Running left the shoulder is left of centre, and it bobs with the stride.
+        step_for(&mut player, &room, Vec2::new(-1.0, 0.0), 0.05);
+        assert_eq!(player.arm().pivot, Vec2::new(-0.088, 0.10));
+        step_for(&mut player, &room, Vec2::new(-1.0, 0.0), 0.1);
+        assert_eq!(player.animation_frame(), 1);
+        assert!((player.arm().pivot.y - 0.12).abs() < 1e-6);
+        assert_eq!(player.arm().left_hand, Vec2::new(-0.089, 0.02));
+
+        // Running up keeps the standing hands but lowers the shoulder.
+        step_for(&mut player, &room, Vec2::new(0.0, 1.0), 0.05);
+        assert_eq!(player.arm().pivot.x, 0.0);
+        assert_eq!(player.arm().left_hand, ARM_STANDING.left_hand);
+
+        step_for(&mut player, &room, Vec2::ZERO, 0.05);
+        assert_eq!(player.arm(), ARM_STANDING);
+        assert_eq!(player.pivot(), player.position + Vec2::new(0.0, 0.15));
     }
 
     #[test]

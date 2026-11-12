@@ -18,7 +18,7 @@ use std::sync::Arc;
 use crystal_engine::glam::Vec2;
 
 use crate::data::ShakeFile;
-use combat::{Combat, Pickup, Target};
+use combat::{Combat, Interaction, Pickup, Target, Teleport};
 use defs::{Defs, GunId};
 use guns::Gun;
 use player::Player;
@@ -98,6 +98,17 @@ impl World {
                     });
                 }
             }
+            // Unity's `DebugRoom` and `DebugRoomExit`: interact on the spot to be
+            // moved by a fixed amount, into the gun room and back out of it.
+            for (script, offset) in [("DebugRoom", Vec2::new(7.0, 0.0)), ("DebugRoomExit", Vec2::new(0.0, -2.5))] {
+                for marker in file.markers.iter().filter(|marker| marker.has_script(script)) {
+                    let (position, half) = match marker.bounds {
+                        Some(bounds) => (Vec2::from(bounds.center), Vec2::from(bounds.size) * 0.5),
+                        None => (Vec2::from(marker.position), Vec2::splat(0.1)),
+                    };
+                    combat.teleports.push(Teleport { position, half, offset });
+                }
+            }
             for marker in file.markers.iter().filter(|marker| marker.has_script("Killable")) {
                 let Some(bounds) = marker.bounds else {
                     continue;
@@ -137,11 +148,14 @@ impl World {
         self.inventory[self.selected_slot].as_ref()
     }
 
-    /// Whether there is something to pick up where the player stands.
-    pub fn can_interact(&self) -> bool {
+    /// What pressing interact would act on where the player stands, if anything.
+    pub fn interaction(&self) -> Option<Interaction> {
         self.combat
-            .pickup_in_reach(&self.defs, self.player.position, player::HALF_SIZE)
-            .is_some()
+            .interaction(&self.defs, self.player.position, player::HALF_SIZE)
+    }
+
+    pub fn can_interact(&self) -> bool {
+        self.interaction().is_some()
     }
 
     /// Puts a gun straight into the first free slot. Returns false when full.
@@ -174,7 +188,16 @@ impl World {
             self.select_slot((self.selected_slot as i32 + input.cycle_slot).rem_euclid(slots) as usize);
         }
         if input.interact {
-            self.pick_up();
+            match self.interaction() {
+                Some(Interaction::Pickup(index)) => self.pick_up(index),
+                Some(Interaction::Teleport(index)) => {
+                    self.player.position += self.combat.teleports[index].offset;
+                    // No blending across the jump: the player is simply there.
+                    self.player.previous_position = self.player.position;
+                    self.player.velocity = Vec2::ZERO;
+                }
+                None => {}
+            }
         }
 
         // Every gun cools, wherever it is.
@@ -224,13 +247,7 @@ impl World {
     /// Unity's `PlayerInventory.AddInventory`: the gun goes into the first empty
     /// slot; with none empty it replaces the one in hand, which drops at the
     /// player's feet.
-    fn pick_up(&mut self) {
-        let Some(index) = self
-            .combat
-            .pickup_in_reach(&self.defs, self.player.position, player::HALF_SIZE)
-        else {
-            return;
-        };
+    fn pick_up(&mut self, index: usize) {
         let taken = self.combat.pickups.swap_remove(index).gun;
 
         match self.inventory.iter_mut().find(|slot| slot.is_none()) {
@@ -360,6 +377,25 @@ mod tests {
         assert_eq!(world.combat.pickups.len(), 1);
         assert_eq!(world.combat.pickups[0].gun.def, pistol);
         assert!(world.combat.pickups[0].position.y < here.y);
+    }
+
+    #[test]
+    fn interacting_on_a_teleport_spot_moves_the_player() {
+        let mut world = world();
+        let here = world.player.position;
+        world.combat.teleports.push(Teleport {
+            position: here,
+            half: Vec2::splat(0.1),
+            offset: Vec2::new(3.0, 0.0),
+        });
+        assert!(world.can_interact());
+        world.step(&Input {
+            interact: true,
+            ..Input::default()
+        });
+        assert_eq!(world.player.position, here + Vec2::new(3.0, 0.0));
+        assert_eq!(world.player.previous_position, world.player.position, "no slide across the jump");
+        assert!(!world.can_interact(), "the spot was left behind");
     }
 
     #[test]

@@ -463,3 +463,66 @@ fn save_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<()> {
         .and_then(|mut writer| writer.write_image_data(rgba))
         .with_context(|| format!("could not write {}", path.display()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::Input;
+    use crate::sim::combat::Interaction;
+    use crate::sim::player::HALF_SIZE;
+
+    fn hub() -> World {
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        load_world(&assets, DEFAULT_ROOM, 1).expect("the hub loads")
+    }
+
+    fn interact(world: &mut World) {
+        world.step(&Input {
+            interact: true,
+            ..Input::default()
+        });
+    }
+
+    #[test]
+    fn the_hub_has_guns_a_target_and_a_free_spawn() {
+        let world = hub();
+        assert!(world.combat.pickups.len() >= 10, "the gun room's guns: {}", world.combat.pickups.len());
+        assert_eq!(world.combat.targets.len(), 1, "the test dummy");
+        assert!(!world.room.box_hits_solid(world.player.position, HALF_SIZE));
+    }
+
+    #[test]
+    fn the_hidden_spot_leads_into_the_gun_room_and_back_out() {
+        let mut world = hub();
+        assert_eq!(world.combat.teleports.len(), 2);
+        let entrance = world
+            .combat
+            .teleports
+            .iter()
+            .position(|teleport| teleport.offset.x > 0.0)
+            .expect("the way in moves the player right");
+
+        // Stand on the way in and interact.
+        world.player.position = world.combat.teleports[entrance].position;
+        assert_eq!(world.interaction(), Some(Interaction::Teleport(entrance)));
+        interact(&mut world);
+        let inside = world.player.position;
+        assert!(!world.room.box_hits_solid(inside, HALF_SIZE), "arrived inside a wall at {inside}");
+        // The guns are laid out in this room.
+        let nearest_gun = world
+            .combat
+            .pickups
+            .iter()
+            .map(|pickup| pickup.position.distance(inside))
+            .fold(f32::INFINITY, f32::min);
+        assert!(nearest_gun < 6.0, "no gun within reach of the gun room: nearest is {nearest_gun} away");
+
+        // Stand on the way out and interact.
+        let exit = 1 - entrance;
+        world.player.position = world.combat.teleports[exit].position;
+        interact(&mut world);
+        let outside = world.player.position;
+        assert!(!world.room.box_hits_solid(outside, HALF_SIZE), "left into a wall at {outside}");
+        assert!(outside.y < inside.y);
+    }
+}

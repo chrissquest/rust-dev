@@ -21,6 +21,7 @@ use crate::assets::{AssetSource, PIXELS_PER_UNIT};
 use crate::data::{DecorationFile, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
 use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
+use crate::sim::combat::Interaction;
 use crate::sim::defs::Defs;
 use crate::sim::player::{Facing, Player};
 use crate::sim::room::Room;
@@ -47,8 +48,10 @@ const Z_ABOVE: f32 = 0.2;
 /// The gun arm's parts, relative to the pivot it turns about, as in the Unity
 /// player prefab: where each sits and how far it is turned, in degrees.
 const GUN_IN_HAND: (Vec2, f32) = (Vec2::new(-0.2, 0.0), 0.0);
-const RIGHT_HAND: (Vec2, f32) = (Vec2::new(-0.066, -0.068), -90.0);
-const LEFT_HAND: (Vec2, f32) = (Vec2::new(-0.125, 0.025), -70.0);
+/// How far each hand's sprite is turned on the arm. Where the hands sit depends
+/// on how the player is moving: see `sim::player::Arm`.
+const RIGHT_HAND_TURN: f32 = -90.0;
+const LEFT_HAND_TURN: f32 = -70.0;
 /// The shadow under the player's feet, relative to the player.
 const SHADOW_OFFSET: Vec2 = Vec2::new(0.0, -0.182);
 /// How the arm hangs when not aiming: down to the left, or mirrored to the right.
@@ -127,6 +130,8 @@ pub struct View {
     bullet_sprites: Vec<Option<ResolvedSprite>>,
     effect_sprites: Vec<Option<ResolvedSprite>>,
     shadow: ResolvedSprite,
+    /// The player standing still. The run sheets are used only while moving.
+    standing: ResolvedSprite,
     left_hand: ResolvedSprite,
     right_hand: ResolvedSprite,
 
@@ -189,6 +194,7 @@ impl View {
             effect_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
             shadow: ResolvedSprite::EMPTY,
+            standing: ResolvedSprite::EMPTY,
             left_hand: ResolvedSprite::EMPTY,
             right_hand: ResolvedSprite::EMPTY,
             shake: ShakeFile::default(),
@@ -196,6 +202,7 @@ impl View {
         };
 
         view.shadow = view.sprite(renderer, "shadow")?;
+        view.standing = view.sprite(renderer, "player_no_hands")?;
         view.left_hand = view.sprite(renderer, "left_hand")?;
         view.right_hand = view.sprite(renderer, "right_hand")?;
         view.gun_sprites = view.optional_sprites(renderer, defs.guns.iter().map(|gun| gun.sprite.as_deref()))?;
@@ -448,7 +455,8 @@ impl View {
     fn draw_player(&mut self, world: &World, position: Vec2) {
         let player = &world.player;
         let (angle, mirrored) = arm_pose(player);
-        let pivot = position + crate::sim::player::PIVOT_OFFSET;
+        let arm = player.arm();
+        let pivot = position + arm.pivot;
         // A part of the arm: its offset is turned with the arm, and mirrored
         // top-to-bottom when the arm points right so the gun is never upside down.
         let part = |sprite: &ResolvedSprite, (offset, degrees): (Vec2, f32)| {
@@ -464,22 +472,30 @@ impl View {
 
         let shadow = self.shadow.placed((position + SHADOW_OFFSET).extend(Z_ENTITIES), [1.0, 1.0], 0.0, [false, false]);
         self.list.sprite(self.shadow.texture, shadow);
-        self.list.sprite(self.left_hand.texture, part(&self.left_hand, LEFT_HAND));
+        self.list
+            .sprite(self.left_hand.texture, part(&self.left_hand, (arm.left_hand, LEFT_HAND_TURN)));
 
-        let sheet = match player.facing {
-            Facing::Front => self.player.front,
-            Facing::Back => self.player.back,
-            Facing::Left => self.player.left,
-            Facing::Right => self.player.right,
-        };
-        self.list.sprite(
-            sheet,
-            Sprite::new(
-                position.extend(Z_ENTITIES),
-                self.player.frames.cell_size(),
-                self.player.frames.uv(player.animation_frame()),
-            ),
-        );
+        if player.running {
+            let sheet = match player.facing {
+                Facing::Front => self.player.front,
+                Facing::Back => self.player.back,
+                Facing::Left => self.player.left,
+                Facing::Right => self.player.right,
+            };
+            self.list.sprite(
+                sheet,
+                Sprite::new(
+                    position.extend(Z_ENTITIES),
+                    self.player.frames.cell_size(),
+                    self.player.frames.uv(player.animation_frame()),
+                ),
+            );
+        } else {
+            // Unity's animator let go of the sprite when movement stopped, which
+            // put the standing picture back.
+            let standing = self.standing.placed(position.extend(Z_ENTITIES), [1.0, 1.0], 0.0, [false, false]);
+            self.list.sprite(self.standing.texture, standing);
+        }
 
         if let Some(sprite) = world
             .current_gun()
@@ -487,7 +503,8 @@ impl View {
         {
             self.list.sprite(sprite.texture, part(sprite, GUN_IN_HAND));
         }
-        self.list.sprite(self.right_hand.texture, part(&self.right_hand, RIGHT_HAND));
+        self.list
+            .sprite(self.right_hand.texture, part(&self.right_hand, (arm.right_hand, RIGHT_HAND_TURN)));
     }
 
     /// How far to move the camera this frame for the shake in progress.
@@ -562,17 +579,17 @@ impl View {
             }
         }
 
-        // The pick-up button shows what would be picked up.
-        if let Some(index) = world
-            .combat
-            .pickup_in_reach(&world.defs, world.player.position, crate::sim::player::HALF_SIZE)
-        {
+        // The interact button shows what would be picked up; over a hidden spot
+        // it is just the button.
+        if let Some(interaction) = world.interaction() {
             let diameter = hud.interact_radius * 2.0;
             self.overlay.sprite(
                 self.disc,
                 Sprite::new(flip(hud.interact_center), [diameter, diameter], full).with_color(HUD_BUTTON_COLOR),
             );
-            if let Some(sprite) = &self.gun_sprites[world.combat.pickups[index].gun.def.0 as usize] {
+            if let Interaction::Pickup(index) = interaction
+                && let Some(sprite) = &self.gun_sprites[world.combat.pickups[index].gun.def.0 as usize]
+            {
                 self.overlay
                     .sprite(sprite.texture, icon(sprite, hud.interact_center, hud.interact_radius * 1.2));
             }

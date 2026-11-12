@@ -70,12 +70,32 @@ pub struct Pickup {
     pub position: Vec2,
 }
 
+/// A spot that moves the player when they interact on it. The hub hides two: the
+/// way into the gun room and the way back out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Teleport {
+    pub position: Vec2,
+    pub half: Vec2,
+    /// Added to the player's position.
+    pub offset: Vec2,
+}
+
+/// What pressing interact would act on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Interaction {
+    /// An index into [`Combat::pickups`].
+    Pickup(usize),
+    /// An index into [`Combat::teleports`].
+    Teleport(usize),
+}
+
 #[derive(Default)]
 pub struct Combat {
     pub bullets: Vec<Bullet>,
     pub effects: Vec<Effect>,
     pub targets: Vec<Target>,
     pub pickups: Vec<Pickup>,
+    pub teleports: Vec<Teleport>,
 }
 
 impl Combat {
@@ -85,6 +105,7 @@ impl Combat {
             effects: Vec::with_capacity(EFFECT_CAPACITY),
             targets: Vec::new(),
             pickups: Vec::new(),
+            teleports: Vec::new(),
         }
     }
 
@@ -205,21 +226,24 @@ impl Combat {
         });
     }
 
-    /// The pickup the player can take: the nearest one whose box they are touching.
-    pub fn pickup_in_reach(&self, defs: &Defs, player: Vec2, player_half: Vec2) -> Option<usize> {
-        self.pickups
+    /// What interacting would act on: the nearest thing whose box the player is
+    /// touching, as Unity picked the closest interactable.
+    pub fn interaction(&self, defs: &Defs, player: Vec2, player_half: Vec2) -> Option<Interaction> {
+        let pickups = self.pickups.iter().enumerate().map(|(index, pickup)| {
+            let half = Vec2::from(defs.gun(pickup.gun.def).pickup_half);
+            (Interaction::Pickup(index), pickup.position, half)
+        });
+        let teleports = self
+            .teleports
             .iter()
             .enumerate()
-            .filter(|(_, pickup)| {
-                let half = Vec2::from(defs.gun(pickup.gun.def).pickup_half);
-                boxes_overlap(player, player_half, pickup.position, half)
-            })
-            .min_by(|(_, a), (_, b)| {
-                a.position
-                    .distance_squared(player)
-                    .total_cmp(&b.position.distance_squared(player))
-            })
-            .map(|(index, _)| index)
+            .map(|(index, teleport)| (Interaction::Teleport(index), teleport.position, teleport.half));
+
+        pickups
+            .chain(teleports)
+            .filter(|(_, position, half)| boxes_overlap(player, player_half, *position, *half))
+            .min_by(|(_, a, _), (_, b, _)| a.distance_squared(player).total_cmp(&b.distance_squared(player)))
+            .map(|(interaction, _, _)| interaction)
     }
 }
 
@@ -354,8 +378,16 @@ mod tests {
         combat.pickups.push(Pickup { gun: gun(), position: Vec2::new(1.1, 1.0) });
         combat.pickups.push(Pickup { gun: gun(), position: Vec2::new(1.05, 1.0) });
         let half = Vec2::new(0.095, 0.24);
-        assert_eq!(combat.pickup_in_reach(&defs, Vec2::new(1.0, 1.0), half), Some(2));
-        assert_eq!(combat.pickup_in_reach(&defs, Vec2::new(3.0, 3.0), half), None);
+        assert_eq!(combat.interaction(&defs, Vec2::new(1.0, 1.0), half), Some(Interaction::Pickup(2)));
+        assert_eq!(combat.interaction(&defs, Vec2::new(3.0, 3.0), half), None);
+
+        // A teleport spot competes on the same terms: nearest wins.
+        combat.teleports.push(Teleport {
+            position: Vec2::new(1.0, 1.0),
+            half: Vec2::splat(0.1),
+            offset: Vec2::new(7.0, 0.0),
+        });
+        assert_eq!(combat.interaction(&defs, Vec2::new(1.0, 1.0), half), Some(Interaction::Teleport(0)));
     }
 
     #[test]
