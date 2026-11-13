@@ -160,8 +160,9 @@ The same game builds as an APK for 64-bit ARM phones, Android 8.0 and up. It run
 in landscape and is played with an on-screen stick: touch the left half of the
 screen and drag to move, drag on the right half to aim and shoot.
 
-**Getting a build onto a phone.** Every push that touches the game runs the
-`Android APK` workflow, which replaces the `android-latest` pre-release on GitHub.
+**Getting a build onto a phone.** The `Android APK` workflow builds one when asked:
+start it from the repository's Actions tab, or push a commit whose message contains
+`[android]`. It replaces the `android-latest` pre-release on GitHub.
 On the phone, open the repository's Releases page, download `cycle-of-steel.apk`
 from "Android test build" and open it. Android asks once to let the browser install
 apps. Later builds install over earlier ones.

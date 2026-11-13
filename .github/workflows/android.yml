@@ -1,5 +1,7 @@
 # Builds the Cycle of Steel test APK and publishes it where a phone can fetch it.
 #
+# It runs only when asked: from the repository's Actions tab ("Android APK" ->
+# "Run workflow"), or for a pushed commit whose message contains `[android]`.
 # Every run replaces the `android-latest` pre-release, so its APK link is stable:
 # open the release page on the phone, download `cycle-of-steel.apk`, install.
 name: Android APK
@@ -31,6 +33,7 @@ env:
 
 jobs:
   apk:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[android]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

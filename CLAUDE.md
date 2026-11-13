@@ -117,15 +117,15 @@ on touch (`TouchDef`, Unity's `BasicAIAttack`), and enemy bullets
 
 ### Android
 
-Every push that touches the game runs `.github/workflows/android.yml`, which builds
-the APK and replaces the `android-latest` pre-release:
+Builds are opt-in, every time (the owner's choice). `.github/workflows/android.yml`
+builds the APK only when started from the Actions tab or when a pushed commit's
+message contains `[android]`; it replaces the `android-latest` pre-release:
 https://github.com/chrissquest/rust-dev/releases/tag/android-latest. The owner tests on
-their phone from that page, so after pushing, check that the run succeeded (GitHub MCP
-`actions_list`) and tell them. Building the APK locally is optional; the steps are in
+their phone from that page. Building the APK locally is optional; the steps are in
 `apps/cycle-of-steel/README.md` and need the SDK from `dl.google.com`.
 
-The owner does not need you to wait for that run: push and report. A commit
-whose message contains `[skip ci]` builds nothing.
+Put `[android]` in a commit message only when the owner asks for a phone build,
+and do not wait for the run: push and report.
 
 Windows and Linux builds run only on request (`.github/workflows/desktop.yml`):
 from the Actions tab ("Desktop builds" -> "Run workflow"), or by putting
