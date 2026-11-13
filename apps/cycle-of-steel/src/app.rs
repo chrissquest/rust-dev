@@ -726,6 +726,10 @@ mod tests {
         // `Crab.prefab`: RangedAI attackRange 2.5, fireInterval 1, damage 50; Killable 200.
         assert_eq!((ranged.attack_range, ranged.fire_interval, ranged.damage), (2.5, 1.0, 50.0));
         assert_eq!(world.defs.enemy(crab).max_health, 200.0);
+        assert_eq!(world.defs.enemy(crab).touch.map(|touch| touch.damage), Some(100.0), "BasicAIAttack bites for 100");
+        let Ai::Laser(laser) = &world.defs.enemy(kind(&world, "LASERCrab")).ai else { panic!("the LASERCrab has a laser") };
+        // `LASERCrab.prefab`: attackRange 4, maxFireTime 3, damage 50 every 0.5 s, turning 50 degrees/s.
+        assert_eq!((laser.attack_range, laser.max_fire_time, laser.damage, laser.damage_rate, laser.turn_speed), (4.0, 3.0, 50.0, 0.5, 50.0));
         let Ai::Turret(muzzles) = &world.defs.enemy(turret).ai else { panic!("the turret is a turret") };
         assert_eq!(muzzles.muzzles.len(), 8);
         assert_eq!(world.defs.bullet(muzzles.bullet).time_to_live, 2.0, "`Enemy Bullet` lives 2 s");

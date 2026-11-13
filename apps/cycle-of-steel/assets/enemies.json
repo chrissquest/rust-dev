@@ -35,7 +35,15 @@
         "wander_interval": 0.25
       },
       "size": [0.2, 0.5],
-      "sprite": "crab_0"
+      "sprite": "crab_0",
+      "touch": {
+        "damage": 100.0,
+        "damage_cooldown": 1.5,
+        "reach": {
+          "offset": [0.0, 0.0],
+          "size": [0.225, 0.52]
+        }
+      }
     },
     "EnemyTank": {
       "animations": {
@@ -121,6 +129,54 @@
           }
         },
         "wander_interval": 0.25
+      }
+    },
+    "LASERCrab": {
+      "animations": {
+        "idle": {
+          "fps": 12.0,
+          "frames": ["crab_0", "crab_1", "crab_2", "crab_3", "crab_4", "crab_5", "crab_6", "crab_7", "crab_8", "crab_9", "crab_10", "crab_11", "crab_12"]
+        }
+      },
+      "color": [0.4802, 0.8507, 0.934, 1.0],
+      "dead_sprites": ["crab_dead_1", "crab_dead_2"],
+      "drag": 15.0,
+      "freezable": true,
+      "laser": {
+        "attack_range": 4.0,
+        "damage": 50.0,
+        "damage_rate": 0.5,
+        "fire_interval": 1.0,
+        "follow_range": 50.0,
+        "max_fire_time": 3.0,
+        "move_speed": 1000.0,
+        "spotting_length": 5.0,
+        "turn_speed": 50.0,
+        "wander_interval": 0.25,
+        "width": 0.05
+      },
+      "loot": [
+        {
+          "drop": "Data Drop",
+          "weight": 30.0
+        },
+        {
+          "drop": "Health Drop",
+          "weight": 10.0
+        }
+      ],
+      "mass": 1.0,
+      "max_health": 200.0,
+      "offset": [0.0, 0.0],
+      "size": [0.2, 0.5],
+      "sprite": "crab_0",
+      "touch": {
+        "damage": 100.0,
+        "damage_cooldown": 1.5,
+        "reach": {
+          "offset": [0.0, 0.0],
+          "size": [0.225, 0.52]
+        }
       }
     },
     "Warrior": {

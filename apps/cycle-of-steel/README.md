@@ -112,8 +112,16 @@ where you spawn and interact. Interact again on the spot inside to leave.
   a small splash. The Crab's push is scaled by Unity's frame time, so its speed
   (about 0.93 units/s) does not depend on the frame-rate assumption.
 
+- **LASERCrabs.** They follow like Crabs (and bite like them), drawing a green
+  sight line to the player. After a second of following within 4 units they
+  attack for 3 seconds: the line turns yellow for one second as a warning, then a
+  red beam sweeps towards the player at 50 degrees a second, stopping at walls
+  and bodies, and burns them for 50 every half second it touches them. They
+  stand still while attacking. The lines fade in from clear at the crab, as
+  Unity's `LineRenderer` draws them. Not yet: the sparks where the beam lands.
+
 Not in yet:
-the LASERCrab, Drones and the boss; lighting (rooms look flatter and brighter than in
+Drones and the boss; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
@@ -217,7 +225,7 @@ src/
     guns.rs      one gun's fire timer and heat
     combat.rs    bullets, hit effects, targets and chests, guns on the floor
     loot.rs      rolling a broken chest's loot; drops flying to the player
-    enemy.rs     enemy AIs (Warrior, ranged, turret), bites, enemy shots
+    enemy.rs     enemy AIs (Warrior, ranged, turret, laser), bites, enemy shots
     elemental.rs being frozen (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells

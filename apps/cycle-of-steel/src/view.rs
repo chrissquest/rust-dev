@@ -22,6 +22,8 @@ use crate::data::{DecorationFile, DropKind, FontFile, RoomFile, ShakeFile, Sorti
 use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
 use crate::sim::combat::Interaction;
+use crate::sim::defs::Ai;
+use crate::sim::enemy::BeamPhase;
 use crate::sim::loot::RemainsKind;
 use crate::sim::defs::Defs;
 use crate::sim::player::{Facing, Player};
@@ -85,6 +87,8 @@ const HUD_HEAT_BACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.45];
 const HUD_HEAT_COOL_COLOR: [f32; 4] = [1.0, 0.85, 0.2, 0.9];
 const HUD_HEAT_HOT_COLOR: [f32; 4] = [1.0, 0.2, 0.1, 0.95];
 const HUD_BUTTON_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.28];
+/// How many flat pieces a LASERCrab's fading line is drawn in.
+const BEAM_PIECES: u32 = 8;
 /// A frozen enemy's colour (`ElementalEffectHandler`), as picked on screen.
 const FROZEN_TINT: [f32; 4] = [0.3, 1.0, 1.0, 1.0];
 const HUD_HEALTH_COLOR: [f32; 4] = [0.55, 0.02, 0.02, 0.9];
@@ -551,6 +555,7 @@ impl View {
                 self.list.sprite(sprite.texture, placed);
             }
         }
+        self.draw_enemy_beams(world);
         if let (Some(beam), Some(gun)) = (&world.combat.beam, world.current_gun()) {
             // The beam leaves the gun, so it moves with the blended player.
             let origin = beam.origin + (player_position - world.player.position);
@@ -653,6 +658,38 @@ impl View {
                 .placed(position.extend(Z_ENTITIES), def.scale, 0.0, [false, false])
                 .with_color(srgb_to_linear(color));
             self.list.sprite(sprite.texture, placed);
+        }
+    }
+
+    /// LASERCrab lines, as Unity's `LineRenderer` draws them: thin, fading in from
+    /// clear at the crab to their colour at the far end, on the `Bullets` layer.
+    fn draw_enemy_beams(&mut self, world: &World) {
+        for target in &world.combat.targets {
+            let (Some(enemy), Some(beam)) = (&target.enemy, target.enemy.as_ref().and_then(|enemy| enemy.beam)) else {
+                continue;
+            };
+            let Ai::Laser(laser) = &world.defs.enemy(enemy.def).ai else {
+                continue;
+            };
+            // `RangedAI_Laser`'s colours: (start, end) of each phase.
+            let (start, end) = match beam.phase {
+                BeamPhase::Sight => ([0.5, 0.5, 0.5, 0.0], [0.0, 1.0, 0.0, 1.0]),
+                BeamPhase::Warning => ([1.0, 0.92, 0.016, 0.0], [1.0, 0.92, 0.016, 1.0]),
+                BeamPhase::Firing => ([1.0, 1.0, 1.0, 0.0], [1.0, 0.0, 0.0, 1.0]),
+            };
+            let span = beam.end - beam.origin;
+            let rotation = span.to_angle();
+            // The gradient in a few flat pieces: a sprite has one colour.
+            for piece in 0..BEAM_PIECES {
+                let middle = (piece as f32 + 0.5) / BEAM_PIECES as f32;
+                let center = beam.origin + span * middle;
+                let color = std::array::from_fn(|channel| start[channel] + (end[channel] - start[channel]) * middle);
+                let size = [span.length() / BEAM_PIECES as f32, laser.width];
+                let sprite = Sprite::new(center.extend(Z_BULLETS), size, [0.0, 0.0, 1.0, 1.0])
+                    .with_rotation(rotation)
+                    .with_color(srgb_to_linear(color));
+                self.list.sprite(self.white, sprite);
+            }
         }
     }
 

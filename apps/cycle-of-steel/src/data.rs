@@ -411,6 +411,8 @@ pub struct EnemyFile {
     pub ranged: Option<RangedFile>,
     #[serde(default)]
     pub turret: Option<TurretFile>,
+    #[serde(default)]
+    pub laser: Option<LaserFile>,
     /// A bite on touch (`BasicAIAttack`), beside its AI.
     #[serde(default)]
     pub touch: Option<TouchFile>,
@@ -431,6 +433,27 @@ pub struct RangedFile {
     pub spotting_length: f32,
     /// A key of `guns.json`'s bullets.
     pub bullet: String,
+}
+
+/// Unity's `RangedAI_Laser`: follows, then sweeps a beam at the player.
+#[derive(Clone, Debug, Deserialize)]
+pub struct LaserFile {
+    pub follow_range: f32,
+    pub attack_range: f32,
+    pub move_speed: f32,
+    pub wander_interval: f32,
+    /// Seconds of each attack: the first second only warns.
+    pub max_fire_time: f32,
+    /// Seconds between attacks.
+    pub fire_interval: f32,
+    pub damage: f32,
+    /// Seconds between the beam's hits.
+    pub damage_rate: f32,
+    pub spotting_length: f32,
+    /// How fast the beam turns towards the player, degrees per second.
+    pub turn_speed: f32,
+    /// The beam's width in world units.
+    pub width: f32,
 }
 
 /// Unity's `RangedAITurret`: fires from every muzzle at once while the player is near.

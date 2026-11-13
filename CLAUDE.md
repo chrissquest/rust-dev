@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (pieces 1 and 2a done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (pieces 1 and 2 done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -68,7 +68,10 @@ Piece 2a is done: `Ai::Ranged` (Crab) and `Ai::Turret` in `sim/enemy.rs`, bites
 on touch (`TouchDef`, Unity's `BasicAIAttack`), and enemy bullets
 (`Combat::shots`, `enemy::step_shots`), defined in `guns.json` beside the players'.
 
-**Next: step 4 piece 2b, the LASERCrab** (`RangedAI_Laser.cs`'s sweeping beam). Convert each new kind of data in
+Piece 2b is done: `Ai::Laser` (LASERCrab) with its sight, warning and firing
+lines (`Enemy::beam`, drawn by `View::draw_enemy_beams`).
+
+**Next: step 4 piece 3, dashers** (Drone: `DashAIDrone.cs`; `DashAI.cs`). Convert each new kind of data in
 `cos-convert` when the step needs it, not before.
 
 ### How to work here

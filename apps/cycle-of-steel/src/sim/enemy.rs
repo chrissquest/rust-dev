@@ -12,6 +12,11 @@
 //! - `RangedAITurret`: never moves by itself; while the player is within
 //!   `attackRange` it fires from every muzzle at once every `fireInterval`, sight
 //!   or no sight.
+//! - `RangedAI_Laser` (the LASERCrab): follows like the Crab, drawing a green
+//!   sight line to the player. Every `fireInterval` of following it attacks for
+//!   `maxFireTime`: the first second the line turns yellow as a warning, then a
+//!   red beam sweeps towards the player at `laserRotSpeed` and hurts them every
+//!   `damageRate` it touches them. It stands still while attacking.
 //!
 //! Some also bite whoever touches them (`BasicAIAttack`). Their shots
 //! (`EnemyBullet`) fly straight, hurt the player and stop on them or on a wall,
@@ -31,6 +36,7 @@ use super::combat::{Effect, Target, UNITY_STEP, boxes_overlap, bullet_hits_wall,
 use super::defs::{
     Ai, Animation, BulletId, Defs, Direction, EnemyDef, EnemyId, OffsetBox, RangedDef, TouchDef, TurretDef, WarriorDef,
 };
+use crate::data::LaserFile;
 use super::player::{self, Player};
 use super::rng::Rng;
 use super::room::{CAMERA_BLOCK, Room};
@@ -54,6 +60,45 @@ const RANGED_SHOT_SPEED: f32 = 3.0;
 const TURRET_SHOT_SPEED: f32 = 1.0;
 /// Room for this many enemy shots before the oldest makes way.
 pub const SHOT_CAPACITY: usize = 256;
+
+/// How far a LASERCrab's sight line reaches (`RangedAI_Laser.PlayerInLineOfSight`).
+const LASER_SIGHT_RANGE: f32 = 100.0;
+
+/// What a LASERCrab's line shows, as its `LineRenderer` colours it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BeamPhase {
+    /// Following: a sight line to what it sees, green.
+    Sight,
+    /// The attack's first second: yellow, still where the sight line last was.
+    Warning,
+    /// Firing: red, and it hurts.
+    Firing,
+}
+
+/// A LASERCrab's line this step, from `origin` to `end`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EnemyBeam {
+    pub origin: Vec2,
+    pub end: Vec2,
+    pub phase: BeamPhase,
+}
+
+/// The LASERCrab's timers (`RangedAI_Laser`), all counting down in seconds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LaserState {
+    /// Seconds of the current attack left; 0 when not attacking.
+    fire_time: f32,
+    /// Seconds of following before the next attack.
+    next_fire_time: f32,
+    /// Seconds before the beam can hurt again.
+    next_damage_tick: f32,
+    /// Where the beam points, radians.
+    angle: f32,
+    /// Where the player was last seen from it, radians (`quatRot`).
+    sight_angle: f32,
+    /// Where the sight line last ended (`hit.point`).
+    sight_end: Vec2,
+}
 
 /// A bullet an enemy fired (`EnemyBullet`).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,6 +131,9 @@ pub struct Enemy {
     hitting_until: f64,
     last_fire: f64,
     last_touch: f64,
+    laser: LaserState,
+    /// A LASERCrab's line, while it shows.
+    pub beam: Option<EnemyBeam>,
     /// The swing in progress: its direction and when it started.
     pub swing: Option<(Direction, f64)>,
     /// What its Animator plays and since when. `None` until it first moves.
@@ -109,6 +157,15 @@ impl Enemy {
             hitting_until: f64::NEG_INFINITY,
             last_fire: f64::NEG_INFINITY,
             last_touch: f64::NEG_INFINITY,
+            laser: LaserState {
+                fire_time: 0.0,
+                next_fire_time: 0.0,
+                next_damage_tick: 0.0,
+                angle: 0.0,
+                sight_angle: 0.0,
+                sight_end: origin,
+            },
+            beam: None,
             swing: None,
             animation: None,
         }
@@ -130,6 +187,10 @@ pub fn spawn(defs: &Defs, enemy: EnemyId, origin: Vec2, id: u32) -> Target {
     // An Animator given a controller in the prefab plays it from the start.
     if def.animations[Animation::Idle.index()].is_some() {
         state.animation = Some((Animation::Idle, 0.0));
+    }
+    if let Ai::Laser(laser) = &def.ai {
+        // `Start`: the first attack waits `maxFireTime`, not `fireInterval`.
+        state.laser.next_fire_time = laser.max_fire_time;
     }
     Target {
         id,
@@ -175,6 +236,10 @@ pub fn step_enemies(
             Ai::Turret(turret) => {
                 fire_turret(&mut targets[index], turret, defs, player.position, now, shots);
                 Vec2::ZERO
+            }
+            Ai::Laser(laser) => {
+                let heading = think_laser(targets, index, laser, room, player, now, rng);
+                heading * laser.move_speed * UNITY_STEP / def.mass
             }
         };
         if let Some(touch) = def.touch {
@@ -292,6 +357,148 @@ fn think_ranged(
         enemy.spotting_timer -= DT;
     }
     push
+}
+
+/// What a ray from an enemy meets first: the player, a wall, or another target
+/// (Unity's mask holds the `Default` and `Player` layers: walls, bodies, chests).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum RayHit {
+    Player(f32),
+    Blocked(f32),
+    Nothing,
+}
+
+fn cast(targets: &[Target], index: usize, room: &Room, player: Vec2, direction: Vec2, range: f32) -> RayHit {
+    let origin = targets[index].origin;
+    let mut nearest = room.ray_hits_wall(origin, direction, range).map(RayHit::Blocked);
+    let distance = |hit: Option<RayHit>| match hit {
+        Some(RayHit::Player(distance) | RayHit::Blocked(distance)) => distance,
+        _ => range,
+    };
+    for (other, target) in targets.iter().enumerate() {
+        if other != index
+            && let Some(hit) = ray_hits_box(origin, direction, target.position, target.half).filter(|&hit| hit < distance(nearest))
+        {
+            nearest = Some(RayHit::Blocked(hit));
+        }
+    }
+    if let Some(hit) = ray_hits_box(origin, direction, player, player::HALF_SIZE).filter(|&hit| hit < distance(nearest)) {
+        nearest = Some(RayHit::Player(hit));
+    }
+    nearest.unwrap_or(RayHit::Nothing)
+}
+
+/// `RangedAI_Laser.Update`, one step: the direction it pushes in, if any. Its
+/// line is left in `enemy.beam` for the view.
+fn think_laser(
+    targets: &mut [Target],
+    index: usize,
+    ai: &LaserFile,
+    room: &Room,
+    player: &mut Player,
+    now: f64,
+    rng: &mut Rng,
+) -> Vec2 {
+    let origin = targets[index].origin;
+    if block_of(origin) != block_of(player.position) {
+        return Vec2::ZERO;
+    }
+    let distance = origin.distance(player.position);
+    let (in_attack, in_follow) = (distance < ai.attack_range, distance < ai.follow_range);
+
+    // `PlayerInLineOfSight`, which also remembers where it looked and what it hit.
+    let look = |targets: &mut [Target]| {
+        let direction = (player.position - origin).normalize_or_zero();
+        let hit = cast(targets, index, room, player.position, direction, LASER_SIGHT_RANGE);
+        let state = targets[index].enemy.as_mut().expect("an enemy");
+        state.laser.sight_angle = direction.to_angle();
+        if let RayHit::Player(distance) | RayHit::Blocked(distance) = hit {
+            state.laser.sight_end = origin + direction * distance;
+        }
+        if matches!(hit, RayHit::Player(_)) {
+            state.spotting_timer = ai.spotting_length;
+        }
+    };
+
+    let enemy = targets[index].enemy.as_mut().expect("an enemy");
+    if enemy.laser.next_damage_tick > 0.0 {
+        enemy.laser.next_damage_tick -= DT;
+    }
+    let mut push = Vec2::ZERO;
+    if enemy.spotting_timer <= 0.0 {
+        enemy.laser.fire_time = 0.0;
+        enemy.laser.next_fire_time = ai.fire_interval;
+        enemy.beam = None;
+        if now - enemy.last_wander > ai.wander_interval as f64 {
+            let mut pick = || (rng.unit() * 3.0).floor().min(2.0) - 1.0;
+            enemy.heading = Vec2::new(pick(), pick());
+            enemy.last_wander = now;
+        }
+        push = enemy.heading.normalize_or_zero();
+        enemy.laser.angle = enemy.laser.sight_angle;
+        if in_attack || in_follow {
+            look(targets);
+        }
+    } else if in_attack && enemy.laser.fire_time > 0.0 {
+        look(targets);
+        let enemy = targets[index].enemy.as_mut().expect("an enemy");
+        if enemy.laser.fire_time <= ai.max_fire_time - 1.0 {
+            fire_laser(targets, index, ai, room, player, now);
+        } else if let Some(beam) = &mut enemy.beam {
+            // The warning recolours the line where the sight line last left it.
+            beam.phase = BeamPhase::Warning;
+        }
+        let enemy = targets[index].enemy.as_mut().expect("an enemy");
+        enemy.laser.fire_time -= DT;
+        enemy.laser.next_fire_time = ai.fire_interval;
+        enemy.spotting_timer -= DT;
+    } else if in_follow {
+        look(targets);
+        let enemy = targets[index].enemy.as_mut().expect("an enemy");
+        enemy.beam = Some(EnemyBeam { origin, end: enemy.laser.sight_end, phase: BeamPhase::Sight });
+        enemy.heading = player.position - origin;
+        push = enemy.heading.normalize_or_zero();
+        enemy.spotting_timer -= DT;
+        enemy.laser.angle = enemy.laser.sight_angle;
+        enemy.laser.fire_time = 0.0;
+    }
+    let enemy = targets[index].enemy.as_mut().expect("an enemy");
+    if enemy.laser.next_fire_time > 0.0 {
+        enemy.laser.next_fire_time -= DT;
+    } else {
+        enemy.laser.fire_time = ai.max_fire_time;
+    }
+    push
+}
+
+/// `RangedAI_Laser.Attack`: turn the beam towards the player at the turn speed,
+/// shine it up to the attack range, and hurt the player if it reaches them first.
+fn fire_laser(targets: &mut [Target], index: usize, ai: &LaserFile, room: &Room, player: &mut Player, now: f64) {
+    let origin = targets[index].origin;
+    let enemy = targets[index].enemy.as_ref().expect("an enemy");
+    let wanted = (player.position - origin).to_angle();
+    let step = ai.turn_speed.to_radians() * DT;
+    let turn = wrap_angle(wanted - enemy.laser.angle).clamp(-step, step);
+    let angle = enemy.laser.angle + turn;
+    let direction = Vec2::from_angle(angle);
+    let hit = cast(targets, index, room, player.position, direction, ai.attack_range);
+    let length = match hit {
+        RayHit::Player(distance) | RayHit::Blocked(distance) => distance,
+        RayHit::Nothing => ai.attack_range,
+    };
+    let enemy = targets[index].enemy.as_mut().expect("an enemy");
+    enemy.laser.angle = angle;
+    enemy.beam = Some(EnemyBeam { origin, end: origin + direction * length, phase: BeamPhase::Firing });
+    if matches!(hit, RayHit::Player(_)) && enemy.laser.next_damage_tick <= 0.0 {
+        player.hurt(ai.damage, now);
+        enemy.laser.next_damage_tick = ai.damage_rate;
+    }
+}
+
+/// An angle brought into -pi..=pi, for turning the short way round.
+fn wrap_angle(angle: f32) -> f32 {
+    let turn = std::f32::consts::TAU;
+    angle - turn * ((angle + std::f32::consts::PI) / turn).floor()
 }
 
 /// `RangedAITurret.Update`: every muzzle fires at once while the player is near.
@@ -564,6 +771,36 @@ mod tests {
         let mut targets = vec![spawn(&defs, defs.enemy_named("turret").unwrap(), Vec2::new(4.0, 3.0), 0)];
         run(&mut targets, &defs, &room, &mut close, 60);
         assert_eq!(close.health, player::MAX_HEALTH - 50.0);
+    }
+
+    #[test]
+    fn a_laser_crab_warns_then_burns_the_player_it_sees() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut player = Player::new(Vec2::new(4.0, 2.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("laser_crab").unwrap(), Vec2::new(6.5, 2.0), 0)];
+        let mut rng = Rng::new(5);
+        let mut shots = Vec::new();
+        let mut phases = Vec::new();
+        for tick in 0..60 * 8 {
+            let now = tick as f64 * DT as f64;
+            // Keep the player in place, out of its bite.
+            player.position = Vec2::new(4.0, 2.0);
+            step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, now, &mut rng);
+            if let Some(beam) = targets[0].enemy.as_ref().unwrap().beam
+                && phases.last() != Some(&beam.phase)
+            {
+                phases.push(beam.phase);
+            }
+        }
+        assert_eq!(&phases[..3], &[BeamPhase::Sight, BeamPhase::Warning, BeamPhase::Firing], "{phases:?}");
+        assert!(player.health < player::MAX_HEALTH, "the beam burned: {}", player.health);
+    }
+
+    #[test]
+    fn angles_wrap_the_short_way_round() {
+        assert!((wrap_angle(3.5 * std::f32::consts::PI) - (-0.5 * std::f32::consts::PI)).abs() < 1e-5);
+        assert!((wrap_angle(0.25) - 0.25).abs() < 1e-6);
     }
 
     #[test]

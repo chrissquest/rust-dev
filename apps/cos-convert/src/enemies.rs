@@ -1,8 +1,8 @@
 //! Enemy prefabs -> `enemies.json`.
 //!
 //! An enemy is a prefab under `Prefabs/Enemies` with a `Killable` (health, loot,
-//! the body it leaves) and one AI script: `Warrior`, `RangedAI` or
-//! `RangedAITurret` so far, each written under its own key. Other AIs are added
+//! the body it leaves) and one AI script: `Warrior`, `RangedAI`,
+//! `RangedAITurret` or `RangedAI_Laser` so far, each written under its own key. Other AIs are added
 //! here when their step needs them. A `BasicAIAttack` on a child (a bite on
 //! touch) is written as `touch`. The bullets ranged enemies fire are written to
 //! `guns.json` with the players' (see `guns.rs`).
@@ -139,6 +139,28 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
                 ai.insert("bullet".into(), json!(project.stem_of(ai_body.get("bulletFab").get("guid").str())));
                 enemy.insert("ranged".into(), Json::Object(ai));
             }
+            "RangedAI_Laser" => {
+                let mut ai = numbers(
+                    ai_body,
+                    &[
+                        ("follow_range", "followRange"),
+                        ("attack_range", "attackRange"),
+                        ("move_speed", "moveSpeed"),
+                        ("wander_interval", "wanderInterval"),
+                        ("max_fire_time", "maxFireTime"),
+                        ("fire_interval", "fireInterval"),
+                        ("damage", "damage"),
+                        ("damage_rate", "damageRate"),
+                        ("spotting_length", "spottingLength"),
+                        ("turn_speed", "laserRotSpeed"),
+                    ],
+                );
+                // The beam is the root's LineRenderer; its colours are set in code.
+                if let Some(line) = prefab.component(root, "LineRenderer") {
+                    ai.insert("width".into(), number(line.body.get("m_Parameters").get("widthMultiplier").f32()));
+                }
+                enemy.insert("laser".into(), Json::Object(ai));
+            }
             _ => {
                 let mut ai = numbers(
                     ai_body,
@@ -162,7 +184,8 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         }
         if let Some((object, body)) = documents.iter().find_map(|document| {
             (document.class == "MonoBehaviour"
-                && project.stem_of(script_guid(document)).as_deref() == Some("BasicAIAttack"))
+                // The class is `BasicAIAttack`; its file is `MeleeAttack.cs`.
+                && project.stem_of(script_guid(document)).as_deref() == Some("MeleeAttack"))
             .then(|| prefab.object_of(document).map(|object| (object, &document.body)))
             .flatten()
         }) {
@@ -185,7 +208,7 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
 }
 
 /// The AI scripts converted so far.
-const AI_SCRIPTS: [&str; 3] = ["Warrior", "RangedAI", "RangedAITurret"];
+const AI_SCRIPTS: [&str; 4] = ["Warrior", "RangedAI", "RangedAITurret", "RangedAI_Laser"];
 
 /// Numeric fields of a script as (key, Unity field) pairs.
 fn numbers(body: &Value, fields: &[(&str, &str)]) -> Map<String, Json> {

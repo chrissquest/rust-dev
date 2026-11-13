@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::data::{
     AnimationFile, BulletFile, DropKind, EffectFile, EnemiesFile, ExplosionFile, GunFile, GunKind, GunsFile,
-    LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
+    LaserFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -141,6 +141,7 @@ pub enum Ai {
     Warrior(WarriorDef),
     Ranged(RangedDef),
     Turret(TurretDef),
+    Laser(LaserFile),
 }
 
 #[derive(Clone, Debug)]
@@ -458,8 +459,8 @@ impl Defs {
                     *slot = Some(file.clone());
                 }
             }
-            let ai = match (&enemy.warrior, &enemy.ranged, &enemy.turret) {
-                (Some(warrior), None, None) => {
+            let ai = match (&enemy.warrior, &enemy.ranged, &enemy.turret, &enemy.laser) {
+                (Some(warrior), None, None, None) => {
                     let swing = |key: &str| -> Result<OffsetBox> {
                         Ok((*warrior.swings.get(key).with_context(|| format!("enemy `{name}` has no `{key}` swing"))?).into())
                     };
@@ -481,7 +482,7 @@ impl Defs {
                         swings: [swing("right")?, swing("left")?, swing("up")?, swing("down")?],
                     })
                 }
-                (None, Some(ranged), None) => Ai::Ranged(RangedDef {
+                (None, Some(ranged), None, None) => Ai::Ranged(RangedDef {
                     follow_range: ranged.follow_range,
                     attack_range: ranged.attack_range,
                     move_speed: ranged.move_speed,
@@ -491,13 +492,14 @@ impl Defs {
                     spotting_length: ranged.spotting_length,
                     bullet: bullet(&ranged.bullet)?,
                 }),
-                (None, None, Some(turret)) => Ai::Turret(TurretDef {
+                (None, None, Some(turret), None) => Ai::Turret(TurretDef {
                     attack_range: turret.attack_range,
                     fire_interval: turret.fire_interval,
                     damage: turret.damage,
                     bullet: bullet(&turret.bullet)?,
                     muzzles: turret.muzzles.clone(),
                 }),
+                (None, None, None, Some(laser)) => Ai::Laser(laser.clone()),
                 _ => anyhow::bail!("enemy `{name}` must have exactly one AI"),
             };
             self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
@@ -642,6 +644,13 @@ pub(crate) mod tests {
                 "loot": [], "dead_sprites": [],
                 "turret": {"attack_range": 3, "fire_interval": 1.3, "damage": 50, "bullet": "round",
                            "muzzles": [{"offset": [0.218, 0], "angle": 0}, {"offset": [0, 0.216], "angle": 90}]}
+              },
+              "laser_crab": {
+                "max_health": 200, "sprite": "crab", "size": [0.2, 0.5], "mass": 1, "drag": 15, "freezable": true,
+                "loot": [], "dead_sprites": [],
+                "laser": {"follow_range": 50, "attack_range": 4, "move_speed": 1000, "wander_interval": 0.25,
+                          "max_fire_time": 3, "fire_interval": 1, "damage": 50, "damage_rate": 0.5,
+                          "spotting_length": 5, "turn_speed": 50, "width": 0.05}
               }
             }}"#,
         )
