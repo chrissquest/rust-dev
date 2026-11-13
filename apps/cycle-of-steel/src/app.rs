@@ -554,6 +554,33 @@ mod tests {
     }
 
     #[test]
+    fn the_real_freezing_guns_freeze_but_not_the_dummy() {
+        let mut world = hub();
+        for name in ["pistol_2", "smg_1", "minigun_1"] {
+            let gun = world.defs.gun(world.defs.gun_named(name).unwrap());
+            // `Bullet_Pistol_2.prefab`: Bullet_Freeze, freezeStrength 5.
+            assert_eq!(world.defs.bullet(gun.bullet.unwrap()).freeze, 5.0, "{name}");
+        }
+        // No other bullet freezes.
+        assert_eq!(world.defs.bullets.iter().filter(|bullet| bullet.freeze > 0.0).count(), 1);
+        // Unity's test dummy has no ElementalEffectHandler: hit, but never frozen.
+        assert_eq!(world.combat.targets[0].elemental, None);
+        assert!(shoot_at_the_dummy("pistol_2", 0.0) > 0.0);
+
+        // Something that can be frozen, shot with the same real gun, is.
+        world.combat.targets[0].elemental = Some(Default::default());
+        world.give(world.defs.gun_named("pistol_2").unwrap());
+        let toward = (world.combat.targets[0].position - world.player.position).normalize();
+        world.step(&sim::Input { aim: Some(toward), ..Default::default() });
+        let mut frozen = false;
+        for _ in 0..120 {
+            world.step(&sim::Input::default());
+            frozen |= world.combat.targets[0].elemental.unwrap().is_frozen();
+        }
+        assert!(frozen);
+    }
+
+    #[test]
     fn the_hidden_spot_leads_into_the_gun_room_and_back_out() {
         let mut world = hub();
         assert_eq!(world.combat.teleports.len(), 2);

@@ -34,7 +34,17 @@ Steps 1 and 2 of the port are in, and step 3 (combat) is under way:
 The hub's hidden gun room is reachable: stand at the right-hand end of the rack
 where you spawn and interact. Interact again on the spot inside to leave.
 
-Not in yet: burn and freeze; damage numbers;
+- **Freezing.** `pistol_2`, `smg_1` and `minigun_1` fire Unity's one freezing
+  bullet. What it hits is frozen only if its Unity object had an
+  `ElementalEffectHandler`, which means enemies; the hub's dummy has none, so
+  until enemies arrive nothing in the game shows it. The state is in
+  `sim/elemental.rs`: freezes of 5 stack to a cap of 20, wear off in under a
+  second, and are what will slow a frozen enemy (added drag) and tint it.
+  Burning is deliberately not ported: no bullet in the Unity project burns, and
+  Unity's burn code never deals its damage (the module's comment and a test show
+  why).
+
+Not in yet: damage numbers;
 enemies, chests and drops; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
@@ -134,6 +144,7 @@ src/
     defs.rs      guns, bullets and effects as loaded data
     guns.rs      one gun's fire timer and heat
     combat.rs    bullets, hit effects, targets, guns on the floor
+    elemental.rs being frozen (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
     collide.rs   moving a box through solid cells

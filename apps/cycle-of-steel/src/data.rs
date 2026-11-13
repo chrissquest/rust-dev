@@ -245,6 +245,9 @@ pub struct BulletFile {
     /// The bullet's `Rigidbody2D` linear drag.
     #[serde(default)]
     pub drag: f32,
+    /// `Bullet_Freeze.freezeStrength`: how hard it freezes what it hits. 0 does not.
+    #[serde(default)]
+    pub freeze: f32,
 }
 
 /// An effect that hurts everything it touches when it appears (`ExplosionScript`).

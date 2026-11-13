@@ -8,6 +8,7 @@
 pub mod collide;
 pub mod combat;
 pub mod defs;
+pub mod elemental;
 pub mod guns;
 pub mod player;
 pub mod rng;
@@ -19,6 +20,7 @@ use crystal_engine::glam::Vec2;
 
 use crate::data::{GunKind, ShakeFile};
 use combat::{Combat, Interaction, Pickup, Target, Teleport};
+use elemental::Elemental;
 use defs::{Defs, GunId};
 use guns::Gun;
 use player::Player;
@@ -121,6 +123,8 @@ impl World {
                     health,
                     max_health: health,
                     last_hit: f64::NEG_INFINITY,
+                    // The hub's dummy has none, so nothing freezes it, as in Unity.
+                    elemental: marker.has_script("ElementalEffectHandler").then(Elemental::default),
                 });
             }
         }
@@ -484,6 +488,7 @@ mod tests {
             health,
             max_health: health,
             last_hit: f64::NEG_INFINITY,
+            elemental: None,
         });
     }
 

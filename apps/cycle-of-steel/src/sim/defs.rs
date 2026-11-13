@@ -57,6 +57,8 @@ pub struct BulletDef {
     pub homing: f32,
     /// Unity's linear drag, per second.
     pub drag: f32,
+    /// How hard it freezes a target that can be frozen; 0 does not.
+    pub freeze: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -103,7 +105,7 @@ impl Defs {
             .map(|(index, name)| (name.as_str(), BulletId(index as u16)))
             .collect();
         for name in &bullet_names {
-            let BulletFile { sprite, color, scale, size, time_to_live, piercing, effect, homing, drag } =
+            let BulletFile { sprite, color, scale, size, time_to_live, piercing, effect, homing, drag, freeze } =
                 file.bullets[*name].clone();
             let effect = match effect {
                 Some(effect) => Some(
@@ -123,6 +125,7 @@ impl Defs {
                 effect,
                 homing,
                 drag,
+                freeze,
             });
         }
 
@@ -204,11 +207,14 @@ pub(crate) mod tests {
                 "bazooka": {"id": 7, "kind": "single", "heat_capacity": 1, "heat_cooldown": 2,
                            "damage": 0, "knockback": 3, "fire_delay": 2, "bullet_speed": 7, "bullet": "missile"},
                 "seeker": {"id": 14, "kind": "single", "heat_capacity": 12, "heat_cooldown": 2,
-                           "damage": 100, "knockback": 5, "fire_delay": 0.2, "bullet_speed": 10, "bullet": "homing"}
+                           "damage": 100, "knockback": 5, "fire_delay": 0.2, "bullet_speed": 10, "bullet": "homing"},
+                "zz_freezer": {"id": 3, "kind": "single", "heat_capacity": 14, "heat_cooldown": 1.5,
+                           "damage": 75, "knockback": 2, "fire_delay": 0.1, "bullet_speed": 6, "bullet": "frost"}
               },
               "bullets": {
                 "round":  {"sprite": "b", "time_to_live": 2, "effect": "splash"},
                 "pellet": {"time_to_live": 0.25, "piercing": true},
+                "frost": {"time_to_live": 2, "freeze": 5, "effect": "splash"},
                 "missile": {"time_to_live": 3, "size": [0.25, 0.1151], "effect": "blast"},
                 "homing": {"time_to_live": 2, "homing": 500, "drag": 3, "effect": "splash"}
               },

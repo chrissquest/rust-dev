@@ -30,13 +30,14 @@ with Unity's heat mechanic, lasers (`Combat::fire_laser`, `Room::ray_hits_wall`)
 explosions (`explode` in `sim/combat.rs`: the bazooka's `Explosion 1`), homing
 bullets (steered in `Combat::step` at the target nearest the player),
 bullets, splashes, targets, camera shake, placeholder HUD, twin touch sticks, the
-hub's hidden gun room. Waiting for enemies (step 4): knockback from lasers and
+hub's hidden gun room, freezing (`sim/elemental.rs`; only targets whose Unity
+object has an `ElementalEffectHandler` freeze, so not the hub's dummy). Burning is
+deliberately left out: no Unity prefab uses `Bullet_Burn` and the handler's burn
+never deals damage. Waiting for enemies (step 4): knockback from lasers and
 explosions, explosions hurting the player and whoever walks into them while they
-last. Waiting for audio (step 6): the laser's loop and the explosion's sound.
+last, a frozen enemy's slowdown (`Elemental::added_drag`) and cyan tint. Waiting for audio (step 6): the laser's loop and the explosion's sound.
 
-**Next, the rest of step 3:** burn and freeze (`ElementalEffectHandler.cs`,
-`Bullet_Burn`, `Bullet_Freeze`; bullets already carry `burn`/`freeze` in `guns.json`
-but `data.rs` does not read them yet), damage numbers (needs text drawing: bake the
+**Next, the rest of step 3:** damage numbers (needs text drawing: bake the
 Thaleah pixel font, `Assets/Thaleah_PixelFont`, into an atlas), chests and drops
 (`Scripts/Drops`, `Prefabs/Room Objects`, `Prefabs/Drops`). Convert each new kind of
 data in `cos-convert` when the step needs it, not before.

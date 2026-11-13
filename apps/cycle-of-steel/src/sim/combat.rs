@@ -8,6 +8,7 @@
 use crystal_engine::glam::Vec2;
 
 use super::defs::{BulletId, Defs, EffectId, GunDef};
+use super::elemental::Elemental;
 use super::guns::Gun;
 use super::rng::Rng;
 use super::room::{Cell, Room};
@@ -77,6 +78,8 @@ pub struct Target {
     pub max_health: f32,
     /// When it was last hit, in world seconds, for the view to flash it.
     pub last_hit: f64,
+    /// Set if it can be frozen: in Unity, if it has an `ElementalEffectHandler`.
+    pub elemental: Option<Elemental>,
 }
 
 /// A gun lying on the floor.
@@ -272,6 +275,10 @@ impl Combat {
                     let damage = if bullet.crit { bullet.damage * CRIT_MULTIPLIER } else { bullet.damage };
                     target.health -= damage;
                     target.last_hit = now;
+                    // `Bullet_Freeze.OnTriggerEnter2D`, beside the bullet's own hit.
+                    if let (true, Some(elemental)) = (def.freeze > 0.0, target.elemental.as_mut()) {
+                        elemental.freeze(def.freeze);
+                    }
                     if def.piercing {
                         bullet.hit.push(target.id);
                     } else {
@@ -307,6 +314,9 @@ impl Combat {
         }
 
         self.targets.retain(|target| target.health > 0.0);
+        for elemental in self.targets.iter_mut().filter_map(|target| target.elemental.as_mut()) {
+            elemental.step();
+        }
 
         self.effects.retain_mut(|effect| {
             effect.time_left -= DT;
@@ -436,7 +446,40 @@ mod tests {
             health,
             max_health: health,
             last_hit: f64::NEG_INFINITY,
+            elemental: None,
         }
+    }
+
+    #[test]
+    fn a_freezing_bullet_freezes_only_what_can_be_frozen() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        // The nearer target has Unity's handler; the one behind it does not.
+        combat.targets.push(Target { elemental: Some(Elemental::default()), ..target(1, Vec2::new(9.0, 4.5), 1000.0) });
+        combat.targets.push(target(2, Vec2::new(9.5, 4.5), 1000.0));
+        fire(&mut combat, &defs, "zz_freezer", PLAYER, Vec2::X);
+        run(&mut combat, &defs, &room, 12);
+        let frozen = combat.targets[0].elemental.unwrap();
+        assert!(frozen.is_frozen());
+        assert_eq!(combat.targets[0].health, 925.0, "it still does its damage");
+        assert!(frozen.added_drag() > 4.0 && frozen.added_drag() < 5.0, "5, already thawing");
+
+        // It wears off by itself in under a second.
+        run(&mut combat, &defs, &room, 60);
+        assert!(!combat.targets[0].elemental.unwrap().is_frozen());
+
+        // The same shot at the plain target does damage and nothing else, and an
+        // ordinary bullet does not freeze.
+        combat.targets.remove(0);
+        fire(&mut combat, &defs, "zz_freezer", PLAYER, Vec2::X);
+        combat.targets.push(Target { elemental: Some(Elemental::default()), ..target(3, Vec2::new(7.0, 4.5), 1000.0) });
+        fire(&mut combat, &defs, "pistol", PLAYER, -Vec2::X);
+        run(&mut combat, &defs, &room, 20);
+        assert_eq!(combat.targets[0].elemental, None);
+        assert_eq!(combat.targets[0].health, 925.0);
+        assert_eq!(combat.targets[1].health, 900.0);
+        assert!(!combat.targets[1].elemental.unwrap().is_frozen());
     }
 
     /// Where the player stands in these tests: the middle of the test room.
