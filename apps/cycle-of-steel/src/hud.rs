@@ -47,6 +47,9 @@ pub struct HudLayout {
     pub text_size: f32,
     /// A boss's health, along the bottom middle, its name above it.
     pub boss_bar: Rect,
+    /// The button that shows the minimap, top right, and where the map is drawn.
+    pub map_button: Rect,
+    pub map_area: Rect,
     /// The round "pick up" button on the right, shown when something is in reach.
     pub interact_center: Vec2,
     pub interact_radius: f32,
@@ -86,6 +89,14 @@ impl HudLayout {
             data_icon,
             data_text: Vec2::new(margin + text_size * 1.3, health_bar.max.y + gap),
             text_size,
+            map_button: Rect {
+                min: Vec2::new(screen.x - margin - unit * 0.13, margin),
+                max: Vec2::new(screen.x - margin, margin + unit * 0.065),
+            },
+            map_area: Rect {
+                min: Vec2::new(screen.x * 0.5 - unit * 0.6, unit * 0.15),
+                max: Vec2::new(screen.x * 0.5 + unit * 0.6, unit * 0.85),
+            },
             boss_bar: Rect {
                 min: Vec2::new(screen.x * 0.25, screen.y - margin - unit * 0.03),
                 max: Vec2::new(screen.x * 0.75, screen.y - margin),

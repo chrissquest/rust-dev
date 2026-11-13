@@ -223,6 +223,9 @@ pub fn parse_map(text: &str) -> Result<Value, ParseError> {
 }
 
 fn parse_lines(lines: &[&str], first_line: usize) -> Result<Value, ParseError> {
+    let joined = join_quoted(lines);
+    let lines: Vec<&str> = joined.iter().map(String::as_str).collect();
+    let lines = lines.as_slice();
     let mut parser = Parser {
         lines,
         first_line,
@@ -234,6 +237,49 @@ fn parse_lines(lines: &[&str], first_line: usize) -> Result<Value, ParseError> {
     }
     let indent = indent_of(lines[parser.position]);
     parser.block(indent)
+}
+
+/// Joins a quoted scalar that runs over several lines (a UI label's text) onto
+/// the line it starts on, so the rest of the parser can stay line by line. Its
+/// line breaks become spaces; the game reads no such text.
+fn join_quoted(lines: &[&str]) -> Vec<String> {
+    let mut joined: Vec<String> = Vec::with_capacity(lines.len());
+    let mut open: Option<char> = None;
+    for line in lines {
+        match open {
+            Some(quote) => {
+                let last = joined.last_mut().expect("a quote was opened on an earlier line");
+                last.push(' ');
+                last.push_str(line.trim());
+                if quotes_in(line, quote) % 2 == 1 {
+                    open = None;
+                }
+            }
+            None => {
+                joined.push(line.to_string());
+                if let Some(start) =
+                    line.find(": '").map(|at| (at + 2, '\'')).or_else(|| line.find(": \"").map(|at| (at + 2, '"')))
+                    && quotes_in(&line[start.0..], start.1) % 2 == 1
+                {
+                    open = Some(start.1);
+                }
+            }
+        }
+    }
+    joined
+}
+
+/// How many quote marks of this kind `text` holds, escaped double quotes aside.
+fn quotes_in(text: &str, quote: char) -> usize {
+    let mut count = 0;
+    let mut previous = ' ';
+    for character in text.chars() {
+        if character == quote && !(quote == '"' && previous == '\\') {
+            count += 1;
+        }
+        previous = character;
+    }
+    count
 }
 
 struct Parser<'a> {
@@ -490,6 +536,13 @@ impl Flow<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_quoted_text_over_several_lines_reads_as_one() {
+        let value = parse_map("m_text: 'Mini Map\n\n'\nnext: 2\n").unwrap();
+        assert_eq!(value.get("next").i64(), 2);
+        assert!(value.get("m_text").str().starts_with("Mini Map"));
+    }
+
     #[test]
     fn a_sequence_of_sequences_reads_as_nested() {
         let value = parse_map("m_Paths:

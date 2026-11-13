@@ -6,8 +6,8 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 to 4 of the port are in (foundation, real rooms, combat, enemies), and
-step 5 (the dungeon) is under way:
+Steps 1 to 5 of the port are in (foundation, real rooms, combat, enemies, the
+dungeon):
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -178,7 +178,13 @@ where you spawn and interact. Interact again on the spot inside to leave.
   so the door does not close on them (`PlayerData.Update`, `RoomScript`); when
   the last enemy counted for the room dies, the doors open. Barriers at every
   doorway keep enemies in their own room. Not yet: the arrows Unity shows
-  towards the opened doors, the exit room's dialogue, the minimap.
+  towards the opened doors, the exit room's dialogue.
+- **Minimap.** Tab (a gamepad's Select, or the MAP button top right on a phone)
+  opens Unity's `MapMenu`: the spawn from the start, every room once entered (the
+  exit and boss rooms as themselves), the rooms beside an entered one as unknown
+  (beside on the grid, door or no door, as Unity does), and a frame on the room
+  the player is in. It is laid out over the whole floor, so it keeps its scale
+  as it fills in. Unity's map is a pause-menu page; here it lies over the game.
 
 Not in yet:
 lighting (rooms look flatter and brighter than in
@@ -200,6 +206,7 @@ cargo test -p cycle-of-steel                # simulation and input tests, no GPU
 | Shoot | arrows, or hold the mouse button | right stick | drag on the right half |
 | Pick up | Space | A or X | the round button that appears |
 | Choose a slot | 1 to 4, Q and E, or the wheel | shoulder buttons | tap the slot |
+| Map | Tab | Select | the MAP button |
 
 F11 toggles fullscreen and Escape quits.
 

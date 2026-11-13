@@ -200,6 +200,9 @@ impl App {
                 Event::Shake(shake) => graphics.view.start_shake(shake),
             }
         }
+        if self.input.take_map_request() {
+            graphics.view.toggle_map();
+        }
         // A new floor rebuilt the room: upload it again.
         if graphics.room_version != self.world.room_version {
             if let Err(error) = graphics.view.set_room(&mut graphics.renderer, &self.world.room) {
@@ -235,6 +238,7 @@ impl App {
     fn command(&mut self, action: Action, event_loop: &ActiveEventLoop) {
         match action {
             Action::Quit => event_loop.exit(),
+            Action::ToggleMap => self.input.request_map(),
             Action::ToggleFullscreen => {
                 if let Some(graphics) = &self.graphics {
                     let fullscreen = match graphics.window.fullscreen() {
@@ -956,6 +960,29 @@ mod tests {
         let floor = world.floor.as_ref().unwrap();
         assert!(!floor.rooms[boss].sealed, "open again once the boss is dead");
         assert_eq!(floor.rooms_cleared, 1);
+    }
+
+    #[test]
+    fn the_minimap_shows_the_spawn_its_neighbours_and_rooms_once_entered() {
+        use crate::sim::dungeon::MapMark;
+        let mut world = load_world(&AssetSource::folder(None).unwrap(), DUNGEON, 1).unwrap();
+        world.step(&Input::default());
+        let floor = world.floor.as_ref().unwrap();
+        let marks: Vec<_> = floor.map().collect();
+        let spawn = marks.iter().find(|(_, mark)| *mark == MapMark::Spawn).expect("the spawn shows").0;
+        assert!(marks.iter().filter(|(_, mark)| *mark != MapMark::Spawn).all(|&(block, mark)| {
+            mark == MapMark::Unknown && (block.0 - spawn.0).abs() + (block.1 - spawn.1).abs() == 1
+        }), "only the spawn's neighbours, as unknown: {marks:?}");
+        let neighbour = marks.iter().find(|(_, mark)| *mark == MapMark::Unknown).expect("a neighbour").0;
+        let shown_before = marks.len();
+
+        let inside = world.room.nearest_open_point(Vec2::new(neighbour.0 as f32 * 16.0 + 8.0, neighbour.1 as f32 * 9.0 + 4.5));
+        world.teleport(inside);
+        world.step(&Input::default());
+        let marks: Vec<_> = world.floor.as_ref().unwrap().map().collect();
+        let entered = marks.iter().find(|(block, _)| *block == neighbour).unwrap().1;
+        assert!(matches!(entered, MapMark::Explored | MapMark::Exit | MapMark::Boss), "{entered:?}");
+        assert!(marks.len() >= shown_before);
     }
 
     #[test]

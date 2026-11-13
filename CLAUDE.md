@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon (pieces 1 to 3 of 4), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -64,27 +64,19 @@ Drag follows Unity 2D (Box2D): velocity divided by `1 + drag * dt` per physics
 step (`combat::drag_kept`, the player's `RESPONSE`), switched in step 4 at the
 owner's request; the player now tops out at 2.22 units/s, not 1.82.
 
-Step 5 (the dungeon) is split into four pieces, agreed with the owner: (1) the
-generator and walking a floor, (2) doors sealing during a fight and rooms
-clearing, (3) the way in from the hub, the exit room and the boss room's locking,
-(4) the minimap. Piece 1 is done: `sim/dungeon.rs` runs `DungeonGenerator` on
-`assets/dungeon.json` and joins the picked rooms into one `RoomFile`
-(`dungeon::build`); `--room dungeon` loads a floor (`app::DUNGEON`).
+Step 5 (the dungeon) is done. A run is the hub with a floor built one empty
+block to its right (`World::new_run`, `sim/dungeon.rs` running Unity's
+`DungeonGenerator` on `assets/dungeon.json`), the default start; `--room dungeon`
+starts in the floor. Rooms seal while their counted enemies live
+(`Floor::seal`, `SealTile`: door tiles, or the boss room's wall layers, which
+unlike Unity reopen when the boss dies); `ExitHub` enters, `ExitDungeon` leaves
+and, once all but two rooms are cleared, makes a new floor at difficulty 2
+(`World::new_floor`, `room_version` makes the view re-upload); death respawns in
+the hub on a new floor. The minimap (`Floor::map`, Tab / Select / MAP button)
+is `MapMenu`. Not yet: the exit dialogue and open-door arrows (UI pass), the
+death screen and saves (step 7).
 
-Piece 2 is done: `dungeon::Floor` seals a room's doorways (`Floor::seal`, door
-cells made walls) when the player enters it with counted enemies left
-(`World::update_rooms`, `Enemy::counted` and `home`), and opens them when they
-die; room barriers keep enemies in (`Combat::barriers`).
-
-Piece 3 is done: a run is the hub with a floor built one empty block to its
-right (`World::new_run`, `dungeon::build` with the hub), the default start.
-`ExitHub` markers enter the dungeon, `ExitDungeon` (interact) leaves it, with a
-new, harder floor (`World::difficulty`) once all but two rooms are cleared;
-death respawns in the hub on a new floor; `World::new_floor` rebuilds the room
-and bumps `room_version` so the view re-uploads it. The boss room seals with its
-wall layers (`SealTile`) and, unlike Unity, opens when the boss dies.
-
-**Next: step 5 piece 4, the minimap** (`Menus/MapMenu.cs`).
+**Next: step 6, lighting and audio.** Read the Port plan and Lighting tabs first.
 
 ### How to work here
 

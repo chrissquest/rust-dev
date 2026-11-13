@@ -339,9 +339,22 @@ pub struct DungeonFile {
     pub by_doors: HashMap<String, Vec<String>>,
     /// The tiles `SealRoom` puts in doorways.
     pub door_tiles: DoorTilesFile,
+    /// The minimap's pictures (`MapMenu`).
+    pub map: MapFile,
     /// Each room's `distanceFromSpawn`: the layer it may appear from.
     #[serde(default)]
     pub distance: HashMap<String, i32>,
+}
+
+/// The minimap's pictures, by what a room is to the player.
+#[derive(Clone, Debug, Deserialize)]
+pub struct MapFile {
+    pub unknown: String,
+    pub spawn: String,
+    pub explored: String,
+    pub exit: String,
+    pub boss: String,
+    pub highlight: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

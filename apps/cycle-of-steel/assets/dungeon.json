@@ -67,6 +67,14 @@
   },
   "exit_room": "exit_room",
   "grid_size": 10,
+  "map": {
+    "boss": "map_boss",
+    "exit": "map_exit",
+    "explored": "map_explored",
+    "highlight": "map_highlight",
+    "spawn": "map_spawn",
+    "unknown": "map_unknown_2"
+  },
   "open_room": "open_room",
   "rooms": 8,
   "spawn": [5, 5],

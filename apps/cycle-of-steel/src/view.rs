@@ -91,6 +91,7 @@ const HUD_BUTTON_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.28];
 const BEAM_PIECES: u32 = 8;
 /// A frozen enemy's colour (`ElementalEffectHandler`), as picked on screen.
 const FROZEN_TINT: [f32; 4] = [0.3, 1.0, 1.0, 1.0];
+const HUD_MAP_BACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.8];
 const HUD_HEALTH_COLOR: [f32; 4] = [0.55, 0.02, 0.02, 0.9];
 const HUD_TEXT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
@@ -161,6 +162,8 @@ pub struct View {
     enemy_sprites: Vec<EnemySprites>,
     /// Per enemy: a boss's laser start, middle and end, if it has lasers.
     boss_laser_sprites: Vec<Option<[ResolvedSprite; 3]>>,
+    /// Whether the minimap is open.
+    show_map: bool,
     /// The tiles sealed rooms show, by sprite name, resolved on first use.
     seal_sprites: HashMap<String, ResolvedSprite>,
     /// A data cell's picture, beside the count in the HUD.
@@ -240,6 +243,7 @@ impl View {
             boss_laser_sprites: Vec::new(),
             data_icon: None,
             seal_sprites: HashMap::new(),
+            show_map: false,
             laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
             shadow: ResolvedSprite::EMPTY,
@@ -338,6 +342,21 @@ impl View {
         names
             .map(|name| name.map(|name| self.sprite(renderer, name)).transpose())
             .collect()
+    }
+
+    /// Opens or closes the minimap.
+    pub fn toggle_map(&mut self) {
+        self.show_map = !self.show_map;
+    }
+
+    /// A sprite by name, resolved once and kept. `None` if it is not in the catalogue.
+    fn cached_sprite(&mut self, renderer: &mut Renderer2d, name: &str) -> Option<ResolvedSprite> {
+        if let Some(sprite) = self.seal_sprites.get(name) {
+            return Some(*sprite);
+        }
+        let sprite = self.sprite(renderer, name).ok()?;
+        self.seal_sprites.insert(name.to_string(), sprite);
+        Some(sprite)
     }
 
     /// Starts a camera shake, replacing any in progress. As in Unity's
@@ -895,6 +914,56 @@ impl View {
             let top = flip(Vec2::new(hud.boss_bar.center().x - width * 0.5, hud.boss_bar.min.y - hud.text_size * 1.1)).truncate();
             let baseline = top - Vec2::new(0.0, FONT_ASCENT * hud.text_size);
             push_text(&mut self.overlay, &self.font, name, baseline, 0.0, hud.text_size, HUD_TEXT_COLOR);
+        }
+
+        // The minimap (`MapMenu`): a button for it, and the map itself while open,
+        // one picture per room it shows, laid out as the rooms are, the room the
+        // player is in framed.
+        if let Some(floor) = &world.floor {
+            self.overlay.sprite(self.white, rect(hud.map_button, HUD_SLOT_COLOR));
+            let label = hud.map_button.size().y * 0.6;
+            let top = flip(hud.map_button.min + Vec2::new(label * 0.4, label * 0.35)).truncate();
+            push_text(&mut self.overlay, &self.font, "MAP", top - Vec2::new(0.0, FONT_ASCENT * label), 0.0, label, HUD_TEXT_COLOR);
+            if self.show_map {
+                self.overlay.sprite(self.white, rect(hud.map_area, HUD_MAP_BACK_COLOR));
+                let here = crate::sim::enemy::block_of(world.player.position);
+                let marks: Vec<((i32, i32), crate::sim::dungeon::MapMark)> = floor.map().collect();
+                // Laid out over the whole floor, so the map keeps its scale as it fills in.
+                let (min, max) = floor.rooms.iter().map(|room| room.block).fold(((i32::MAX, i32::MAX), (i32::MIN, i32::MIN)), |(low, high), block| {
+                    ((low.0.min(block.0), low.1.min(block.1)), (high.0.max(block.0), high.1.max(block.1)))
+                });
+                // `MapMenu.spawnImage`: rooms 135 apart across, 93 up; fitted to the area.
+                let columns = (max.0 - min.0 + 1).max(1) as f32;
+                let rows = (max.1 - min.1 + 1).max(1) as f32;
+                let step = (hud.map_area.size().x / (columns * 135.0)).min(hud.map_area.size().y / (rows * 93.0)) * Vec2::new(135.0, 93.0);
+                let side = step.y * 0.9;
+                let centre = hud.map_area.center();
+                let middle = Vec2::new((min.0 + max.0) as f32, (min.1 + max.1) as f32) * 0.5;
+                let place = |block: (i32, i32)| {
+                    // Up the world is up the screen, and the screen's y points down.
+                    let offset = (Vec2::new(block.0 as f32, block.1 as f32) - middle) * step;
+                    centre + Vec2::new(offset.x, -offset.y)
+                };
+                let names = floor.map.clone();
+                for (block, mark) in &marks {
+                    use crate::sim::dungeon::MapMark;
+                    let name = match mark {
+                        MapMark::Unknown => &names.unknown,
+                        MapMark::Spawn => &names.spawn,
+                        MapMark::Explored => &names.explored,
+                        MapMark::Exit => &names.exit,
+                        MapMark::Boss => &names.boss,
+                    };
+                    if let Some(sprite) = self.cached_sprite(renderer, name) {
+                        self.overlay.sprite(sprite.texture, Sprite::new(flip(place(*block)), [side, side], sprite.uv));
+                    }
+                }
+                if marks.iter().any(|(block, _)| *block == here)
+                    && let Some(sprite) = self.cached_sprite(renderer, &names.highlight)
+                {
+                    self.overlay.sprite(sprite.texture, Sprite::new(flip(place(here)), [side, side], sprite.uv));
+                }
+            }
         }
 
         let health = (world.player.health / world.player.max_health).clamp(0.0, 1.0);

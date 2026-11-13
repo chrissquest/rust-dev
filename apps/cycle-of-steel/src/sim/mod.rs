@@ -393,6 +393,9 @@ impl World {
             return;
         };
         let block = enemy::block_of(self.player.position);
+        if let Some(index) = floor.room_at(block) {
+            floor.rooms[index].explored = true;
+        }
         let enemies_left = |targets: &[Target], block: (i32, i32)| {
             targets
                 .iter()

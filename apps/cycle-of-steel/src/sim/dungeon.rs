@@ -208,6 +208,19 @@ pub struct Floor {
     pub entry: Vec2,
     /// Rooms whose enemies have all died (`DungeonGenerator.ClearedRoom`).
     pub rooms_cleared: usize,
+    /// The minimap's pictures.
+    pub map: crate::data::MapFile,
+}
+
+/// What the minimap shows for a room (`MapMenu`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MapMark {
+    /// Next to a room the player has been in, not entered yet.
+    Unknown,
+    Spawn,
+    Explored,
+    Exit,
+    Boss,
 }
 
 /// A tile a sealed room shows, and the cell it closes.
@@ -236,11 +249,40 @@ pub struct FloorRoom {
     /// have all died since.
     pub had_enemies: bool,
     pub cleared: bool,
+    /// Whether the player has been in it (`MapMenu.PlayerEnteredRoom`).
+    pub explored: bool,
 }
 
 impl Floor {
     pub fn room_at(&self, block: (i32, i32)) -> Option<usize> {
         self.rooms.iter().position(|room| room.block == block)
+    }
+
+    /// What the minimap shows for each room it shows, and where: the spawn from
+    /// the start, every room once entered, and the rooms beside an entered one
+    /// as unknown (`MapMenu.checkConnectedForUnknown`: beside on the grid, door
+    /// or no door). Entering marks a picked room explored and the exit and boss
+    /// rooms as themselves.
+    pub fn map(&self) -> impl Iterator<Item = ((i32, i32), MapMark)> + '_ {
+        self.rooms.iter().filter_map(|room| {
+            let mark = if room.kind == RoomKind::Spawn {
+                MapMark::Spawn
+            } else if room.explored {
+                match room.kind {
+                    RoomKind::Exit => MapMark::Exit,
+                    RoomKind::Boss => MapMark::Boss,
+                    _ => MapMark::Explored,
+                }
+            } else if self.rooms.iter().any(|other| {
+                (other.explored || other.kind == RoomKind::Spawn)
+                    && (other.block.0 - room.block.0).abs() + (other.block.1 - room.block.1).abs() == 1
+            }) {
+                MapMark::Unknown
+            } else {
+                return None;
+            };
+            Some((room.block, mark))
+        })
     }
 
     /// Puts the room's seal in place; tiles that collide make their cells walls.
@@ -323,6 +365,7 @@ pub fn build(
         start_x: start_block as f32 * ROOM_SIZE.x,
         entry: Vec2::ZERO,
         rooms_cleared: 0,
+        map: settings.map.clone(),
     };
     for room in &layout.rooms {
         let file = files.get(&room.name).with_context(|| format!("room `{}` was not loaded", room.name))?;
@@ -340,6 +383,7 @@ pub fn build(
             sealed: false,
             had_enemies: false,
             cleared: false,
+            explored: false,
         });
     }
     Ok(Built { file: joined.file, floor })
@@ -542,6 +586,7 @@ mod tests {
             r#"{"grid_size": 10, "rooms": 8, "spawn": [5, 5], "open_room": "open", "spawn_room": "spawn",
                 "door_tiles": {"top": {"sprite": "t", "solid": true}, "bottom": {"sprite": "b", "solid": false},
                                "vertical": {"sprite": "v", "solid": true}},
+                "map": {"unknown": "u", "spawn": "s", "explored": "e", "exit": "x", "boss": "b", "highlight": "h"},
                 "exit_room": "exit", "boss_room": "boss",
                 "by_doors": {"N": ["n_far", "n"], "S": ["s"], "E": ["e"], "W": ["w"], "NS": ["ns"], "EW": ["ew"],
                              "NE": ["ne"], "NW": ["nw"], "SE": ["se"], "SW": ["sw"], "NSE": ["nse"],

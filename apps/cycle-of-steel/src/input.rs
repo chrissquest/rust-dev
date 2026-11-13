@@ -36,11 +36,13 @@ pub enum Action {
     NextSlot,
     PreviousSlot,
     ToggleFullscreen,
+    /// Show or hide the minimap.
+    ToggleMap,
     Quit,
 }
 
 impl Action {
-    const COUNT: usize = 17;
+    const COUNT: usize = 18;
 
     fn index(self) -> usize {
         self as usize
@@ -48,7 +50,7 @@ impl Action {
 
     /// Actions the window itself carries out, once per press.
     pub fn is_window_command(self) -> bool {
-        matches!(self, Action::ToggleFullscreen | Action::Quit)
+        matches!(self, Action::ToggleFullscreen | Action::ToggleMap | Action::Quit)
     }
 }
 
@@ -80,6 +82,8 @@ impl Default for Bindings {
                 (KeyCode::KeyE, Action::NextSlot),
                 (KeyCode::KeyQ, Action::PreviousSlot),
                 (KeyCode::F11, Action::ToggleFullscreen),
+                // Unity's map key; the hub's floor says "Map (tab)".
+                (KeyCode::Tab, Action::ToggleMap),
                 (KeyCode::Escape, Action::Quit),
             ],
         }
@@ -109,6 +113,8 @@ pub struct InputState {
     held: [u8; Action::COUNT],
     /// Keys currently down, to ignore auto-repeat and unmatched releases.
     down: Vec<KeyCode>,
+    /// The minimap was asked for: the window acts on it, not the simulation.
+    map_requested: bool,
 
     /// The gamepad's sticks, already dead-zoned.
     pad_movement: Vec2,
@@ -166,6 +172,16 @@ impl InputState {
     /// Queues a jump to an inventory slot, e.g. from a tap on it.
     pub fn select_slot(&mut self, slot: usize) {
         self.select_slot = Some(slot);
+    }
+
+    /// Asks for the minimap to be shown or hidden, from a key, a button or a tap.
+    pub fn request_map(&mut self) {
+        self.map_requested = true;
+    }
+
+    /// Whether the minimap was asked for since the last call.
+    pub fn take_map_request(&mut self) -> bool {
+        std::mem::take(&mut self.map_requested)
     }
 
     /// Forgets everything held. Call when the window loses focus: the releases
@@ -391,6 +407,10 @@ impl TouchControls {
                 state.select_slot(slot);
                 return;
             }
+            if hud.map_button.contains(position) {
+                state.request_map();
+                return;
+            }
             if can_interact && hud.interact_contains(position) {
                 state.press(Action::Interact);
                 return;
@@ -448,6 +468,7 @@ impl Gamepads {
                     Button::South | Button::West => state.press(Action::Interact),
                     Button::RightTrigger => state.press(Action::NextSlot),
                     Button::LeftTrigger => state.press(Action::PreviousSlot),
+                    Button::Select => state.request_map(),
                     _ => {}
                 }
             }

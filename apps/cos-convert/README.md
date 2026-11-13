@@ -95,6 +95,7 @@ it uses for grown, spawn, exit and boss rooms, `by_doors` (for each set of doors
 (each room's `distanceFromSpawn`). Room names are the room files' names.
 `door_tiles` names the three tiles `RoomScript.SealRoom` places in a doorway
 (`top`, `bottom` and `vertical`) with each one's sprite and whether it blocks.
+`map` names the minimap's pictures from the `MapMenu` on `Player View.prefab`.
 Each enemy also has `counts_as_enemy` (`Killable.countAsEnemy`).
 
 `font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
@@ -144,7 +145,8 @@ An enemy whose picture is on a child named `Sprite` (the Priest) gets that
 child's sprite, colour and animation, with `sprite_offset`. A `PolygonCollider2D`
 is written as the box around its points.
 
-The YAML reader understands a list inside a list (`- - item`), which polygons and
+The YAML reader understands a quoted text over several lines (UI labels), and a
+list inside a list (`- - item`), which polygons and
 some rule tiles use. Before it did, seven tiles' sprites went unresolved and were
 not drawn in seven rooms (the hub, the spawn and exit rooms, ns1, ns2, s1, s2).
 

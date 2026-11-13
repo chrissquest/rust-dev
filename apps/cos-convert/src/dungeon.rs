@@ -9,6 +9,10 @@
 //! It also writes the tiles `RoomScript.SealRoom` puts in a room's doorways while
 //! the player fights there, and whether each blocks: every room uses the same
 //! three, so they are read from the first room that names them.
+//!
+//! And the minimap's pictures, from the `MapMenu` on `Prefabs/Player View.prefab`:
+//! a room not yet entered, the spawn, an entered room, the exit, the boss room,
+//! and the frame over the room the player is in.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -22,6 +26,7 @@ use crate::room::Prefab;
 use crate::slug;
 
 const SCENE: &str = "Scenes/Dungeon.unity";
+const PLAYER_VIEW: &str = "Prefabs/Player View.prefab";
 const ROOMS_FOLDER: &str = "Prefabs/Generatable Rooms";
 /// `DungeonGenerator.dungeonSize` and `dungeonRooms`: constants, not fields.
 const GRID_SIZE: u32 = 10;
@@ -78,9 +83,39 @@ pub fn convert(project: &Project) -> Result<(Json, Vec<SpriteInfo>)> {
         }
     }
 
+    let mut map = serde_json::Map::new();
+    let view = project.documents(Path::new(PLAYER_VIEW))?;
+    if let Some(menu) = view.iter().find(|document| {
+        document.class == "MonoBehaviour" && project.stem_of(crate::room::script_guid(document)).as_deref() == Some("MapMenu")
+    }) {
+        for (key, field) in [
+            ("spawn", "mapSpawn"),
+            ("explored", "mapExplored"),
+            ("exit", "mapExit"),
+            ("boss", "mapBoss"),
+            ("highlight", "mapHighlight"),
+        ] {
+            if let Some(sprite) = project.sprite(menu.body.get(field))? {
+                map.insert(key.into(), json!(sprite.name));
+                sprites.push(sprite);
+            }
+        }
+        // `mapUnknown` is a prefab: its picture.
+        if let Some(documents) = project.prefab(menu.body.get("mapUnknown").get("guid").str()) {
+            let prefab = Prefab::new(&documents);
+            if let Some(root) = prefab.root_transform().and_then(|transform| prefab.object_of(transform))
+                && let Some(sprite) = crate::loot::renderer_sprite_info(project, &prefab, root)?
+            {
+                map.insert("unknown".into(), json!(sprite.name));
+                sprites.push(sprite);
+            }
+        }
+    }
+
     let spawn = body.get("spawnCoord");
     Ok((json!({
         "door_tiles": door_tiles,
+        "map": map,
         "grid_size": GRID_SIZE,
         "rooms": ROOM_COUNT,
         "spawn": [spawn.get("x").i64(), spawn.get("y").i64()],
