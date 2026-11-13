@@ -18,7 +18,7 @@ use crystal_engine::scene::{Texture, TextureFilter};
 use crystal_engine::sprite::{Grid, Sheet, Sprite};
 
 use crate::assets::{AssetSource, PIXELS_PER_UNIT};
-use crate::data::{DecorationFile, DropKind, FontFile, LightKind, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
+use crate::data::{DecorationFile, DropKind, FontFile, LightFile, LightKind, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
 use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
 use crate::sim::combat::Interaction;
@@ -378,8 +378,60 @@ impl View {
         // What the camera sees: a light reaching in from outside still counts.
         let half = Vec2::new(camera.view_height * 0.5 * aspect, camera.view_height * 0.5);
         let (low, high) = (camera.center - half, camera.center + half);
-        let near = |min: Vec2, max: Vec2| max.x >= low.x && min.x <= high.x && max.y >= low.y && min.y <= high.y;
         for light in &file.lights {
+            self.add_light(light, Vec2::ZERO, 0.0, (low, high));
+        }
+        // Lights things carry: placed from the thing, turned with it.
+        let defs = &world.defs;
+        let combat = &world.combat;
+        let view = (low, high);
+        for target in &combat.targets {
+            let lights = match (&target.enemy, target.chest) {
+                (Some(enemy), _) => &defs.enemy(enemy.def).lights,
+                (None, Some(chest)) => &defs.chest(chest).lights,
+                _ => continue,
+            };
+            for light in lights {
+                self.add_light(light, target.origin, 0.0, view);
+            }
+        }
+        for drop in &combat.drops {
+            for light in &defs.drop_def(drop.def).lights {
+                self.add_light(light, drop.position, 0.0, view);
+            }
+        }
+        for bullet in &combat.bullets {
+            for light in &defs.bullet(bullet.def).lights {
+                self.add_light(light, bullet.position, bullet.rotation, view);
+            }
+        }
+        for shot in &combat.shots {
+            for light in &defs.bullet(shot.def).lights {
+                self.add_light(light, shot.position, shot.rotation, view);
+            }
+        }
+        for effect in &combat.effects {
+            for light in &defs.effect(effect.def).lights {
+                self.add_light(light, effect.position, effect.rotation, view);
+            }
+        }
+    }
+
+    /// Adds one light to this frame's, moved to `at` and turned by `rotation`,
+    /// if it reaches into the view between `low` and `high`.
+    fn add_light(&mut self, light: &LightFile, at: Vec2, rotation: f32, (low, high): (Vec2, Vec2)) {
+        let near = |min: Vec2, max: Vec2| max.x >= low.x && min.x <= high.x && max.y >= low.y && min.y <= high.y;
+        let turn = Vec2::from_angle(rotation);
+        let place = |point: [f32; 2]| (at + turn.rotate(Vec2::from(point))).to_array();
+        let position = place(light.position);
+        let path: Vec<[f32; 2]>;
+        let path = if light.path.is_empty() {
+            &light.path
+        } else {
+            path = light.path.iter().map(|point| place(*point)).collect();
+            &path
+        };
+        {
             let layers = light.layers.iter().fold(0u32, |mask, name| mask | 1 << light_layer(name));
             let [r, g, b] = light.color;
             let color = [r * light.intensity, g * light.intensity, b * light.intensity, 1.0];
@@ -389,11 +441,11 @@ impl View {
                     self.lights.polygon(layers, &corners, color);
                 }
                 LightKind::Point => {
-                    let centre = Vec2::from(light.position);
+                    let centre = Vec2::from(position);
                     let reach = Vec2::splat(light.outer_radius);
                     if near(centre - reach, centre + reach) {
                         let point = PointLight {
-                            position: light.position,
+                            position,
                             inner_radius: light.inner_radius,
                             outer_radius: light.outer_radius,
                             color,
@@ -406,15 +458,13 @@ impl View {
                     }
                 }
                 LightKind::Freeform => {
-                    let (min, max) = light.path.iter().fold((Vec2::MAX, Vec2::MIN), |(min, max), point| {
+                    let (min, max) = path.iter().fold((Vec2::MAX, Vec2::MIN), |(min, max), point| {
                         (min.min(Vec2::from(*point)), max.max(Vec2::from(*point)))
                     });
                     if near(min, max) {
                         match light.shadow {
-                            Some(strength) => {
-                                self.lights.shadowed_polygon(layers, &light.path, color, light.position, strength)
-                            }
-                            None => self.lights.polygon(layers, &light.path, color),
+                            Some(strength) => self.lights.shadowed_polygon(layers, path, color, position, strength),
+                            None => self.lights.polygon(layers, path, color),
                         }
                     }
                 }

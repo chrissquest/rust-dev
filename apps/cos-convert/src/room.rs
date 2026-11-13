@@ -583,6 +583,45 @@ fn tile_layer(
     Ok(((layer_position, order), (Json::Object(layer), count)))
 }
 
+/// The lights a prefab carries, placed from its root: what a thing spawned while
+/// playing (a bullet, a chest, an enemy) brings with it. Switched-off lights and
+/// lights on switched-off objects are left out.
+pub(crate) fn prefab_lights(project: &Project, prefab: &Prefab, root: &Document, documents: &[Document]) -> Vec<Json> {
+    let origin = prefab.world_of_object(root).position;
+    let mut lights = Vec::new();
+    for document in documents {
+        if document.class != "MonoBehaviour" || script_guid(document) != LIGHT_2D || !document.body.get("m_Enabled").bool() {
+            continue;
+        }
+        let Some(object) = prefab.object_of(document) else {
+            continue;
+        };
+        if !prefab.is_active(object) {
+            continue;
+        }
+        let mut entry = light(project, prefab, object, document);
+        // From the root, not from wherever the prefab's root happened to stand.
+        let shift = |point: &mut Json| {
+            if let Some([x, y]) = point.as_array().and_then(|pair| {
+                Some([pair.first()?.as_f64()? as f32, pair.get(1)?.as_f64()? as f32])
+            }) {
+                *point = crate::json::pair(x - origin[0], y - origin[1]);
+            }
+        };
+        if let Some(position) = entry.get_mut("position") {
+            shift(position);
+        }
+        if let Some(path) = entry.get_mut("path").and_then(Json::as_array_mut) {
+            path.iter_mut().for_each(shift);
+        }
+        if let Some(fields) = entry.as_object_mut() {
+            fields.remove("group");
+        }
+        lights.push(entry);
+    }
+    lights
+}
+
 fn light(project: &Project, prefab: &Prefab, object: &Document, light: &Document) -> Json {
     let group = prefab
         .transform_of(object)

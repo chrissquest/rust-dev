@@ -86,6 +86,10 @@ pub fn convert(project: &Project) -> Result<ConvertedLoot> {
             }
         }
         chest.insert("loot".into(), Json::Array(loot));
+        let lights = crate::room::prefab_lights(project, &prefab, root, &documents);
+        if !lights.is_empty() {
+            chest.insert("lights".into(), Json::Array(lights));
+        }
         tables.chests.insert(name, Json::Object(chest));
     }
 
@@ -162,6 +166,10 @@ fn drop(project: &Project, name: &str, documents: &[Document], tables: &mut Tabl
         let offset = collider.body.get("m_Offset");
         drop.insert("radius".into(), number(collider.body.get("m_Radius").f32()));
         drop.insert("offset".into(), pair(offset.get("x").f32(), offset.get("y").f32()));
+    }
+    let lights = crate::room::prefab_lights(project, &prefab, root, documents);
+    if !lights.is_empty() {
+        drop.insert("lights".into(), Json::Array(lights));
     }
     tables.drops.insert(name.to_string(), serde_json::Value::Object(drop));
     Ok(())

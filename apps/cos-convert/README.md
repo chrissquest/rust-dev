@@ -138,6 +138,9 @@ src/
   json.rs      JSON output that keeps a row of tiles on one line
 ```
 
+Bullets, effects, chests, drops and enemies carry `lights`: their prefab's
+`Light2D`s, in the room lights' format, placed from the prefab's root.
+
 An explosion's `radius` is its circle's at the prefab's scale; a scaled one also
 has `knockback_radius`, the unscaled radius Unity divides its push by.
 

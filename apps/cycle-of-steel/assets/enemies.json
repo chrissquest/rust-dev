@@ -12,6 +12,19 @@
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
       "drag": 15.0,
       "freezable": true,
+      "lights": [
+        {
+          "color": [0.9906, 0.1916, 0.1916],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 1.5,
+          "kind": "point",
+          "layers": ["Entities"],
+          "name": "Light 2D",
+          "outer_radius": 0.4955,
+          "position": [0.028, 0.024]
+        }
+      ],
       "loot": [
         {
           "drop": "Data Drop",
@@ -64,6 +77,19 @@
       "explosion": "Explosion",
       "flying": true,
       "freezable": true,
+      "lights": [
+        {
+          "color": [0.9906, 0.1916, 0.1916],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 1.5,
+          "kind": "point",
+          "layers": ["Entities"],
+          "name": "Light 2D",
+          "outer_radius": 0.3855,
+          "position": [0.004, 0.024]
+        }
+      ],
       "loot": [
         {
           "drop": "Data Drop 2",
@@ -121,6 +147,19 @@
       "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
       "drag": 15.0,
       "freezable": true,
+      "lights": [
+        {
+          "color": [0.9906, 0.1916, 0.1916],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 1.5,
+          "kind": "point",
+          "layers": ["Entities"],
+          "name": "Light 2D",
+          "outer_radius": 0.8135,
+          "position": [0.004, 0.024]
+        }
+      ],
       "loot": [
         {
           "drop": "Data Drop",
@@ -193,6 +232,19 @@
         "wander_interval": 0.25,
         "width": 0.05
       },
+      "lights": [
+        {
+          "color": [0.9906, 0.1916, 0.1916],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 1.5,
+          "kind": "point",
+          "layers": ["Entities"],
+          "name": "Light 2D",
+          "outer_radius": 0.4955,
+          "position": [0.028, 0.024]
+        }
+      ],
       "loot": [
         {
           "drop": "Data Drop",
@@ -248,6 +300,19 @@
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
       "drag": 15.0,
       "freezable": false,
+      "lights": [
+        {
+          "color": [0.9906, 0.1916, 0.1916],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 1.5,
+          "kind": "point",
+          "layers": ["Entities"],
+          "name": "Light 2D",
+          "outer_radius": 0.4955,
+          "position": [0.0, 0.0]
+        }
+      ],
       "loot": [
         {
           "drop": "Health Drop",
@@ -333,6 +398,19 @@
       "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
       "drag": 20.0,
       "freezable": true,
+      "lights": [
+        {
+          "color": [0.9906, 0.1916, 0.1916],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 1.5,
+          "kind": "point",
+          "layers": ["Entities"],
+          "name": "Light 2D",
+          "outer_radius": 1.0,
+          "position": [0.056, 0.024]
+        }
+      ],
       "loot": [
         {
           "drop": "Data Drop",
@@ -386,6 +464,19 @@
       "drag": 35.0,
       "explosion": "Explosion",
       "freezable": false,
+      "lights": [
+        {
+          "color": [0.9906, 0.1916, 0.1916],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 2.0,
+          "kind": "point",
+          "layers": ["Entities"],
+          "name": "Light 2D",
+          "outer_radius": 1.0,
+          "position": [0.0684, 0.0197]
+        }
+      ],
       "loot": [
         {
           "drop": "Data Drop 2",

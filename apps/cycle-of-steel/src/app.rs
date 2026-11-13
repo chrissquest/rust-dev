@@ -1004,6 +1004,24 @@ mod tests {
     }
 
     #[test]
+    fn real_enemies_explosions_and_bullets_carry_their_unity_lights() {
+        let world = hub();
+        let defs = &world.defs;
+        // `Warrior.prefab`'s Light 2D: red, 1.5, radius 1, on Entities, just off centre.
+        let warrior = &defs.enemy(defs.enemy_named("Warrior").unwrap()).lights[0];
+        assert_eq!((warrior.intensity, warrior.outer_radius), (1.5, 1.0));
+        assert_eq!(warrior.layers, ["Entities"]);
+        assert!(Vec2::from(warrior.position).length() < 0.1);
+        // `Explosion 1`: a freeform square lighting every layer around the blast.
+        let pistol = defs.gun(defs.gun_named("bazooka_1").unwrap());
+        let missile = defs.bullet(pistol.bullet.unwrap());
+        let blast = defs.effect(missile.effect.unwrap());
+        assert_eq!(blast.lights.len(), 1);
+        assert_eq!(blast.lights[0].path.len(), 4);
+        assert!(!missile.lights.is_empty(), "the missile glows too");
+    }
+
+    #[test]
     fn the_hubs_drops_fly_to_the_player_and_count() {
         use crate::data::DropKind;
         let mut world = hub();

@@ -288,6 +288,10 @@ fn bullet(project: &Project, guid: &str, tables: &mut Tables) -> Result<Option<S
         entry.insert("effect".into(), json!(effect));
     }
 
+    let lights = crate::room::prefab_lights(project, &prefab, root, &documents);
+    if !lights.is_empty() {
+        entry.insert("lights".into(), Json::Array(lights));
+    }
     tables.bullets.insert(name.clone(), Json::Object(entry));
     Ok(Some(name))
 }
@@ -323,6 +327,10 @@ fn effect(project: &Project, guid: &str, tables: &mut Tables) -> Result<Option<S
         entry.insert("explosion".into(), explosion);
     }
 
+    let lights = crate::room::prefab_lights(project, &prefab, root, &documents);
+    if !lights.is_empty() {
+        entry.insert("lights".into(), Json::Array(lights));
+    }
     tables.effects.insert(name.clone(), Json::Object(entry));
     Ok(Some(name))
 }

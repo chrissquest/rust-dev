@@ -267,6 +267,10 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
             enemy.insert("touch".into(), Json::Object(touch));
         }
         enemy.insert("animations".into(), Json::Object(animations));
+        let lights = crate::room::prefab_lights(project, &prefab, root, &documents);
+        if !lights.is_empty() {
+            enemy.insert("lights".into(), Json::Array(lights));
+        }
         enemies.insert(name, Json::Object(enemy));
     }
 

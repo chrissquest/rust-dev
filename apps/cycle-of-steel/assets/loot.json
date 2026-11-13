@@ -3,6 +3,19 @@
     "Common Data Chest": {
       "damaged_sprite": "32x32Chest_half_broken",
       "dead_sprite": "32x32Chest_fullyDestroyed",
+      "lights": [
+        {
+          "color": [0.9528, 0.8034, 0.1303],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 5.0,
+          "kind": "point",
+          "layers": ["HUD Items", "Background", "Default"],
+          "name": "Light 2D",
+          "outer_radius": 1.0,
+          "position": [0.0, 0.0]
+        }
+      ],
       "loot": [
         {
           "drop": "Com Data Pool",
@@ -17,6 +30,19 @@
     "Common Weapon Chest": {
       "damaged_sprite": "32x32Chest_half_broken",
       "dead_sprite": "32x32Chest_fullyDestroyed",
+      "lights": [
+        {
+          "color": [0.9528, 0.8034, 0.1303],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 5.0,
+          "kind": "point",
+          "layers": ["HUD Items", "Background", "Default"],
+          "name": "Light 2D",
+          "outer_radius": 1.0,
+          "position": [0.0, 0.0]
+        }
+      ],
       "loot": [
         {
           "drop": "Com Weapon Pool",
@@ -31,6 +57,19 @@
     "Rare Data Chest": {
       "damaged_sprite": "32x32Chest_half_broken",
       "dead_sprite": "32x32Chest_fullyDestroyed",
+      "lights": [
+        {
+          "color": [0.9528, 0.8034, 0.1303],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 5.0,
+          "kind": "point",
+          "layers": ["HUD Items", "Background", "Default"],
+          "name": "Light 2D",
+          "outer_radius": 1.0,
+          "position": [0.0, 0.0]
+        }
+      ],
       "loot": [
         {
           "drop": "Rare Data Pool",
@@ -45,6 +84,19 @@
     "Rare Weapon Chest": {
       "damaged_sprite": "chest_purple_damaged",
       "dead_sprite": "chest_purple_destroyed",
+      "lights": [
+        {
+          "color": [0.9528, 0.8034, 0.1303],
+          "falloff": 0.5,
+          "inner_radius": 0.0,
+          "intensity": 5.0,
+          "kind": "point",
+          "layers": ["HUD Items", "Background", "Default"],
+          "name": "Light 2D",
+          "outer_radius": 1.0,
+          "position": [0.0, 0.0]
+        }
+      ],
       "loot": [
         {
           "drop": "Rare Weapon Pool",
@@ -71,6 +123,52 @@
     "Data Drop 2": {
       "drag": 3.0,
       "kind": "data",
+      "lights": [
+        {
+          "color": [0.12, 0.267, 0.8774],
+          "falloff": 0.5,
+          "falloff_size": 0.5,
+          "intensity": 5.0,
+          "kind": "freeform",
+          "layers": ["Background", "Default", "Entities", "Bullets", "Foreground", "HUD", "HUD Items", "UI"],
+          "name": "Light 2D",
+          "path": [
+            [0.2872, -0.062],
+            [0.282, -0.0113],
+            [0.2663, 0.0375],
+            [0.241, 0.0824],
+            [0.2069, 0.1218],
+            [0.1653, 0.1542],
+            [0.1179, 0.1782],
+            [0.0665, 0.193],
+            [0.013, 0.198],
+            [-0.0405, 0.193],
+            [-0.0919, 0.1782],
+            [-0.1393, 0.1542],
+            [-0.1809, 0.1218],
+            [-0.215, 0.0824],
+            [-0.2403, 0.0375],
+            [-0.256, -0.0113],
+            [-0.2612, -0.062],
+            [-0.256, -0.1127],
+            [-0.2403, -0.1615],
+            [-0.215, -0.2064],
+            [-0.1809, -0.2458],
+            [-0.1393, -0.2782],
+            [-0.0919, -0.3022],
+            [-0.0405, -0.317],
+            [0.013, -0.322],
+            [0.0665, -0.317],
+            [0.1179, -0.3022],
+            [0.1653, -0.2782],
+            [0.2069, -0.2458],
+            [0.241, -0.2064],
+            [0.2663, -0.1615],
+            [0.282, -0.1127]
+          ],
+          "position": [0.013, -0.062]
+        }
+      ],
       "offset": [0.0, -0.05],
       "pickup_range": 2.0,
       "pickup_speed": 7.0,
@@ -81,6 +179,52 @@
     "Health Drop": {
       "drag": 3.0,
       "kind": "heal",
+      "lights": [
+        {
+          "color": [0.3355, 0.8491, 0.3244],
+          "falloff": 0.5,
+          "falloff_size": 0.5,
+          "intensity": 5.0,
+          "kind": "freeform",
+          "layers": ["Background", "Default", "Entities", "Bullets", "Foreground", "HUD", "HUD Items", "UI"],
+          "name": "Light 2D",
+          "path": [
+            [0.2872, -0.062],
+            [0.2819, -0.0113],
+            [0.2663, 0.0375],
+            [0.241, 0.0824],
+            [0.2069, 0.1218],
+            [0.1653, 0.1542],
+            [0.1179, 0.1782],
+            [0.0665, 0.193],
+            [0.013, 0.198],
+            [-0.0405, 0.193],
+            [-0.0919, 0.1782],
+            [-0.1393, 0.1542],
+            [-0.1809, 0.1218],
+            [-0.215, 0.0824],
+            [-0.2403, 0.0375],
+            [-0.2559, -0.0113],
+            [-0.2612, -0.062],
+            [-0.2559, -0.1127],
+            [-0.2403, -0.1615],
+            [-0.215, -0.2064],
+            [-0.1809, -0.2458],
+            [-0.1393, -0.2782],
+            [-0.0919, -0.3022],
+            [-0.0405, -0.317],
+            [0.013, -0.322],
+            [0.0665, -0.317],
+            [0.1179, -0.3022],
+            [0.1653, -0.2782],
+            [0.2069, -0.2458],
+            [0.241, -0.2064],
+            [0.2663, -0.1615],
+            [0.2819, -0.1127]
+          ],
+          "position": [0.013, -0.062]
+        }
+      ],
       "offset": [0.0, -0.05],
       "pickup_range": 1.5,
       "pickup_speed": 7.0,

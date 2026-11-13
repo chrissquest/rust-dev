@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::data::{
     AnimationFile, BulletFile, DropKind, EffectFile, EnemiesFile, ExplosionFile, GunFile, GunKind, GunsFile,
-    BossFile, DroneFile, LaserFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
+    BossFile, DroneFile, LaserFile, LightFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -156,6 +156,8 @@ pub struct BossDef {
 
 #[derive(Clone, Debug)]
 pub struct EnemyDef {
+    /// The lights it carries, placed from its position.
+    pub lights: Vec<LightFile>,
     pub name: String,
     pub max_health: f32,
     pub sprite: String,
@@ -210,6 +212,8 @@ pub struct GunDef {
 
 #[derive(Clone, Debug)]
 pub struct BulletDef {
+    /// The lights it carries, placed from its position.
+    pub lights: Vec<LightFile>,
     pub sprite: Option<String>,
     pub color: [f32; 4],
     pub scale: [f32; 2],
@@ -228,6 +232,8 @@ pub struct BulletDef {
 
 #[derive(Clone, Debug)]
 pub struct EffectDef {
+    /// The lights it carries, placed from its position.
+    pub lights: Vec<LightFile>,
     pub sprite: Option<String>,
     pub color: [f32; 4],
     pub scale: [f32; 2],
@@ -255,6 +261,8 @@ pub struct LootEntry {
 
 #[derive(Clone, Debug)]
 pub struct ChestDef {
+    /// The lights it carries, placed from its position.
+    pub lights: Vec<LightFile>,
     pub max_health: f32,
     pub sprite: String,
     pub damaged_sprite: Option<String>,
@@ -273,6 +281,8 @@ pub struct PoolDef {
 
 #[derive(Clone, Debug)]
 pub struct DropDef {
+    /// The lights it carries, placed from its position.
+    pub lights: Vec<LightFile>,
     pub kind: DropKind,
     pub value: u32,
     pub sprite: String,
@@ -317,8 +327,8 @@ impl Defs {
             .collect();
         defs.effect_by_name = effect_ids.iter().map(|(name, id)| (name.to_string(), *id)).collect();
         for name in &effect_names {
-            let EffectFile { sprite, color, scale, time_to_live, explosion } = file.effects[*name].clone();
-            defs.effects.push(EffectDef { sprite, color, scale, time_to_live, explosion });
+            let EffectFile { lights, sprite, color, scale, time_to_live, explosion } = file.effects[*name].clone();
+            defs.effects.push(EffectDef { lights, sprite, color, scale, time_to_live, explosion });
         }
 
         let mut bullet_names: Vec<&String> = file.bullets.keys().collect();
@@ -330,7 +340,7 @@ impl Defs {
             .collect();
         defs.bullet_by_name = bullet_ids.iter().map(|(name, id)| (name.to_string(), *id)).collect();
         for name in &bullet_names {
-            let BulletFile { sprite, color, scale, size, time_to_live, piercing, effect, homing, drag, freeze } =
+            let BulletFile { lights, sprite, color, scale, size, time_to_live, piercing, effect, homing, drag, freeze, .. } =
                 file.bullets[*name].clone();
             let effect = match effect {
                 Some(effect) => Some(
@@ -341,6 +351,7 @@ impl Defs {
                 None => None,
             };
             defs.bullets.push(BulletDef {
+                lights,
                 sprite,
                 color,
                 scale,
@@ -400,6 +411,7 @@ impl Defs {
             let drop = &file.drops[name];
             self.drop_by_name.insert(name.clone(), DropId(self.drops.len() as u16));
             self.drops.push(DropDef {
+                lights: drop.lights.clone(),
                 kind: drop.kind,
                 value: drop.value,
                 sprite: drop.sprite.clone(),
@@ -442,6 +454,7 @@ impl Defs {
                 .with_context(|| format!("in chest `{name}`"))?;
             self.chest_by_name.insert(name.clone(), ChestId(self.chests.len() as u16));
             self.chests.push(ChestDef {
+                lights: chest.lights.clone(),
                 max_health: chest.max_health,
                 sprite: chest.sprite.clone(),
                 damaged_sprite: chest.damaged_sprite.clone(),
@@ -539,6 +552,7 @@ impl Defs {
             };
             self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
             self.enemies.push(EnemyDef {
+                lights: enemy.lights.clone(),
                 flying: enemy.flying,
                 counts_as_enemy: enemy.counts_as_enemy,
                 boss_bar: enemy.boss_bar.clone(),

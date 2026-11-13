@@ -196,8 +196,14 @@ where you spawn and interact. Interact again on the spot inside to leave.
   bits, so light adds up to at most full brightness (Unity on a PC may let it go
   higher); a point light's falloff curve is matched by eye; freeform lights have
   hard edges for now; the hub uses its prefab's lights, not the Dungeon scene's
-  overrides of them. Not yet: the lights carried by chests, drops, enemies and
-  effects.
+  overrides of them.
+- **Lights things carry.** Chests, drops, enemies, bullets (the players' and
+  enemies') and explosions bring their prefabs' `Light2D`s with them, placed
+  from the thing and turned with it: an enemy's small coloured glow, a bullet's,
+  an explosion's bright square over every layer while it lasts. As in Unity, an
+  enemy's light on the Entities layer means that layer is lit, so in a room
+  with no other Entities light, characters away from it go dark. Not yet: the
+  guns' own lights (glow and muzzle flash, switched by their scripts).
 - **Shadows.** Lights with Unity's shadows on (295 of them, mostly at 0.75)
   are shadowed by the walls: every border between a wall cell and floor,
   merged into straight runs (`Room::wall_edges`), throws its shadow away from

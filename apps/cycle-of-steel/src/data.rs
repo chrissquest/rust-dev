@@ -304,6 +304,9 @@ pub struct ShakeFile {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct BulletFile {
+    /// The lights it carries, placed from its position (its prefab's `Light2D`s).
+    #[serde(default)]
+    pub lights: Vec<LightFile>,
     #[serde(default)]
     pub sprite: Option<String>,
     #[serde(default = "white")]
@@ -346,6 +349,9 @@ pub struct ExplosionFile {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct EffectFile {
+    /// The lights it carries, placed from its position (its prefab's `Light2D`s).
+    #[serde(default)]
+    pub lights: Vec<LightFile>,
     #[serde(default)]
     pub sprite: Option<String>,
     #[serde(default = "white")]
@@ -442,6 +448,9 @@ pub struct LootEntryFile {
 /// A chest: Unity's `Killable` on a prefab under `Prefabs/Room Objects`.
 #[derive(Clone, Debug, Deserialize)]
 pub struct ChestFile {
+    /// The lights it carries, placed from its position (its prefab's `Light2D`s).
+    #[serde(default)]
+    pub lights: Vec<LightFile>,
     pub max_health: f32,
     pub sprite: String,
     /// Shown below 70% health.
@@ -475,6 +484,9 @@ pub enum DropKind {
 /// A pickup that flies to the player once they are near.
 #[derive(Clone, Debug, Deserialize)]
 pub struct DropFile {
+    /// The lights it carries, placed from its position (its prefab's `Light2D`s).
+    #[serde(default)]
+    pub lights: Vec<LightFile>,
     pub kind: DropKind,
     pub value: u32,
     pub sprite: String,
@@ -503,6 +515,9 @@ impl EnemiesFile {
 /// An enemy: Unity's `Killable` and its AI script on a prefab under `Prefabs/Enemies`.
 #[derive(Clone, Debug, Deserialize)]
 pub struct EnemyFile {
+    /// The lights it carries, placed from its position (its prefab's `Light2D`s).
+    #[serde(default)]
+    pub lights: Vec<LightFile>,
     pub max_health: f32,
     /// Shown until it first moves: Unity's Animator starts with no controller.
     pub sprite: String,
