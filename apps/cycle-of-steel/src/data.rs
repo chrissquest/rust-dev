@@ -303,6 +303,35 @@ pub struct EffectFile {
     pub explosion: Option<ExplosionFile>,
 }
 
+/// `dungeon.json`: the dungeon generator's settings (`DungeonGenerator`).
+#[derive(Clone, Debug, Deserialize)]
+pub struct DungeonFile {
+    /// Rooms on each side of the generator's square grid.
+    pub grid_size: u32,
+    /// How many rooms it grows, the spawn included.
+    pub rooms: u32,
+    /// The spawn room's place on the grid.
+    pub spawn: [i32; 2],
+    /// Room files: what a grown room is until swapped, and the special rooms.
+    pub open_room: String,
+    pub spawn_room: String,
+    pub exit_room: String,
+    pub boss_room: String,
+    /// For each set of doors (`N`, `NE`, `NSEW`...), the rooms that fit, in the
+    /// order they are tried.
+    pub by_doors: HashMap<String, Vec<String>>,
+    /// Each room's `distanceFromSpawn`: the layer it may appear from.
+    #[serde(default)]
+    pub distance: HashMap<String, i32>,
+}
+
+impl DungeonFile {
+    pub fn load(assets: &AssetSource) -> Result<Self> {
+        let bytes = assets.read("dungeon.json")?;
+        serde_json::from_slice(&bytes).context("could not parse dungeon.json")
+    }
+}
+
 /// `loot.json`: chests, the loot pools they roll on, and the drops they leave.
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct LootFile {

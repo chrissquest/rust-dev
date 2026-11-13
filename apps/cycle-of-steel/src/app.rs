@@ -25,7 +25,9 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::assets::AssetSource;
-use crate::data::{EnemiesFile, GunsFile, LootFile, RoomFile};
+use crate::data::{DungeonFile, EnemiesFile, GunsFile, LootFile, RoomFile};
+use crate::sim::dungeon;
+use crate::sim::rng::Rng;
 use crate::input::{Action, Bindings, Gamepads, InputState, StickVisual, TouchControls};
 use crate::sim::defs::Defs;
 use crate::sim::room::Room;
@@ -352,10 +354,33 @@ fn give_guns(world: &mut World, names: &[String]) -> Result<()> {
 }
 
 /// Loads the game's definitions and a room, and builds the world in it.
+/// The room name that loads a generated dungeon floor instead of one room.
+pub const DUNGEON: &str = "dungeon";
+
 fn load_world(assets: &AssetSource, room: &str, seed: u32) -> Result<World> {
     let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?.with_loot(&LootFile::load(assets)?)?.with_enemies(&EnemiesFile::load(assets)?)?);
-    let room = Room::from_file(RoomFile::load(assets, room)?);
+    let room = if room == DUNGEON {
+        load_dungeon(assets, seed)?
+    } else {
+        Room::from_file(RoomFile::load(assets, room)?)
+    };
     Ok(World::new(room, defs, seed))
+}
+
+/// Generates a floor from `seed` and joins its rooms into one room.
+fn load_dungeon(assets: &AssetSource, seed: u32) -> Result<Room> {
+    let settings = DungeonFile::load(assets)?;
+    let layout = dungeon::generate(&settings, &mut Rng::new(seed));
+    let mut files = std::collections::HashMap::new();
+    for planned in &layout.rooms {
+        if !files.contains_key(&planned.name) {
+            files.insert(planned.name.clone(), RoomFile::load(assets, &planned.name)?);
+        }
+    }
+    let (floor, spawn) = dungeon::build(&layout, &files)?;
+    let mut room = Room::from_file(floor);
+    room.place_spawn(spawn);
+    Ok(room)
 }
 
 /// A seed that differs from launch to launch. The simulation itself never reads
@@ -799,6 +824,18 @@ mod tests {
         let Ai::Boss(boss) = &def.ai else { panic!("the Priest runs BossAI") };
         assert_eq!((boss.file.bullet_damage, boss.file.laser.damage, boss.file.laser.damage_delay), (100.0, 20.0, 0.1));
         assert!(world.defs.bullet(boss.homing_bullet).homing > 0.0, "its ring homes in");
+    }
+
+    #[test]
+    fn a_real_dungeon_floor_loads_and_starts_in_its_spawn_room() {
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        for seed in [1, 2, 3, 99] {
+            let world = load_world(&assets, DUNGEON, seed).expect("the floor builds");
+            assert!(!world.room.box_hits_solid(world.player.position, HALF_SIZE), "seed {seed}");
+            // A floor is whole rooms: 32 by 18 cells each.
+            assert_eq!((world.room.size().x % 16.0, world.room.size().y % 9.0), (0.0, 0.0));
+            assert!(world.combat.targets.iter().any(|target| target.enemy.is_some()), "seed {seed} has enemies");
+        }
     }
 
     #[test]

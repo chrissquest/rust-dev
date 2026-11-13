@@ -8,6 +8,7 @@
 pub mod collide;
 pub mod combat;
 pub mod defs;
+pub mod dungeon;
 pub mod elemental;
 pub mod enemy;
 pub mod guns;

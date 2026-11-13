@@ -92,6 +92,11 @@ impl Room {
         self.nearest_open(wanted)
     }
 
+    /// Puts the spawn at the open floor nearest `wanted`.
+    pub fn place_spawn(&mut self, wanted: Vec2) {
+        self.spawn = self.nearest_open(wanted);
+    }
+
     /// The centre of the walkable cell nearest to `point` that also has walkable
     /// cells all round it, so a character placed there is not touching a wall.
     fn nearest_open(&self, point: Vec2) -> Vec2 {

@@ -6,6 +6,7 @@
 
 mod font;
 mod guns;
+mod dungeon;
 mod enemies;
 mod json;
 mod loot;
@@ -151,6 +152,12 @@ fn main() -> Result<()> {
         add_sprite(&mut catalogue, sprite)?;
     }
 
+    let dungeon = dungeon::convert(&project)?;
+    let dungeon_path = output.join("dungeon.json");
+    std::fs::write(&dungeon_path, json::to_string(&dungeon))
+        .with_context(|| format!("could not write {}", dungeon_path.display()))?;
+    println!("dungeon generator settings");
+
     let font = font::convert(&project)?;
     let font_path = output.join("font.json");
     std::fs::write(&font_path, json::to_string(&font.json))
@@ -198,7 +205,7 @@ fn add_sprite(catalogue: &mut BTreeMap<String, SpriteInfo>, sprite: SpriteInfo) 
 }
 
 /// `Hub Room` -> `hub_room`: a file name with no spaces or capitals to trip over.
-fn slug(name: &str) -> String {
+pub(crate) fn slug(name: &str) -> String {
     name.chars()
         .map(|character| {
             if character.is_ascii_alphanumeric() || character == '-' {

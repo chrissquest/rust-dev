@@ -24,6 +24,7 @@ rooms/<room>.json     one per prefab under Assets/Prefabs/Generatable Rooms
 guns.json             every gun, the bullets they fire and the effects those leave
 loot.json             chests, loot pools and drops
 enemies.json          enemies the port has an AI for
+dungeon.json          the dungeon generator's settings
 sprites.json          every sprite the above use: texture, rectangle, pivot, scale
 sprites/<name>.png    the textures themselves, copied unchanged
 ```
@@ -87,6 +88,12 @@ sample, read through the `AnimatorController` the script names.
 Room objects carry `overrides`, the settings a placement changes; the game reads
 the drops' `value` from them (the hub's drops are worth more than their prefabs).
 
+`dungeon.json` holds the `DungeonGenerator` of `Scenes/Dungeon.unity`: the grid
+size and room count (constants in the script), the spawn's place, the room files
+it uses for grown, spawn, exit and boss rooms, `by_doors` (for each set of doors,
+`N` to `NSEW`, the rooms that fit, in the order it tries them) and `distance`
+(each room's `distanceFromSpawn`). Room names are the room files' names.
+
 `font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
 atlas (`ThaleahFat.fontsettings` and its PNG). `glyphs` maps a character to its
 `sprite`, one of the `font_<code point>` entries the converter adds to
@@ -123,6 +130,7 @@ src/
   guns.rs      gun, bullet and effect prefabs -> guns.json
   loot.rs      chest, loot pool and drop prefabs -> loot.json
   enemies.rs   enemy prefabs and their animations -> enemies.json
+  dungeon.rs   the dungeon scene's generator -> dungeon.json
   json.rs      JSON output that keeps a row of tiles on one line
 ```
 

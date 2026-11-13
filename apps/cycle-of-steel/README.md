@@ -6,7 +6,8 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 to 4 of the port are in (foundation, real rooms, combat, enemies):
+Steps 1 to 4 of the port are in (foundation, real rooms, combat, enemies), and
+step 5 (the dungeon) is under way:
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -151,6 +152,18 @@ where you spawn and interact. Interact again on the spot inside to leave.
   Unity's attack angles run on `Time.time`, the game's clock; here they run on
   the room's.
 
+- **Dungeon floors.** `--room dungeon` plays a generated floor (a new one each
+  launch; screenshots and tests use seed 1). It is Unity's `DungeonGenerator`:
+  from the spawn in the middle of a 10 by 10 grid it grows 8 rooms outwards a
+  layer at a time, each touching only the room it grew from; the last room of
+  the outermost layer is the exit, with the boss room beside it. Each grown room
+  becomes a room whose doors match its neighbours, the first in the generator's
+  list for those doors that its distance from the spawn allows; the spawn, exit
+  and boss rooms switch on their wall layers on the sides that lead nowhere. The
+  rooms are joined into one, so the player walks from room to room, and each
+  room's enemies wake when the player is in it. Not yet: doors sealing during a
+  fight, the way in from the hub and out through the exit, the minimap.
+
 Not in yet:
 lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
@@ -185,6 +198,7 @@ cargo run -p cycle-of-steel -- --screenshot beam.png --give laser_2 --aim -1,0.6
 cargo run -p cycle-of-steel -- --screenshot chests.png --room n1 --whole-room
 cargo run -p cycle-of-steel -- --screenshot warrior.png --room n1 --ticks 300
 cargo run -p cycle-of-steel -- --screenshot ranged.png --room e1 --whole-room
+cargo run -p cycle-of-steel -- --screenshot floor.png --room dungeon --whole-room
 ```
 
 `--room` picks any file under `assets/rooms`; `--whole-room` frames all of it, for
@@ -260,6 +274,7 @@ src/
     elemental.rs freezing, water and lava (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
+    dungeon.rs   generating a floor and joining its rooms into one
     collide.rs   moving a box through solid cells
     player.rs    movement, facing, animation
 assets/
@@ -267,6 +282,7 @@ assets/
   guns.json      every gun, bullet and hit effect, with their numbers
   loot.json      chests, the loot pools they roll on, and drops
   enemies.json   enemies: health, body, loot, AI numbers, animations
+  dungeon.json   the dungeon generator's room lists and settings
   sprites.json   every sprite by name: texture, rectangle, pivot
   font.json      the pixel font: each character's glyph sprite and advance
   sprites/       PNGs copied from the Unity project

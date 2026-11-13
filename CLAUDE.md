@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon (piece 1 of 4), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -64,7 +64,15 @@ Drag follows Unity 2D (Box2D): velocity divided by `1 + drag * dt` per physics
 step (`combat::drag_kept`, the player's `RESPONSE`), switched in step 4 at the
 owner's request; the player now tops out at 2.22 units/s, not 1.82.
 
-**Next: step 5, the dungeon.** Read the Port plan tab first.
+Step 5 (the dungeon) is split into four pieces, agreed with the owner: (1) the
+generator and walking a floor, (2) doors sealing during a fight and rooms
+clearing, (3) the way in from the hub, the exit room and the boss room's locking,
+(4) the minimap. Piece 1 is done: `sim/dungeon.rs` runs `DungeonGenerator` on
+`assets/dungeon.json` and joins the picked rooms into one `RoomFile`
+(`dungeon::build`); `--room dungeon` loads a floor (`app::DUNGEON`).
+
+**Next: step 5 piece 2, doors sealing and rooms clearing** (`RoomScript`'s
+`SealRoom`, `UnsealRoom`, `PlayerEnteredRoom`, enemy counts).
 `cos-convert` when the step needs it, not before.
 
 ### How to work here
@@ -101,7 +109,8 @@ owner's request; the player now tops out at 2.22 units/s, not 1.82.
   not the code. The local clippy there is newer and also warns about
   `chunks_exact` in older code; those warnings predate step 3's last piece.
 - **Re-running the converter:** `cargo run -p cos-convert -- ../CycleOfSteel apps/cycle-of-steel/assets`.
-  It overwrites `rooms/`, `guns.json`, `loot.json`, `font.json`, `sprites.json` and `sprites/`.
+  It overwrites `rooms/`, `guns.json`, `loot.json`, `enemies.json`, `dungeon.json`, `font.json`,
+  `sprites.json` and `sprites/`.
   On the owner's Windows machine the Unity project is at `../../Unity/CycleOfSteel`
   (relative to this repo), and a run there changes a few room rotations in the last
   digit; revert those rather than commit them.
