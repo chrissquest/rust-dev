@@ -48,6 +48,8 @@ pub struct Launch {
     pub backends: wgpu::Backends,
     /// Draw this many frames, then exit. A smoke test.
     pub frames: Option<u32>,
+    /// Guns to start with: names from `guns.json`.
+    pub give: Vec<String>,
 }
 
 /// Runs the game on `event_loop` until its window closes.
@@ -56,7 +58,8 @@ pub struct Launch {
 /// passes to `android_main`; on desktop it is a plain `EventLoop::new()`.
 pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
-    let world = load_world(&launch.assets, &launch.room, clock_seed())?;
+    let mut world = load_world(&launch.assets, &launch.room, clock_seed())?;
+    give_guns(&mut world, &launch.give)?;
 
     let mut app = App {
         assets: launch.assets,
@@ -336,6 +339,18 @@ impl ApplicationHandler for App {
     }
 }
 
+/// Puts the named guns into the inventory, for `--give`.
+fn give_guns(world: &mut World, names: &[String]) -> Result<()> {
+    for name in names {
+        let gun = world
+            .defs
+            .gun_named(name)
+            .with_context(|| format!("`{name}` is not a gun in guns.json"))?;
+        world.give(gun);
+    }
+    Ok(())
+}
+
 /// Loads the game's definitions and a room, and builds the world in it.
 fn load_world(assets: &AssetSource, room: &str, seed: u32) -> Result<World> {
     let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?.with_loot(&LootFile::load(assets)?)?);
@@ -403,13 +418,7 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
 
     // A fixed seed: the same command always gives the same picture.
     let mut world = load_world(&options.assets, &options.room, 1)?;
-    for name in &options.give {
-        let gun = world
-            .defs
-            .gun_named(name)
-            .with_context(|| format!("`{name}` is not a gun in guns.json"))?;
-        world.give(gun);
-    }
+    give_guns(&mut world, &options.give)?;
     for _ in 0..options.ticks {
         world.step(&sim_input);
     }

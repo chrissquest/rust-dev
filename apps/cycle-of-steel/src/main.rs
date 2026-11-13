@@ -76,6 +76,7 @@ fn main() -> Result<()> {
                 room: options.room,
                 backends: options.backends,
                 frames: options.frames,
+                give: options.give,
             },
             EventLoop::new().context("could not create the event loop")?,
         ),

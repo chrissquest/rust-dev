@@ -45,6 +45,7 @@ fn android_main(android_app: winit::platform::android::activity::AndroidApp) {
                     room: app::DEFAULT_ROOM.to_string(),
                     backends: wgpu::Backends::all(),
                     frames: None,
+                    give: Vec::new(),
                 },
                 event_loop,
             )
