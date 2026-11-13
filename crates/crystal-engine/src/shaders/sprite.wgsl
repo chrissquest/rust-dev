@@ -6,12 +6,18 @@
 
 struct Camera {
     view_proj: mat4x4<f32>,
+    // xy: the target's size in pixels.
+    screen: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 
 @group(1) @binding(0) var sheet: texture_2d<f32>;
 @group(1) @binding(1) var sheet_sampler: sampler;
+
+// The light buffer: one layer per group of sprites lit alike (a sorting layer).
+@group(2) @binding(0) var light_maps: texture_2d_array<f32>;
+@group(2) @binding(1) var light_sampler: sampler;
 
 struct Instance {
     @location(0) position: vec3<f32>,
@@ -21,6 +27,7 @@ struct Instance {
     // u0, v0 (top-left), u1, v1 (bottom-right)
     @location(4) uv: vec4<f32>,
     @location(5) color: vec4<f32>,
+    @location(6) light: u32,
 };
 
 struct VertexOutput {
@@ -29,6 +36,7 @@ struct VertexOutput {
     @location(1) color: vec4<f32>,
     // The instance's UV rectangle as (min, max), for clamping in the fragment stage.
     @location(2) @interpolate(flat) uv_bounds: vec4<f32>,
+    @location(3) @interpolate(flat) light: u32,
 };
 
 @vertex
@@ -58,6 +66,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, instance: Instance) -> Vert
         mix(instance.uv.w, instance.uv.y, corner.y),
     );
     out.color = instance.color;
+    out.light = instance.light;
     out.uv_bounds = vec4<f32>(
         min(instance.uv.xy, instance.uv.zw),
         max(instance.uv.xy, instance.uv.zw),
@@ -72,9 +81,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let inset = 0.01 / vec2<f32>(textureDimensions(sheet));
     let uv = clamp(in.uv, in.uv_bounds.xy + inset, in.uv_bounds.zw - inset);
 
-    let texel = textureSample(sheet, sheet_sampler, uv) * in.color;
+    var texel = textureSample(sheet, sheet_sampler, uv) * in.color;
     if (texel.a < 0.004) {
         discard;
+    }
+    if (in.light != 0xffffffffu) {
+        let layers = textureNumLayers(light_maps);
+        let layer = i32(min(in.light, layers - 1u));
+        let screen_uv = in.clip_position.xy / camera.screen.xy;
+        let light = textureSampleLevel(light_maps, light_sampler, screen_uv, layer, 0.0).rgb;
+        texel = vec4<f32>(texel.rgb * light, texel.a);
     }
     return texel;
 }

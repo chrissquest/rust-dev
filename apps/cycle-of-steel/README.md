@@ -7,7 +7,7 @@ reference for behaviour while the port catches up.
 ## State of the port
 
 Steps 1 to 5 of the port are in (foundation, real rooms, combat, enemies, the
-dungeon):
+dungeon), and step 6 (lighting and audio) is under way:
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -186,8 +186,21 @@ where you spawn and interact. Interact again on the spot inside to leave.
   the player is in. It is laid out over the whole floor, so it keeps its scale
   as it fills in. Unity's map is a pause-menu page; here it lies over the game.
 
+- **Lighting.** The rooms' Unity 2D lights light them now: point lights and
+  freeform (polygon) lights, each lighting only the sorting layers it names, as
+  Unity's do. Every light uses Unity's Multiply blend style: a sprite is its
+  picture times the light on its layer, added up from every light that reaches
+  it, in a buffer at half the screen's resolution (Unity's light texture
+  scale). A layer no light reaches is drawn unlit, as Unity does, which is why
+  the player shows in the spawn room. Differences: the light buffer holds 8
+  bits, so light adds up to at most full brightness (Unity on a PC may let it go
+  higher); a point light's falloff curve is matched by eye; freeform lights have
+  hard edges for now; the hub uses its prefab's lights, not the Dungeon scene's
+  overrides of them. Not yet: shadows, and the lights carried by chests, drops,
+  enemies and effects.
+
 Not in yet:
-lighting (rooms look flatter and brighter than in
+shadows (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)

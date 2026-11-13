@@ -8,11 +8,21 @@
 //! target that a later pass scales up.
 //!
 //! ```text
-//! group 0  binding 0  Camera { view_proj }       uniform, vertex
+//! group 0  binding 0  Camera { view_proj, screen }  uniform
 //! group 1  binding 0  sprite sheet texture       fragment
 //! group 1  binding 1  sampler                    fragment
+//! group 2  binding 0  light buffer (2D array)    fragment
+//! group 2  binding 1  sampler                    fragment
 //! vertex buffer 0     Sprite, one per instance   see `sprite::Sprite`
 //! ```
+//!
+//! Lighting, as Unity's 2D renderer does it: lights are added up, per layer,
+//! into a light buffer at half the target's resolution
+//! ([`Renderer2d::draw_lights`]), and a sprite with a light layer
+//! ([`Sprite::lit`]) is multiplied by its layer's light where it is drawn. Until
+//! lights are drawn the buffer is white, so lit sprites look unlit, and a layer
+//! no light reaches in a frame stays white, as Unity draws such a layer unlit.
+//! It holds 8 bits a channel, so light adds up to at most full brightness.
 //!
 //! Drawing a frame:
 //!
@@ -35,7 +45,13 @@ use crate::scene::{Texture, TextureFilter};
 use crate::sprite::Sprite;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-const CAMERA_UNIFORM_SIZE: u64 = 64;
+/// The view-projection matrix, then the target's size.
+const CAMERA_UNIFORM_SIZE: u64 = 80;
+/// How many layers the light buffer has: groups of sprites lit alike.
+pub const LIGHT_LAYERS: u32 = 8;
+const LIGHT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+/// Unity's `m_LightRenderTextureScale`: the light buffer is half the target's size.
+const LIGHT_SCALE: u32 = 2;
 const INSTANCE_SIZE: u64 = std::mem::size_of::<Sprite>() as u64;
 /// Room for this many dynamic sprites before the instance buffer first grows.
 const INITIAL_DYNAMIC_CAPACITY: u64 = 1024;
@@ -149,11 +165,83 @@ struct CameraSlot {
     bind_group: wgpu::BindGroup,
 }
 
+/// The light buffer: a texture array, one layer per light layer.
+struct LightMaps {
+    /// One view per layer, to draw into.
+    layer_views: Vec<wgpu::TextureView>,
+    bind_group: wgpu::BindGroup,
+    size: (u32, u32),
+}
+
+/// A point light: brightest within `inner_radius`, gone at `outer_radius`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PointLight {
+    pub position: [f32; 2],
+    pub inner_radius: f32,
+    pub outer_radius: f32,
+    /// Colour times intensity; alpha is unused.
+    pub color: [f32; 4],
+    /// How soon it fades: 0 lights evenly to the edge, 1 fades early.
+    pub falloff: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightVertex {
+    position: [f32; 2],
+    color: [f32; 4],
+}
+
+/// The lights of one frame, each for a set of layers (a bit mask).
+#[derive(Default)]
+pub struct LightList {
+    points: Vec<(u32, PointLight)>,
+    /// Triangles of polygon lights, three vertices each.
+    triangles: Vec<(u32, [LightVertex; 3])>,
+    /// Reused while drawing.
+    scratch_points: Vec<PointLight>,
+    scratch_vertices: Vec<LightVertex>,
+}
+
+impl LightList {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn clear(&mut self) {
+        self.points.clear();
+        self.triangles.clear();
+    }
+
+    /// Adds a point light to the layers whose bits `layers` sets.
+    pub fn point(&mut self, layers: u32, light: PointLight) {
+        self.points.push((layers, light));
+    }
+
+    /// Adds a polygon light, one colour all over (colour times intensity), to the
+    /// layers whose bits `layers` sets. Any simple polygon, either winding.
+    pub fn polygon(&mut self, layers: u32, points: &[[f32; 2]], color: [f32; 4]) {
+        for [a, b, c] in triangulate(points) {
+            let vertex = |position: [f32; 2]| LightVertex { position, color };
+            self.triangles.push((layers, [vertex(a), vertex(b), vertex(c)]));
+        }
+    }
+}
+
 pub struct Renderer2d {
     device: wgpu::Device,
     queue: wgpu::Queue,
 
     pipeline: wgpu::RenderPipeline,
+    point_light_pipeline: wgpu::RenderPipeline,
+    polygon_light_pipeline: wgpu::RenderPipeline,
+    light_layout: wgpu::BindGroupLayout,
+    light_maps: LightMaps,
+    light_points: wgpu::Buffer,
+    light_points_capacity: u64,
+    light_vertices: wgpu::Buffer,
+    light_vertices_capacity: u64,
     camera_layout: wgpu::BindGroupLayout,
     texture_layout: wgpu::BindGroupLayout,
     nearest_sampler: wgpu::Sampler,
@@ -187,7 +275,7 @@ impl Renderer2d {
             label: Some("2d camera layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -219,9 +307,31 @@ impl Renderer2d {
             ],
         });
 
+        let light_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("light buffer layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("sprite pipeline layout"),
-            bind_group_layouts: &[Some(&camera_layout), Some(&texture_layout)],
+            bind_group_layouts: &[Some(&camera_layout), Some(&texture_layout), Some(&light_layout)],
             immediate_size: 0,
         });
 
@@ -280,12 +390,71 @@ impl Renderer2d {
         let nearest_sampler = sampler("sprite nearest", wgpu::FilterMode::Nearest);
         let linear_sampler = sampler("sprite linear", wgpu::FilterMode::Linear);
 
+        let light_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("light shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/light2d.wgsl").into()),
+        });
+        let light_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("light pipeline layout"),
+            bind_group_layouts: &[Some(&camera_layout)],
+            immediate_size: 0,
+        });
+        // Lights add up.
+        let additive = wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent::REPLACE,
+        };
+        let light_pipeline = |label, vertex_entry, fragment_entry, buffer: wgpu::VertexBufferLayout<'static>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&light_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &light_shader,
+                    entry_point: Some(vertex_entry),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[Some(buffer)],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &light_shader,
+                    entry_point: Some(fragment_entry),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: LIGHT_FORMAT,
+                        blend: Some(additive),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let point_light_pipeline = light_pipeline("point lights", "vs_point", "fs_point", POINT_LIGHT_LAYOUT);
+        let polygon_light_pipeline = light_pipeline("polygon lights", "vs_polygon", "fs_polygon", LIGHT_VERTEX_LAYOUT);
+        let light_maps = create_light_maps(device, queue, &light_layout, &linear_sampler, (1, 1), true);
+        let light_points = create_light_buffer(device, "point lights", 64 * POINT_LIGHT_SIZE);
+        let light_vertices = create_light_buffer(device, "polygon lights", 256 * LIGHT_VERTEX_SIZE);
+
         let dynamic = create_instance_buffer(device, INITIAL_DYNAMIC_CAPACITY);
 
         Self {
             device: device.clone(),
             queue: queue.clone(),
             pipeline,
+            point_light_pipeline,
+            polygon_light_pipeline,
+            light_layout,
+            light_maps,
+            light_points,
+            light_points_capacity: 64,
+            light_vertices,
+            light_vertices_capacity: 256,
             camera_layout,
             texture_layout,
             nearest_sampler,
@@ -408,7 +577,7 @@ impl Renderer2d {
 
     /// Records one render pass drawing `list` into `target`.
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: Target<'_>, pass: &Pass, list: &DrawList) {
-        let camera_slot = self.next_camera(pass.view_projection);
+        let camera_slot = self.next_camera(pass.view_projection, [target.width as f32, target.height as f32]);
         let dynamic_base = self.upload_dynamic(&list.sprites);
         self.ensure_depth(target.width, target.height);
         let depth_view = &self.depth.as_ref().expect("ensure_depth just set it").0;
@@ -465,6 +634,7 @@ impl Renderer2d {
 
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.cameras[camera_slot].bind_group, &[]);
+        render_pass.set_bind_group(2, &self.light_maps.bind_group, &[]);
 
         for command in &list.commands {
             match *command {
@@ -499,12 +669,99 @@ impl Renderer2d {
         }
     }
 
+    /// Fills the light buffer for a frame drawn into a `width` by `height` target
+    /// with `view_projection`: each layer starts dark and gets every light meant
+    /// for it. Call before the [`Renderer2d::draw`] of the sprites it lights.
+    pub fn draw_lights(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        view_projection: Mat4,
+        width: u32,
+        height: u32,
+        lights: &mut LightList,
+    ) {
+        let size = ((width / LIGHT_SCALE).max(1), (height / LIGHT_SCALE).max(1));
+        if self.light_maps.size != size {
+            self.light_maps =
+                create_light_maps(&self.device, &self.queue, &self.light_layout, &self.linear_sampler, size, false);
+        }
+        let camera_slot = self.next_camera(view_projection, [width as f32, height as f32]);
+
+        // Each layer's lights, one layer after another, with where each layer starts.
+        let LightList { points, triangles, scratch_points, scratch_vertices } = lights;
+        scratch_points.clear();
+        scratch_vertices.clear();
+        let mut ranges = [(0u32, 0u32, 0u32, 0u32); LIGHT_LAYERS as usize];
+        for (layer, range) in ranges.iter_mut().enumerate() {
+            let bit = 1 << layer;
+            let first_point = scratch_points.len() as u32;
+            scratch_points.extend(points.iter().filter(|(layers, _)| layers & bit != 0).map(|(_, light)| *light));
+            let first_vertex = scratch_vertices.len() as u32;
+            for (_, triangle) in triangles.iter().filter(|(layers, _)| layers & bit != 0) {
+                scratch_vertices.extend_from_slice(triangle);
+            }
+            *range = (first_point, scratch_points.len() as u32, first_vertex, scratch_vertices.len() as u32);
+        }
+        if scratch_points.len() as u64 > self.light_points_capacity {
+            self.light_points_capacity = (scratch_points.len() as u64).next_power_of_two();
+            self.light_points =
+                create_light_buffer(&self.device, "point lights", self.light_points_capacity * POINT_LIGHT_SIZE);
+        }
+        if scratch_vertices.len() as u64 > self.light_vertices_capacity {
+            self.light_vertices_capacity = (scratch_vertices.len() as u64).next_power_of_two();
+            self.light_vertices =
+                create_light_buffer(&self.device, "polygon lights", self.light_vertices_capacity * LIGHT_VERTEX_SIZE);
+        }
+        if !scratch_points.is_empty() {
+            self.queue.write_buffer(&self.light_points, 0, bytemuck::cast_slice(scratch_points));
+        }
+        if !scratch_vertices.is_empty() {
+            self.queue.write_buffer(&self.light_vertices, 0, bytemuck::cast_slice(scratch_vertices));
+        }
+
+        for (layer, &(point_start, point_end, vertex_start, vertex_end)) in ranges.iter().enumerate() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("lights"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.light_maps.layer_views[layer],
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // A layer no light reaches is drawn unlit, as Unity's 2D
+                        // renderer does; one with lights starts dark.
+                        load: wgpu::LoadOp::Clear(if point_end > point_start || vertex_end > vertex_start {
+                            wgpu::Color::BLACK
+                        } else {
+                            wgpu::Color::WHITE
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.cameras[camera_slot].bind_group, &[]);
+            if vertex_end > vertex_start {
+                pass.set_pipeline(&self.polygon_light_pipeline);
+                pass.set_vertex_buffer(0, self.light_vertices.slice(..));
+                pass.draw(vertex_start..vertex_end, 0..1);
+            }
+            if point_end > point_start {
+                pass.set_pipeline(&self.point_light_pipeline);
+                pass.set_vertex_buffer(0, self.light_points.slice(..));
+                pass.draw(0..6, point_start..point_end);
+            }
+        }
+    }
+
     fn texture(&self, id: TextureId) -> Option<&GpuTexture> {
         self.textures.get(id.0 as usize).and_then(Option::as_ref)
     }
 
     /// Writes the pass's camera into the next free slot and returns its index.
-    fn next_camera(&mut self, view_projection: Mat4) -> usize {
+    fn next_camera(&mut self, view_projection: Mat4, screen: [f32; 2]) -> usize {
         let slot = self.cameras_used;
         self.cameras_used += 1;
 
@@ -526,11 +783,11 @@ impl Renderer2d {
             self.cameras.push(CameraSlot { buffer, bind_group });
         }
 
-        self.queue.write_buffer(
-            &self.cameras[slot].buffer,
-            0,
-            bytemuck::cast_slice(&view_projection.to_cols_array()),
-        );
+        let mut uniform = [0.0f32; 20];
+        uniform[..16].copy_from_slice(&view_projection.to_cols_array());
+        uniform[16] = screen[0].max(1.0);
+        uniform[17] = screen[1].max(1.0);
+        self.queue.write_buffer(&self.cameras[slot].buffer, 0, bytemuck::cast_slice(&uniform));
         slot
     }
 
@@ -579,7 +836,7 @@ impl Renderer2d {
     }
 }
 
-static INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 6] = [
+static INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 7] = [
     // position
     wgpu::VertexAttribute {
         format: wgpu::VertexFormat::Float32x3,
@@ -616,7 +873,160 @@ static INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 6] = [
         offset: 48,
         shader_location: 5,
     },
+    // light layer
+    wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Uint32,
+        offset: 64,
+        shader_location: 6,
+    },
 ];
+
+const POINT_LIGHT_SIZE: u64 = std::mem::size_of::<PointLight>() as u64;
+const LIGHT_VERTEX_SIZE: u64 = std::mem::size_of::<LightVertex>() as u64;
+
+static POINT_LIGHT_ATTRIBUTES: [wgpu::VertexAttribute; 4] = [
+    wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 0, shader_location: 0 },
+    wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 8, shader_location: 1 },
+    wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x4, offset: 16, shader_location: 2 },
+    wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32, offset: 32, shader_location: 3 },
+];
+
+const POINT_LIGHT_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+    array_stride: POINT_LIGHT_SIZE,
+    step_mode: wgpu::VertexStepMode::Instance,
+    attributes: &POINT_LIGHT_ATTRIBUTES,
+};
+
+static LIGHT_VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 2] = [
+    wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 0, shader_location: 0 },
+    wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x4, offset: 8, shader_location: 1 },
+];
+
+const LIGHT_VERTEX_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+    array_stride: LIGHT_VERTEX_SIZE,
+    step_mode: wgpu::VertexStepMode::Vertex,
+    attributes: &LIGHT_VERTEX_ATTRIBUTES,
+};
+
+fn create_light_buffer(device: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+/// A light buffer of `size`. `white` fills it with full light, for drawing before
+/// any lights have been.
+fn create_light_maps(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    size: (u32, u32),
+    white: bool,
+) -> LightMaps {
+    let extent = wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: LIGHT_LAYERS };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("light buffer"),
+        size: extent,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: LIGHT_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    if white {
+        let pixels = vec![255u8; (size.0 * size.1 * 4 * LIGHT_LAYERS) as usize];
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(size.0 * 4),
+                rows_per_image: Some(size.1),
+            },
+            extent,
+        );
+    }
+    let array_view = texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..Default::default()
+    });
+    let layer_views = (0..LIGHT_LAYERS)
+        .map(|layer| {
+            texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_array_layer: layer,
+                array_layer_count: Some(1),
+                ..Default::default()
+            })
+        })
+        .collect();
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("light buffer"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&array_view) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+        ],
+    });
+    LightMaps { layer_views, bind_group, size }
+}
+
+/// Cuts a simple polygon into triangles by clipping ears. Either winding; a
+/// polygon of fewer than three points gives none.
+fn triangulate(points: &[[f32; 2]]) -> Vec<[[f32; 2]; 3]> {
+    let mut triangles = Vec::new();
+    if points.len() < 3 {
+        return triangles;
+    }
+    let area: f32 = (0..points.len())
+        .map(|i| {
+            let (a, b) = (points[i], points[(i + 1) % points.len()]);
+            a[0] * b[1] - b[0] * a[1]
+        })
+        .sum();
+    let mut order: Vec<usize> = (0..points.len()).collect();
+    if area < 0.0 {
+        order.reverse();
+    }
+    let cross = |a: [f32; 2], b: [f32; 2], c: [f32; 2]| (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    let inside = |p: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]| {
+        cross(a, b, p) >= 0.0 && cross(b, c, p) >= 0.0 && cross(c, a, p) >= 0.0
+    };
+    let mut guard = order.len() * order.len();
+    while order.len() > 3 && guard > 0 {
+        guard -= 1;
+        let n = order.len();
+        let ear = (0..n).find(|&i| {
+            let (a, b, c) = (points[order[(i + n - 1) % n]], points[order[i]], points[order[(i + 1) % n]]);
+            cross(a, b, c) > 0.0
+                && !order
+                    .iter()
+                    .filter(|&&j| ![order[(i + n - 1) % n], order[i], order[(i + 1) % n]].contains(&j))
+                    .any(|&j| inside(points[j], a, b, c))
+        });
+        let Some(i) = ear else {
+            break;
+        };
+        triangles.push([points[order[(i + n - 1) % n]], points[order[i]], points[order[(i + 1) % n]]]);
+        order.remove(i);
+    }
+    if order.len() == 3 {
+        triangles.push([points[order[0]], points[order[1]], points[order[2]]]);
+    }
+    triangles
+}
 
 const INSTANCE_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
     array_stride: INSTANCE_SIZE,
@@ -783,6 +1193,29 @@ mod tests {
 
     fn sprite() -> Sprite {
         Sprite::new(Vec3::ZERO, [1.0, 1.0], [0.0, 0.0, 1.0, 1.0])
+    }
+
+    #[test]
+    fn a_square_is_two_triangles_whichever_way_it_winds() {
+        let square = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        assert_eq!(triangulate(&square).len(), 2);
+        let mut backwards = square;
+        backwards.reverse();
+        assert_eq!(triangulate(&backwards).len(), 2);
+        assert!(triangulate(&square[..2]).is_empty());
+    }
+
+    #[test]
+    fn a_concave_polygon_is_cut_without_covering_its_notch() {
+        // An L: the notch's corner (1.5, 1.5) must not be inside any triangle.
+        let l = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0], [1.0, 2.0], [0.0, 2.0]];
+        let triangles = triangulate(&l);
+        assert_eq!(triangles.len(), 4);
+        let area: f32 = triangles
+            .iter()
+            .map(|[a, b, c]| ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).abs() * 0.5)
+            .sum();
+        assert!((area - 3.0).abs() < 1e-5, "{area}");
     }
 
     #[test]

@@ -352,6 +352,7 @@ pub fn build(
             markers: Vec::new(),
             barriers: Vec::new(),
             doors: DoorsFile::default(),
+            lights: Vec::new(),
         },
         palette_index: HashMap::new(),
         layer_index: HashMap::new(),
@@ -466,6 +467,14 @@ impl Joined {
             let mut object = object.clone();
             object.position = moved(object.position);
             self.file.objects.push(object);
+        }
+        for light in &room.lights {
+            let mut light = light.clone();
+            light.position = moved(light.position);
+            for point in &mut light.path {
+                *point = moved(*point);
+            }
+            self.file.lights.push(light);
         }
         for barrier in &room.barriers {
             let mut barrier = *barrier;

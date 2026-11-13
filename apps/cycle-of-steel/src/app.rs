@@ -986,6 +986,24 @@ mod tests {
     }
 
     #[test]
+    fn a_floor_keeps_every_rooms_lights_where_its_room_went() {
+        let world = load_world(&AssetSource::folder(None).unwrap(), DUNGEON, 1).unwrap();
+        let lights = &world.room.file.as_ref().unwrap().lights;
+        let start_x = world.floor.as_ref().unwrap().start_x;
+        let hub = RoomFile::load(&AssetSource::folder(None).unwrap(), DEFAULT_ROOM).unwrap();
+        // The hub's lights stay where they were; the floor's are beyond it.
+        assert!(lights.iter().filter(|light| light.position[0] < start_x).count() >= hub.lights.len());
+        let floor_lights = lights.iter().filter(|light| light.position[0] >= start_x).count();
+        assert!(floor_lights > 20, "{floor_lights}");
+        let size = world.room.size();
+        for light in lights {
+            for point in &light.path {
+                assert!(point[0] >= -0.01 && point[1] >= -0.01 && point[0] <= size.x + 0.01 && point[1] <= size.y + 0.01);
+            }
+        }
+    }
+
+    #[test]
     fn the_hubs_drops_fly_to_the_player_and_count() {
         use crate::data::DropKind;
         let mut world = hub();

@@ -35,10 +35,15 @@ pub struct Sprite {
     pub uv: [f32; 4],
     /// Multiplied with the texel. Straight (not premultiplied) alpha.
     pub color: [f32; 4],
+    /// Which layer of the light buffer lights it (see `render2d`), or
+    /// [`Sprite::UNLIT`] to draw it as it is.
+    pub light: u32,
 }
 
 impl Sprite {
     pub const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+    /// Drawn as it is, whatever the lights.
+    pub const UNLIT: u32 = u32::MAX;
 
     /// A centred, untinted, unrotated sprite showing `uv`.
     pub fn new(position: Vec3, size: [f32; 2], uv: [f32; 4]) -> Self {
@@ -49,7 +54,15 @@ impl Sprite {
             pivot: [0.5, 0.5],
             uv,
             color: Self::WHITE,
+            light: Self::UNLIT,
         }
+    }
+
+    /// Lit by layer `layer` of the light buffer: its colour is multiplied by the
+    /// light there.
+    pub fn lit(mut self, layer: u32) -> Self {
+        self.light = layer;
+        self
     }
 
     pub fn with_pivot(mut self, pivot: [f32; 2]) -> Self {
@@ -229,9 +242,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sprite_is_sixty_four_bytes() {
-        // The shader's instance layout is written against these offsets.
-        assert_eq!(std::mem::size_of::<Sprite>(), 64);
+    fn sprite_is_sixty_eight_bytes() {
+        // The shader's instance layout is written against these offsets: the
+        // light layer is the last four bytes.
+        assert_eq!(std::mem::size_of::<Sprite>(), 68);
     }
 
     #[test]

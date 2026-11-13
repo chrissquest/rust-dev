@@ -13,12 +13,12 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use crystal_engine::camera2d::Camera2d;
 use crystal_engine::glam::{Vec2, Vec3};
-use crystal_engine::render2d::{BatchId, DrawList, Pass, Renderer2d, Target, TextureId};
+use crystal_engine::render2d::{BatchId, DrawList, LightList, Pass, PointLight, Renderer2d, Target, TextureId};
 use crystal_engine::scene::{Texture, TextureFilter};
 use crystal_engine::sprite::{Grid, Sheet, Sprite};
 
 use crate::assets::{AssetSource, PIXELS_PER_UNIT};
-use crate::data::{DecorationFile, DropKind, FontFile, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
+use crate::data::{DecorationFile, DropKind, FontFile, LightKind, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
 use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
 use crate::sim::combat::Interaction;
@@ -87,6 +87,27 @@ const HUD_HEAT_BACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.45];
 const HUD_HEAT_COOL_COLOR: [f32; 4] = [1.0, 0.85, 0.2, 0.9];
 const HUD_HEAT_HOT_COLOR: [f32; 4] = [1.0, 0.2, 0.1, 0.95];
 const HUD_BUTTON_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.28];
+/// Which layer of the light buffer lights a Unity sorting layer. Unity has these
+/// eight; an unknown name is lit as `Default`, as it would be drawn.
+fn light_layer(sorting_layer: &str) -> u32 {
+    match sorting_layer {
+        "Background" => LIGHT_BACKGROUND,
+        "Entities" => LIGHT_ENTITIES,
+        "Bullets" => LIGHT_BULLETS,
+        "Foreground" => 4,
+        "HUD Items" => LIGHT_HUD_ITEMS,
+        "HUD" => 6,
+        "UI" => 7,
+        _ => LIGHT_DEFAULT,
+    }
+}
+const LIGHT_BACKGROUND: u32 = 0;
+const LIGHT_DEFAULT: u32 = 1;
+const LIGHT_ENTITIES: u32 = 2;
+const LIGHT_BULLETS: u32 = 3;
+/// Chests are on Unity's `HUD Items` sorting layer.
+const LIGHT_HUD_ITEMS: u32 = 5;
+
 /// How many flat pieces a LASERCrab's fading line is drawn in.
 const BEAM_PIECES: u32 = 8;
 /// A frozen enemy's colour (`ElementalEffectHandler`), as picked on screen.
@@ -162,6 +183,8 @@ pub struct View {
     enemy_sprites: Vec<EnemySprites>,
     /// Per enemy: a boss's laser start, middle and end, if it has lasers.
     boss_laser_sprites: Vec<Option<[ResolvedSprite; 3]>>,
+    /// This frame's lights, kept so their storage is reused.
+    lights: LightList,
     /// Whether the minimap is open.
     show_map: bool,
     /// The tiles sealed rooms show, by sprite name, resolved on first use.
@@ -244,6 +267,7 @@ impl View {
             data_icon: None,
             seal_sprites: HashMap::new(),
             show_map: false,
+            lights: LightList::new(),
             laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
             shadow: ResolvedSprite::EMPTY,
@@ -344,6 +368,54 @@ impl View {
             .collect()
     }
 
+    /// The room's lights near enough to the camera to show, for the light buffer.
+    /// Each lights the sorting layers it names, as Unity's do.
+    fn gather_lights(&mut self, world: &World, camera: &Camera2d, aspect: f32) {
+        self.lights.clear();
+        let Some(file) = &world.room.file else {
+            return;
+        };
+        // What the camera sees: a light reaching in from outside still counts.
+        let half = Vec2::new(camera.view_height * 0.5 * aspect, camera.view_height * 0.5);
+        let (low, high) = (camera.center - half, camera.center + half);
+        let near = |min: Vec2, max: Vec2| max.x >= low.x && min.x <= high.x && max.y >= low.y && min.y <= high.y;
+        for light in &file.lights {
+            let layers = light.layers.iter().fold(0u32, |mask, name| mask | 1 << light_layer(name));
+            let [r, g, b] = light.color;
+            let color = [r * light.intensity, g * light.intensity, b * light.intensity, 1.0];
+            match light.kind {
+                LightKind::Global => {
+                    let corners = [low.to_array(), [high.x, low.y], high.to_array(), [low.x, high.y]];
+                    self.lights.polygon(layers, &corners, color);
+                }
+                LightKind::Point => {
+                    let centre = Vec2::from(light.position);
+                    let reach = Vec2::splat(light.outer_radius);
+                    if near(centre - reach, centre + reach) {
+                        self.lights.point(
+                            layers,
+                            PointLight {
+                                position: light.position,
+                                inner_radius: light.inner_radius,
+                                outer_radius: light.outer_radius,
+                                color,
+                                falloff: light.falloff,
+                            },
+                        );
+                    }
+                }
+                LightKind::Freeform => {
+                    let (min, max) = light.path.iter().fold((Vec2::MAX, Vec2::MIN), |(min, max), point| {
+                        (min.min(Vec2::from(*point)), max.max(Vec2::from(*point)))
+                    });
+                    if near(min, max) {
+                        self.lights.polygon(layers, &light.path, color);
+                    }
+                }
+            }
+        }
+    }
+
     /// Opens or closes the minimap.
     pub fn toggle_map(&mut self) {
         self.show_map = !self.show_map;
@@ -427,6 +499,7 @@ impl View {
         let rows = file.size[1] as usize;
         for (index, layer) in file.layers.iter().enumerate().filter(|(_, layer)| layer.enabled) {
             let sorting_layer = SortingLayer::from_name(&layer.sorting_layer);
+            let light = light_layer(&layer.sorting_layer);
             let above = sorting_layer.is_above_entities();
             let z = if above { Z_ABOVE } else { Z_BELOW };
 
@@ -444,7 +517,7 @@ impl View {
                     let mirrored = tile % 8 >= 4;
                     sprites.push((
                         resolved.texture,
-                        resolved.placed(centre, [1.0, 1.0], quarter_turns * std::f32::consts::FRAC_PI_2, [mirrored, false]),
+                        resolved.placed(centre, [1.0, 1.0], quarter_turns * std::f32::consts::FRAC_PI_2, [mirrored, false]).lit(light),
                     ));
                 }
             }
@@ -475,6 +548,7 @@ impl View {
         let position = Vec2::from(decoration.position).extend(z);
         let sprite = resolved
             .placed(position, decoration.scale, decoration.rotation.to_radians(), decoration.flip)
+            .lit(light_layer(&decoration.sorting_layer))
             // `SpriteRenderer.color` is as picked on screen; tints here are linear.
             .with_color(srgb_to_linear(decoration.color));
         Ok((resolved.texture, sprite))
@@ -559,7 +633,7 @@ impl View {
                     let quarter_turns = (tile.transform % 4) as f32;
                     let mirrored = tile.transform >= 4;
                     let placed = sprite.placed(centre, [1.0, 1.0], quarter_turns * std::f32::consts::FRAC_PI_2, [mirrored, false]);
-                    self.list.sprite(sprite.texture, placed);
+                    self.list.sprite(sprite.texture, placed.lit(LIGHT_BACKGROUND));
                 }
             }
         }
@@ -572,7 +646,7 @@ impl View {
             };
             if let Some(sprite) = sprite {
                 let placed = sprite.placed(remains.position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]);
-                self.list.sprite(sprite.texture, placed);
+                self.list.sprite(sprite.texture, placed.lit(LIGHT_BACKGROUND));
             }
         }
 
@@ -580,12 +654,12 @@ impl View {
         for drop in &world.combat.drops {
             let sprite = &self.drop_sprites[drop.def.0 as usize];
             let position = drop.previous_position.lerp(drop.position, blend);
-            self.list.sprite(sprite.texture, sprite.placed(position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]));
+            self.list.sprite(sprite.texture, sprite.placed(position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]).lit(LIGHT_DEFAULT));
         }
         for pickup in &world.combat.pickups {
             if let Some(sprite) = &self.gun_sprites[pickup.gun.def.0 as usize] {
                 let placed = sprite.placed(pickup.position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]);
-                self.list.sprite(sprite.texture, placed);
+                self.list.sprite(sprite.texture, placed.lit(LIGHT_DEFAULT));
             }
         }
 
@@ -599,7 +673,7 @@ impl View {
                 let placed = sprite
                     .placed(position.extend(Z_BULLETS), def.scale, bullet.rotation, [false, false])
                     .with_color(srgb_to_linear(def.color));
-                self.list.sprite(sprite.texture, placed);
+                self.list.sprite(sprite.texture, placed.lit(LIGHT_BULLETS));
             }
         }
         for shot in &world.combat.shots {
@@ -609,7 +683,7 @@ impl View {
                 let placed = sprite
                     .placed(position.extend(Z_BULLETS), def.scale, shot.rotation, [false, false])
                     .with_color(srgb_to_linear(def.color));
-                self.list.sprite(sprite.texture, placed);
+                self.list.sprite(sprite.texture, placed.lit(LIGHT_BULLETS));
             }
         }
         self.draw_enemy_beams(world);
@@ -623,7 +697,7 @@ impl View {
                     // Drawn pointing left, like bullets.
                     let rotation = (-beam.direction).to_angle();
                     let placed = sprite.placed(position.extend(Z_BULLETS), [stretch, 1.0], rotation, [false, false]);
-                    self.list.sprite(sprite.texture, placed);
+                    self.list.sprite(sprite.texture, placed.lit(LIGHT_BULLETS));
                 }
             }
         }
@@ -633,7 +707,7 @@ impl View {
                 let placed = sprite
                     .placed(effect.position.extend(Z_BULLETS), def.scale, effect.rotation, [false, false])
                     .with_color(srgb_to_linear(effect.color));
-                self.list.sprite(sprite.texture, placed);
+                self.list.sprite(sprite.texture, placed.lit(LIGHT_BULLETS));
             }
         }
 
@@ -650,7 +724,7 @@ impl View {
             let sprite = if target.is_damaged() { damaged.as_ref().or(whole.as_ref()) } else { whole.as_ref() };
             if let Some(sprite) = sprite {
                 let placed = sprite.placed(target.origin.extend(Z_ABOVE), [1.0, 1.0], 0.0, [false, false]);
-                self.list.sprite(sprite.texture, placed);
+                self.list.sprite(sprite.texture, placed.lit(LIGHT_HUD_ITEMS));
             }
         }
 
@@ -668,6 +742,8 @@ impl View {
         let mut camera = self.camera;
         camera.center += shake;
         renderer.begin_frame();
+        self.gather_lights(world, &camera, aspect);
+        renderer.draw_lights(encoder, camera.view_projection(aspect), target.width, target.height, &mut self.lights);
         renderer.draw(
             encoder,
             target,
@@ -716,7 +792,7 @@ impl View {
             let placed = sprite
                 .placed(position.extend(Z_ENTITIES), crate::sim::enemy::drawn_scale(enemy, def), 0.0, [false, false])
                 .with_color(srgb_to_linear(color));
-            self.list.sprite(sprite.texture, placed);
+            self.list.sprite(sprite.texture, placed.lit(LIGHT_ENTITIES));
         }
     }
 
@@ -735,7 +811,7 @@ impl View {
                 let rotation = (-beam.direction).to_angle();
                 for (sprite, (position, stretch)) in pieces.iter().zip(beam_pieces(beam.origin, beam.direction, beam.length)) {
                     let placed = sprite.placed(position.extend(Z_BULLETS), [stretch, 1.0], rotation, [false, false]);
-                    self.list.sprite(sprite.texture, placed);
+                    self.list.sprite(sprite.texture, placed.lit(LIGHT_BULLETS));
                 }
             }
         }
@@ -763,7 +839,7 @@ impl View {
                 let sprite = Sprite::new(center.extend(Z_BULLETS), size, [0.0, 0.0, 1.0, 1.0])
                     .with_rotation(rotation)
                     .with_color(srgb_to_linear(color));
-                self.list.sprite(self.white, sprite);
+                self.list.sprite(self.white, sprite.lit(LIGHT_BULLETS));
             }
         }
     }
@@ -785,10 +861,11 @@ impl View {
                 angle + side * degrees.to_radians(),
                 [false, mirrored],
             )
+            .lit(LIGHT_ENTITIES)
         };
 
         let shadow = self.shadow.placed((position + SHADOW_OFFSET).extend(Z_ENTITIES), [1.0, 1.0], 0.0, [false, false]);
-        self.list.sprite(self.shadow.texture, shadow);
+        self.list.sprite(self.shadow.texture, shadow.lit(LIGHT_ENTITIES));
         self.list
             .sprite(self.left_hand.texture, part(&self.left_hand, (arm.left_hand, LEFT_HAND_TURN)));
 
@@ -805,13 +882,14 @@ impl View {
                     position.extend(Z_ENTITIES),
                     self.player.frames.cell_size(),
                     self.player.frames.uv(player.animation_frame()),
-                ),
+                )
+                .lit(LIGHT_ENTITIES),
             );
         } else {
             // Unity's animator let go of the sprite when movement stopped, which
             // put the standing picture back.
             let standing = self.standing.placed(position.extend(Z_ENTITIES), [1.0, 1.0], 0.0, [false, false]);
-            self.list.sprite(self.standing.texture, standing);
+            self.list.sprite(self.standing.texture, standing.lit(LIGHT_ENTITIES));
         }
 
         if let Some(sprite) = world

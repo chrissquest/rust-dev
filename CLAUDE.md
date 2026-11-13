@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio (piece 1 of 4), 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -76,7 +76,21 @@ the hub on a new floor. The minimap (`Floor::map`, Tab / Select / MAP button)
 is `MapMenu`. Not yet: the exit dialogue and open-door arrows (UI pass), the
 death screen and saves (step 7).
 
-**Next: step 6, lighting and audio.** Read the Port plan and Lighting tabs first.
+Step 6 (lighting and audio) is split into four pieces, agreed with the owner:
+(1) the light buffer and the rooms' lights, (2) wall shadows, (3) lights on
+things (chests, drops, enemies, bullets, explosions), (4) audio. The plan's
+depth cues (bloom, vignette...) wait until after parity: port first.
+
+Piece 1 is done. `crystal-engine` has 2D lights: `Sprite::lit(layer)`, a
+half-resolution light buffer with `LIGHT_LAYERS` layers filled by
+`Renderer2d::draw_lights` from a `LightList` (point lights, polygon lights by
+layer mask), multiplied into lit sprites. A layer no light reaches stays white
+(Unity draws it unlit). The game maps Unity's sorting layers to light layers
+(`view::light_layer`) and gathers the room's `lights` near the camera each
+frame (`View::gather_lights`).
+
+**Next: step 6 piece 2, wall shadows.** The converter does not yet write a
+light's shadow settings (`m_ShadowIntensity`, shadows on or off).
 
 ### How to work here
 

@@ -4,8 +4,7 @@
 //! now the source of truth. Everything is in room space: x right, y up, origin at
 //! the room's bottom-left corner, in world units.
 //!
-//! Only what the game uses so far is read. A room file also lists `lights`;
-//! those are skipped here until the step that needs them.
+//! Only what the game uses so far is read.
 
 use std::collections::HashMap;
 
@@ -90,6 +89,41 @@ pub struct RoomFile {
     /// Which sides have a doorway that `RoomScript.SealRoom` closes.
     #[serde(default)]
     pub doors: DoorsFile,
+    /// Unity's 2D lights in the room.
+    #[serde(default)]
+    pub lights: Vec<LightFile>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LightKind {
+    /// Lights everything on its layers.
+    Global,
+    /// A circle, brightest inside `inner_radius`, gone at `outer_radius`.
+    Point,
+    /// A polygon, `path`.
+    Freeform,
+}
+
+/// A `Light2D`. Each lights only the sorting layers it names.
+#[derive(Clone, Debug, Deserialize)]
+pub struct LightFile {
+    pub kind: LightKind,
+    #[serde(default)]
+    pub position: [f32; 2],
+    pub color: [f32; 3],
+    pub intensity: f32,
+    #[serde(default)]
+    pub inner_radius: f32,
+    #[serde(default)]
+    pub outer_radius: f32,
+    /// Unity's falloff strength.
+    #[serde(default)]
+    pub falloff: f32,
+    /// A freeform light's outline, in room space.
+    #[serde(default)]
+    pub path: Vec<[f32; 2]>,
+    pub layers: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
