@@ -688,6 +688,32 @@ mod tests {
     }
 
     #[test]
+    fn shooting_real_chests_breaks_them_into_a_gun_or_data_cells() {
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        for (chest, gives_gun) in [("Common Weapon Chest", true), ("Common Data Chest", false)] {
+            let mut world = load_world(&assets, "n1", 1).expect("n1 loads");
+            world.combat.targets.retain(|target| target.enemy.is_none());
+            world.give(world.defs.gun_named("shotgun_1").unwrap());
+            let id = world.defs.chest_named(chest).unwrap();
+            let target = world.combat.targets.iter().find(|target| target.chest == Some(id)).unwrap().clone();
+            // Stand just to its right, on free floor, and shoot left.
+            world.player.position = target.position + Vec2::new(1.15, 0.0);
+            world.player.previous_position = world.player.position;
+            assert!(!world.room.box_hits_solid(world.player.position, HALF_SIZE), "{chest}");
+            for _ in 0..600 {
+                world.step(&Input { aim: Some(-Vec2::X), ..Input::default() });
+            }
+            assert!(world.combat.targets.iter().all(|other| other.id != target.id), "{chest} broke");
+            if gives_gun {
+                assert!(world.combat.pickups.iter().any(|pickup| pickup.position == target.origin), "a gun lies there");
+            } else {
+                // Its cells land beside the player and fly straight in.
+                assert!(world.data_cells > 0, "the data cells were collected");
+            }
+        }
+    }
+
+    #[test]
     fn the_hubs_drops_fly_to_the_player_and_count() {
         use crate::data::DropKind;
         let mut world = hub();
