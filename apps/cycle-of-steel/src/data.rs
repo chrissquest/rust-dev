@@ -239,6 +239,20 @@ pub struct BulletFile {
     /// A key of `effects`: what is left where it hits.
     #[serde(default)]
     pub effect: Option<String>,
+    /// Unity's `HomingBullet.homingPower`: the force that steers it. 0 flies straight.
+    #[serde(default)]
+    pub homing: f32,
+    /// The bullet's `Rigidbody2D` linear drag.
+    #[serde(default)]
+    pub drag: f32,
+}
+
+/// An effect that hurts everything it touches when it appears (`ExplosionScript`).
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+pub struct ExplosionFile {
+    pub damage: f32,
+    /// World units, from the prefab's `CircleCollider2D`.
+    pub radius: f32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -250,6 +264,8 @@ pub struct EffectFile {
     #[serde(default = "one")]
     pub scale: [f32; 2],
     pub time_to_live: f32,
+    #[serde(default)]
+    pub explosion: Option<ExplosionFile>,
 }
 
 fn quarter() -> [f32; 2] {

@@ -27,12 +27,14 @@ owner's phone.
 
 Step 3 so far: guns picked up into a four-slot inventory, single and spray guns
 with Unity's heat mechanic, lasers (`Combat::fire_laser`, `Room::ray_hits_wall`),
+explosions (`explode` in `sim/combat.rs`: the bazooka's `Explosion 1`), homing
+bullets (steered in `Combat::step` at the target nearest the player),
 bullets, splashes, targets, camera shake, placeholder HUD, twin touch sticks, the
-hub's hidden gun room. Laser knockback and its looping sound wait for enemies
-(step 4) and audio (step 6).
+hub's hidden gun room. Waiting for enemies (step 4): knockback from lasers and
+explosions, explosions hurting the player and whoever walks into them while they
+last. Waiting for audio (step 6): the laser's loop and the explosion's sound.
 
-**Next, the rest of step 3:** homing bullets, explosions
-(`Explosion 1` effect: damage in a radius), burn and freeze (`ElementalEffectHandler.cs`,
+**Next, the rest of step 3:** burn and freeze (`ElementalEffectHandler.cs`,
 `Bullet_Burn`, `Bullet_Freeze`; bullets already carry `burn`/`freeze` in `guns.json`
 but `data.rs` does not read them yet), damage numbers (needs text drawing: bake the
 Thaleah pixel font, `Assets/Thaleah_PixelFont`, into an atlas), chests and drops

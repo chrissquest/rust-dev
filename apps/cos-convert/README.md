@@ -49,8 +49,10 @@ first, so a room reads the way it looks.
 `guns.json` has three tables keyed by Unity prefab name. `guns` holds each gun's
 numbers (kind, damage, fire delay, heat capacity and cooldown, spread, camera
 shake) and names its bullet; `bullets` holds a bullet's sprite, colour, size,
-lifetime and whether it pierces, and names the effect it leaves; `effects` holds
-the splash or explosion. Only bullets and effects that some gun reaches are written.
+lifetime and whether it pierces, and names the effect it leaves (homing bullets
+also carry `homing`, the steering force, and `drag`, their rigidbody's linear
+drag); `effects` holds the splash or explosion, an explosion with its `damage`
+and `radius`. Only bullets and effects that some gun reaches are written.
 
 ## What it decides on the way
 

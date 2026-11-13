@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 
-use crate::data::{BulletFile, EffectFile, GunFile, GunKind, GunsFile, ShakeFile};
+use crate::data::{BulletFile, EffectFile, ExplosionFile, GunFile, GunKind, GunsFile, ShakeFile};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GunId(pub u16);
@@ -53,6 +53,10 @@ pub struct BulletDef {
     pub time_to_live: f32,
     pub piercing: bool,
     pub effect: Option<EffectId>,
+    /// The force steering it at a target, as Unity's `AddForce` takes it; 0 flies straight.
+    pub homing: f32,
+    /// Unity's linear drag, per second.
+    pub drag: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +65,8 @@ pub struct EffectDef {
     pub color: [f32; 4],
     pub scale: [f32; 2],
     pub time_to_live: f32,
+    /// Set if the effect hurts what it touches when it appears.
+    pub explosion: Option<ExplosionFile>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -85,8 +91,8 @@ impl Defs {
             .map(|(index, name)| (name.as_str(), EffectId(index as u16)))
             .collect();
         for name in &effect_names {
-            let EffectFile { sprite, color, scale, time_to_live } = file.effects[*name].clone();
-            defs.effects.push(EffectDef { sprite, color, scale, time_to_live });
+            let EffectFile { sprite, color, scale, time_to_live, explosion } = file.effects[*name].clone();
+            defs.effects.push(EffectDef { sprite, color, scale, time_to_live, explosion });
         }
 
         let mut bullet_names: Vec<&String> = file.bullets.keys().collect();
@@ -97,7 +103,7 @@ impl Defs {
             .map(|(index, name)| (name.as_str(), BulletId(index as u16)))
             .collect();
         for name in &bullet_names {
-            let BulletFile { sprite, color, scale, size, time_to_live, piercing, effect } =
+            let BulletFile { sprite, color, scale, size, time_to_live, piercing, effect, homing, drag } =
                 file.bullets[*name].clone();
             let effect = match effect {
                 Some(effect) => Some(
@@ -115,6 +121,8 @@ impl Defs {
                 time_to_live,
                 piercing,
                 effect,
+                homing,
+                drag,
             });
         }
 
@@ -192,13 +200,20 @@ pub(crate) mod tests {
                            "damage": 100, "knockback": 1, "damage_delay": 0.1,
                            "shake": {"time": 0.05, "amplitude": 0.25, "frequency": 1}},
                 "endless_laser": {"id": 13, "kind": "laser", "heat_capacity": 0, "heat_cooldown": 0,
-                           "damage": 100, "knockback": 1, "damage_delay": 0.02}
+                           "damage": 100, "knockback": 1, "damage_delay": 0.02},
+                "bazooka": {"id": 7, "kind": "single", "heat_capacity": 1, "heat_cooldown": 2,
+                           "damage": 0, "knockback": 3, "fire_delay": 2, "bullet_speed": 7, "bullet": "missile"},
+                "seeker": {"id": 14, "kind": "single", "heat_capacity": 12, "heat_cooldown": 2,
+                           "damage": 100, "knockback": 5, "fire_delay": 0.2, "bullet_speed": 10, "bullet": "homing"}
               },
               "bullets": {
                 "round":  {"sprite": "b", "time_to_live": 2, "effect": "splash"},
-                "pellet": {"time_to_live": 0.25, "piercing": true}
+                "pellet": {"time_to_live": 0.25, "piercing": true},
+                "missile": {"time_to_live": 3, "size": [0.25, 0.1151], "effect": "blast"},
+                "homing": {"time_to_live": 2, "homing": 500, "drag": 3, "effect": "splash"}
               },
-              "effects": {"splash": {"sprite": "s", "time_to_live": 0.2}}
+              "effects": {"splash": {"sprite": "s", "time_to_live": 0.2},
+                          "blast": {"time_to_live": 0.3, "explosion": {"damage": 200, "radius": 0.4422}}}
             }"#,
         )
         .unwrap();
@@ -208,15 +223,15 @@ pub(crate) mod tests {
     #[test]
     fn names_resolve_to_ids_in_name_order() {
         let defs = test_defs();
-        assert_eq!(defs.gun_named("pistol"), Some(GunId(2)));
-        assert_eq!(defs.gun_named("shotgun"), Some(GunId(4)));
+        assert_eq!(defs.gun_named("pistol"), Some(GunId(3)));
+        assert_eq!(defs.gun_named("shotgun"), Some(GunId(6)));
         assert_eq!(defs.gun_named("nope"), None);
 
-        let pistol = defs.gun(GunId(2));
+        let pistol = defs.gun(GunId(3));
         let round = defs.bullet(pistol.bullet.unwrap());
         assert_eq!(round.half, [0.0625, 0.0625], "default size is an eighth of a unit");
         assert!(round.effect.is_some());
-        assert!((defs.gun(GunId(4)).spray_angle - 20f32.to_radians()).abs() < 1e-6);
+        assert!((defs.gun(GunId(6)).spray_angle - 20f32.to_radians()).abs() < 1e-6);
     }
 
     #[test]

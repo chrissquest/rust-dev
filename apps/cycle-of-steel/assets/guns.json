@@ -2,6 +2,7 @@
   "bullets": {
     "Bullet_Homing": {
       "color": [0.8679, 0.8662, 0.5199, 1.0],
+      "drag": 3.0,
       "effect": "Bullet Splash",
       "homing": 500.0,
       "piercing": false,
@@ -11,6 +12,7 @@
     },
     "Bullet_Homing 2": {
       "color": [0.8679, 0.8662, 0.5199, 1.0],
+      "drag": 3.0,
       "effect": "Bullet Splash",
       "homing": 500.0,
       "piercing": false,

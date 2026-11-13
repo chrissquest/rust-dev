@@ -22,11 +22,19 @@ Steps 1 and 2 of the port are in, and step 3 (combat) is under way:
   long that stops at the first wall or target and passes over ledges; it hurts
   every `damage_delay` and heats the gun each time it does, even against a wall,
   as in Unity.
+- **Explosions and homing.** The bazooka's missile (`bazooka_1`) does nothing by
+  itself; where it stops it leaves `Explosion 1`, which takes 200 from every
+  target within 0.44 units, through walls, as in Unity. Homing bullets (`rifle_3`,
+  `lmg_red`) are steered at the target nearest the *player*, as Unity chooses it,
+  with Unity's force and drag: they slow to about 3 units per second and curve
+  in, and with nothing to chase they simply slow down. Not yet, because nothing
+  can be pushed or hurt back: the blast's knockback, its damage to the player,
+  and hurting enemies that walk into it during its 0.3 seconds.
 
 The hub's hidden gun room is reachable: stand at the right-hand end of the rack
 where you spawn and interact. Interact again on the spot inside to leave.
 
-Not in yet: homing, explosions and elemental effects; damage numbers;
+Not in yet: burn and freeze; damage numbers;
 enemies, chests and drops; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 

@@ -507,6 +507,52 @@ mod tests {
         }
     }
 
+    /// Fires the named gun once from the spawn, `turned` radians off the line to
+    /// the hub's test dummy, and returns the health the dummy lost in two seconds.
+    fn shoot_at_the_dummy(name: &str, turned: f32) -> f32 {
+        let mut world = hub();
+        let gun = world.defs.gun_named(name).expect(name);
+        world.give(gun);
+        let before = world.combat.targets[0].health;
+        let toward = (world.combat.targets[0].position - world.player.position).normalize();
+        world.step(&sim::Input { aim: Some(Vec2::from_angle(turned).rotate(toward)), ..Default::default() });
+        assert_eq!(world.combat.bullets.len(), 1, "{name} fired");
+        for _ in 0..120 {
+            world.step(&sim::Input::default());
+        }
+        before - world.combat.targets.first().map_or(0.0, |target| target.health)
+    }
+
+    #[test]
+    fn the_real_bazooka_hurts_only_through_its_explosion() {
+        let world = hub();
+        let bazooka = world.defs.gun(world.defs.gun_named("bazooka_1").unwrap());
+        let missile = world.defs.bullet(bazooka.bullet.unwrap());
+        let explosion = world.defs.effect(missile.effect.unwrap()).explosion.expect("Explosion 1 explodes");
+        // `Explosion 1.prefab`: Damage 200, CircleCollider2D radius 0.44217265.
+        assert_eq!(explosion.damage, 200.0);
+        assert!((explosion.radius - 0.4422).abs() < 1e-4);
+        assert_eq!(bazooka.damage, 0.0);
+
+        assert_eq!(shoot_at_the_dummy("bazooka_1", 0.0), 200.0);
+    }
+
+    #[test]
+    fn the_real_homing_guns_bend_their_shots_onto_the_dummy() {
+        for name in ["rifle_3", "lmg_red"] {
+            let world = hub();
+            let gun = world.defs.gun(world.defs.gun_named(name).unwrap());
+            let bullet = world.defs.bullet(gun.bullet.unwrap());
+            // `Bullet_Homing.prefab`: homingPower 500, Rigidbody2D linear drag 3.
+            assert_eq!((bullet.homing, bullet.drag), (500.0, 3.0), "{name}");
+        }
+        // Fired 25 degrees wide of the dummy, the rifle's shot still lands. (The
+        // lmg sprays at random, so it is left to the unit tests.)
+        assert!(shoot_at_the_dummy("rifle_3", 25f32.to_radians()) > 0.0);
+        // An ordinary bullet fired the same way misses.
+        assert_eq!(shoot_at_the_dummy("rifle_1", 25f32.to_radians()), 0.0);
+    }
+
     #[test]
     fn the_hidden_spot_leads_into_the_gun_room_and_back_out() {
         let mut world = hub();

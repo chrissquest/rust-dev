@@ -12,7 +12,7 @@ use super::guns::Gun;
 use super::rng::Rng;
 use super::room::{Cell, Room};
 use super::{DT, Event};
-use crate::data::GunKind;
+use crate::data::{ExplosionFile, GunKind};
 
 /// Room for this many bullets and effects before the vectors would grow.
 const BULLET_CAPACITY: usize = 512;
@@ -22,6 +22,9 @@ const EFFECT_CAPACITY: usize = 256;
 pub const LASER_RANGE: f32 = 20.0;
 /// A crit does this many times the gun's damage.
 const CRIT_MULTIPLIER: f32 = 2.0;
+/// Unity's physics step (`TimeManager.asset`, Fixed Timestep). Forces and drag
+/// were tuned against it, so they are converted from it rather than from [`DT`].
+const UNITY_STEP: f32 = 0.02;
 
 #[derive(Clone, Debug)]
 pub struct Bullet {
@@ -226,12 +229,33 @@ impl Combat {
     }
 
     /// Moves bullets, resolves what they hit, and ages effects.
-    pub fn step(&mut self, defs: &Defs, room: &Room, now: f64) {
+    ///
+    /// `player` is where the player stands: homing bullets chase the target
+    /// nearest the player, not the one nearest themselves (`HomingBullet.Update`
+    /// compares `DistanceToPlayer`), so every homing bullet in flight agrees on
+    /// one target. Ties go to the earlier target, as Unity's loop does.
+    pub fn step(&mut self, defs: &Defs, room: &Room, player: Vec2, now: f64) {
+        let chased = self
+            .targets
+            .iter()
+            .min_by(|a, b| a.position.distance_squared(player).total_cmp(&b.position.distance_squared(player)))
+            .map(|target| target.position);
+
         let mut index = 0;
         while index < self.bullets.len() {
             let bullet = &mut self.bullets[index];
             let def = defs.bullet(bullet.def);
             bullet.previous_position = bullet.position;
+            if let (true, Some(chased)) = (def.homing > 0.0, chased) {
+                let toward = (chased - bullet.position).normalize_or_zero();
+                bullet.velocity += toward * homing_acceleration(def.homing) * DT;
+                if toward != Vec2::ZERO {
+                    // Unity points a homing bullet at its target, not along its
+                    // flight (`Quaternion.FromToRotation(Vector3.left, target)`).
+                    bullet.rotation = (-toward).to_angle();
+                }
+            }
+            bullet.velocity *= drag_kept(def.drag);
             bullet.position += bullet.velocity * DT;
             bullet.time_left -= DT;
 
@@ -259,6 +283,7 @@ impl Combat {
 
             if stopped {
                 if let Some(effect) = def.effect {
+                    let effect_def = defs.effect(effect);
                     if self.effects.len() == self.effects.capacity() {
                         self.effects.remove(0);
                     }
@@ -267,8 +292,11 @@ impl Combat {
                         position: bullet.position,
                         rotation: bullet.rotation,
                         color: def.color,
-                        time_left: defs.effect(effect).time_to_live,
+                        time_left: effect_def.time_to_live,
                     });
+                    if let Some(explosion) = effect_def.explosion {
+                        explode(&mut self.targets, bullet.position, explosion, now);
+                    }
                 }
                 self.bullets.swap_remove(index);
             } else if bullet.time_left <= 0.0 {
@@ -307,6 +335,51 @@ impl Combat {
     }
 }
 
+/// Hurts every target the blast circle touches (`ExplosionScript.OnTriggerEnter2D`).
+///
+/// As in Unity the damage is the same anywhere inside the circle, walls do not
+/// shelter anything, and it is separate from the direct hit of the bullet that
+/// set it off (the bazooka's missile itself does 0).
+///
+/// Deliberate differences, until the things they need exist:
+/// - Unity's trigger lasts the effect's whole 0.3 s, so an enemy walking into the
+///   blast late is still hurt. Targets do not move yet, so damage is dealt once,
+///   when the explosion appears. Revisit with enemies (step 4).
+/// - Unity pushes what it hurts away from the centre (three times the offset
+///   divided by the radius). Knockback waits for enemies that can move.
+/// - Unity's explosion hurts the player too, the bazooka's owner included. The
+///   player has no health yet.
+fn explode(targets: &mut [Target], center: Vec2, explosion: ExplosionFile, now: f64) {
+    for target in targets {
+        if circle_overlaps_box(center, explosion.radius, target.position, target.half) {
+            target.health -= explosion.damage;
+            target.last_hit = now;
+        }
+    }
+}
+
+/// The acceleration, in units/s^2, of a homing bullet steered with force `homing`.
+///
+/// `HomingBullet.Update` calls `AddForce(direction * 500 * Time.deltaTime)` every
+/// frame. Forces pile up until the next physics step, so one step sees a force of
+/// `500 * UNITY_STEP` in total whatever the frame rate, and the bullets' mass is
+/// 1: 10 units/s^2. (The script hard-codes 500 and ignores its own `homingPower`
+/// field; both prefabs set that to 500 as well, so reading the field is the same.)
+fn homing_acceleration(homing: f32) -> f32 {
+    homing * UNITY_STEP
+}
+
+/// The share of its velocity a bullet keeps over one step of [`DT`] under Unity's
+/// linear `drag`. Unity multiplies velocity by `1 - drag * UNITY_STEP` each
+/// physics step; this is the same decay spread over our shorter step. Homing
+/// bullets have drag 3 and so settle at about 3.1 units/s; the rest have none.
+fn drag_kept(drag: f32) -> f32 {
+    if drag == 0.0 {
+        return 1.0;
+    }
+    (1.0 - drag * UNITY_STEP).max(0.0).powf(DT / UNITY_STEP)
+}
+
 /// Bullets fly over ledges; only walls stop them.
 fn bullet_hits_wall(room: &Room, center: Vec2, half: Vec2) -> bool {
     let (min, max) = room.cell_range(center, half);
@@ -331,6 +404,11 @@ fn ray_hits_box(origin: Vec2, direction: Vec2, center: Vec2, half: Vec2) -> Opti
         leave = leave.min(a.max(b));
     }
     (enter <= leave).then_some(enter)
+}
+
+fn circle_overlaps_box(center: Vec2, radius: f32, box_center: Vec2, half: Vec2) -> bool {
+    let nearest = center.clamp(box_center - half, box_center + half);
+    nearest.distance_squared(center) < radius * radius
 }
 
 fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {
@@ -361,10 +439,128 @@ mod tests {
         }
     }
 
+    /// Where the player stands in these tests: the middle of the test room.
+    const PLAYER: Vec2 = Vec2::new(8.0, 4.5);
+
     fn run(combat: &mut Combat, defs: &Defs, room: &Room, steps: u32) {
         for step in 0..steps {
-            combat.step(defs, room, step as f64 * DT as f64);
+            combat.step(defs, room, PLAYER, step as f64 * DT as f64);
         }
+    }
+
+    #[test]
+    fn a_missile_explodes_and_hurts_everything_in_its_radius() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        // The missile hits the first target. The blast (radius 0.4422) reaches the
+        // second, whose near edge is 0.35 above, but not the third, a unit away.
+        combat.targets.push(target(1, Vec2::new(10.0, 4.5), 1000.0));
+        combat.targets.push(target(2, Vec2::new(10.0, 5.1), 1000.0));
+        combat.targets.push(target(3, Vec2::new(11.2, 4.5), 1000.0));
+        fire(&mut combat, &defs, "bazooka", PLAYER, Vec2::X);
+        run(&mut combat, &defs, &room, 30);
+        assert!(combat.bullets.is_empty());
+        assert_eq!(combat.effects.len(), 1, "the explosion is what the missile leaves");
+        // The bazooka's own damage is 0: all 200 is the explosion's.
+        assert_eq!(combat.targets[0].health, 800.0);
+        assert_eq!(combat.targets[1].health, 800.0);
+        assert_eq!(combat.targets[2].health, 1000.0);
+
+        // It hurts once, not on every step of its 0.3 s.
+        run(&mut combat, &defs, &room, 30);
+        assert!(combat.effects.is_empty());
+        assert_eq!(combat.targets[1].health, 800.0);
+    }
+
+    #[test]
+    fn a_missile_exploding_on_a_wall_hurts_a_target_beside_it() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        // Out of the missile's path, 0.3 from the right wall's face at x = 15.5.
+        combat.targets.push(target(1, Vec2::new(15.1, 4.9), 250.0));
+        fire(&mut combat, &defs, "bazooka", PLAYER, Vec2::X);
+        run(&mut combat, &defs, &room, 90);
+        assert_eq!(combat.targets[0].health, 50.0);
+
+        // A plain splash is not an explosion: the pistol's hurts nothing nearby.
+        fire(&mut combat, &defs, "pistol", PLAYER, Vec2::X);
+        run(&mut combat, &defs, &room, 90);
+        assert_eq!(combat.targets[0].health, 50.0);
+    }
+
+    #[test]
+    fn the_blast_circle_touches_boxes_by_their_nearest_point() {
+        let half = Vec2::new(0.1, 0.25);
+        assert!(circle_overlaps_box(Vec2::ZERO, 0.44, Vec2::new(0.5, 0.0), half));
+        assert!(!circle_overlaps_box(Vec2::ZERO, 0.44, Vec2::new(0.6, 0.0), half));
+        // Diagonally the corner is 0.5 away although each axis alone is within reach.
+        assert!(!circle_overlaps_box(Vec2::ZERO, 0.44, Vec2::new(0.4, 0.65), half));
+        assert!(circle_overlaps_box(Vec2::ZERO, 0.44, Vec2::ZERO, half), "a centre inside the box");
+    }
+
+    #[test]
+    fn a_homing_bullet_curves_into_a_target_off_its_line() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        combat.targets.push(target(1, Vec2::new(10.0, 6.5), 1000.0));
+        // Fired level, two units below the target: a straight bullet would miss.
+        fire(&mut combat, &defs, "seeker", PLAYER, Vec2::X);
+        run(&mut combat, &defs, &room, 1);
+        let bullet = &combat.bullets[0];
+        assert!(bullet.velocity.y > 0.0, "pulled up towards the target");
+        // It points at the target, 45 degrees up and right, not along its flight.
+        let facing = -Vec2::from_angle(bullet.rotation);
+        assert!((facing - Vec2::ONE.normalize()).length() < 0.05, "{facing}");
+
+        run(&mut combat, &defs, &room, 119);
+        assert!(combat.bullets.is_empty());
+        assert_eq!(combat.targets[0].health, 900.0);
+    }
+
+    #[test]
+    fn homing_bullets_chase_the_target_nearest_the_player() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        // The bullet starts right beside the far target, yet turns for the one
+        // nearest the player, as in Unity.
+        combat.targets.push(target(1, Vec2::new(14.0, 7.0), 1000.0));
+        combat.targets.push(target(2, Vec2::new(7.0, 4.5), 1000.0));
+        fire(&mut combat, &defs, "seeker", Vec2::new(13.0, 6.0), Vec2::Y);
+        run(&mut combat, &defs, &room, 1);
+        assert!(combat.bullets[0].velocity.x < 0.0);
+    }
+
+    #[test]
+    fn homing_speed_matches_unitys_force_and_drag() {
+        // 500 * 0.02 s, mass 1.
+        assert_eq!(homing_acceleration(500.0), 10.0);
+        // Drag 3 keeps 94% per 0.02 s Unity step: over 0.1 s, 0.94^5.
+        assert!((drag_kept(3.0).powi(6) - 0.94f32.powi(5)).abs() < 1e-4);
+        assert_eq!(drag_kept(0.0), 1.0);
+
+        // With nothing to chase a homing bullet only slows: 10 units/s falls
+        // below 1 within a second, where a plain bullet keeps its speed.
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        fire(&mut combat, &defs, "seeker", Vec2::new(2.0, 4.5), Vec2::X);
+        run(&mut combat, &defs, &room, 60);
+        let speed = combat.bullets[0].velocity.length();
+        assert!((speed - 10.0 * 0.94f32.powi(50)).abs() < 0.01, "{speed}");
+
+        // Chasing a far target it settles where push and drag balance. In Unity
+        // that is (v + 0.2) * 0.94 = v, about 3.13 units/s.
+        // A fresh bullet, flown almost to the end of its 2 s.
+        let mut combat = Combat::new();
+        combat.targets.push(target(1, Vec2::new(14.0, 4.5), 1000.0));
+        fire(&mut combat, &defs, "seeker", Vec2::new(2.0, 4.5), Vec2::X);
+        run(&mut combat, &defs, &room, 115);
+        let speed = combat.bullets[0].velocity.length();
+        assert!((speed - 3.13).abs() < 0.05, "{speed}");
     }
 
     #[test]

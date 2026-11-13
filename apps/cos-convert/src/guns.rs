@@ -221,6 +221,15 @@ fn bullet(project: &Project, guid: &str, tables: &mut Tables) -> Result<Option<S
     if script == "HomingBullet" {
         entry.insert("homing".into(), number(body.get("homingPower").f32()));
     }
+    // Only the homing bullets have drag; without it they would never turn, only
+    // drift sideways at full speed.
+    let drag = prefab
+        .component(root, "Rigidbody2D")
+        .map(|body| body.body.get("m_LinearDrag").f32())
+        .unwrap_or(0.0);
+    if drag != 0.0 {
+        entry.insert("drag".into(), number(drag));
+    }
     if script == "EnemyBullet" {
         // An enemy's bullet carries its own damage; a player's takes the gun's.
         entry.insert("enemy_damage".into(), number(body.get("Damage").f32()));
