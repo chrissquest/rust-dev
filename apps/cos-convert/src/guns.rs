@@ -17,6 +17,7 @@ use crate::yaml::{Document, Value};
 
 /// Where the gun prefabs live, relative to the Unity `Assets` folder.
 const GUNS_FOLDER: &str = "Prefabs/Guns";
+const ENEMIES_FOLDER: &str = "Prefabs/Enemies";
 
 pub struct ConvertedGuns {
     pub json: Json,
@@ -110,6 +111,18 @@ pub fn convert(project: &Project) -> Result<ConvertedGuns> {
         }
 
         tables.guns.insert(name, Json::Object(gun));
+    }
+
+    // The bullets ranged enemies fire live in the same table: same format, same
+    // splashes. Their damage is set by the enemy that fires them.
+    for path in project.prefabs_under(ENEMIES_FOLDER)? {
+        let documents = project.documents(&path)?;
+        let prefab = Prefab::new(&documents);
+        if let Some((_, _, body)) = root_script(project, &prefab, &["RangedAI", "RangedAITurret"])
+            && bullet(project, body.get("bulletFab").get("guid").str(), &mut tables)?.is_none()
+        {
+            tables.warnings.push(format!("{}: no usable enemy bullet", path.display()));
+        }
     }
 
     Ok(ConvertedGuns {

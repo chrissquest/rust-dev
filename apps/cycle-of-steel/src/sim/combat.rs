@@ -10,7 +10,7 @@ use crystal_engine::glam::Vec2;
 use super::defs::{BulletId, ChestId, Defs, EffectId, GunDef};
 use super::elemental::Elemental;
 use super::guns::Gun;
-use super::enemy::Enemy;
+use super::enemy::{Enemy, SHOT_CAPACITY, Shot};
 use super::loot::{DROP_CAPACITY, Drop, PICKUP_CAPACITY, Remains, RemainsKind, Spawned, spill};
 use super::rng::Rng;
 use super::room::{Cell, Room};
@@ -159,6 +159,8 @@ pub struct Combat {
     /// The player's laser beam, while it fires.
     pub beam: Option<Beam>,
     pub damage_numbers: Vec<DamageNumber>,
+    /// Bullets enemies fired.
+    pub shots: Vec<Shot>,
 }
 
 impl Combat {
@@ -173,6 +175,7 @@ impl Combat {
             remains: Vec::new(),
             beam: None,
             damage_numbers: Vec::with_capacity(DAMAGE_NUMBER_CAPACITY),
+            shots: Vec::with_capacity(SHOT_CAPACITY),
         }
     }
 
@@ -525,7 +528,7 @@ pub(super) fn drag_kept(drag: f32) -> f32 {
 }
 
 /// Bullets fly over ledges; only walls stop them.
-fn bullet_hits_wall(room: &Room, center: Vec2, half: Vec2) -> bool {
+pub(super) fn bullet_hits_wall(room: &Room, center: Vec2, half: Vec2) -> bool {
     let (min, max) = room.cell_range(center, half);
     (min.1..=max.1).any(|y| (min.0..=max.0).any(|x| room.cell_at(x, y) == Cell::Wall))
 }

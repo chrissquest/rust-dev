@@ -404,9 +404,59 @@ pub struct EnemyFile {
     pub loot: Vec<LootEntryFile>,
     /// One is picked at random for the body it leaves.
     pub dead_sprites: Vec<String>,
-    pub warrior: WarriorFile,
-    /// By name: `run_right`, `attack_up` and so on.
+    /// Its AI: exactly one of these.
+    #[serde(default)]
+    pub warrior: Option<WarriorFile>,
+    #[serde(default)]
+    pub ranged: Option<RangedFile>,
+    #[serde(default)]
+    pub turret: Option<TurretFile>,
+    /// A bite on touch (`BasicAIAttack`), beside its AI.
+    #[serde(default)]
+    pub touch: Option<TouchFile>,
+    /// By name: `idle`, `run_right`, `attack_up` and so on.
+    #[serde(default)]
     pub animations: HashMap<String, AnimationFile>,
+}
+
+/// Unity's `RangedAI`: keeps its distance and shoots at the player.
+#[derive(Clone, Debug, Deserialize)]
+pub struct RangedFile {
+    pub follow_range: f32,
+    pub attack_range: f32,
+    pub move_speed: f32,
+    pub wander_interval: f32,
+    pub fire_interval: f32,
+    pub damage: f32,
+    pub spotting_length: f32,
+    /// A key of `guns.json`'s bullets.
+    pub bullet: String,
+}
+
+/// Unity's `RangedAITurret`: fires from every muzzle at once while the player is near.
+#[derive(Clone, Debug, Deserialize)]
+pub struct TurretFile {
+    pub attack_range: f32,
+    pub fire_interval: f32,
+    pub damage: f32,
+    pub bullet: String,
+    pub muzzles: Vec<MuzzleFile>,
+}
+
+/// Where a turret's shot starts, from its position, and which way it flies.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct MuzzleFile {
+    pub offset: [f32; 2],
+    /// Degrees counter-clockwise from the right.
+    pub angle: f32,
+}
+
+/// Unity's `BasicAIAttack`: hurts the player touching its box, at most every cooldown.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct TouchFile {
+    pub damage: f32,
+    pub damage_cooldown: f32,
+    pub reach: OffsetBoxFile,
 }
 
 /// A box relative to its owner's position, in world units.

@@ -390,6 +390,96 @@
       "rect": [0, 0, 256, 256],
       "texture": "controls_1"
     },
+    "crab_0": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [32, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_10": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_11": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [352, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_12": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [384, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [96, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_4": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [160, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_7": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [224, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_8": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_9": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [288, 0, 32, 32],
+      "texture": "crab"
+    },
+    "crab_dead_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "crab_dead_1"
+    },
+    "crab_dead_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "crab_dead_2"
+    },
     "dark_compound_2_0": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
@@ -1931,6 +2021,12 @@
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 16, 16],
       "texture": "missile_1"
+    },
+    "multi-turret_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "multi-turret_1"
     },
     "partiallyFormedOnRack": {
       "pivot": [0.5, 0.5],

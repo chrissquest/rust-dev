@@ -265,9 +265,9 @@ impl View {
         }
         for enemy in &defs.enemies {
             let idle = view.sprite(renderer, &enemy.sprite)?;
-            let mut animations: [Vec<ResolvedSprite>; 8] = Default::default();
+            let mut animations: [Vec<ResolvedSprite>; 9] = Default::default();
             for (frames, animation) in animations.iter_mut().zip(&enemy.animations) {
-                for frame in &animation.frames {
+                for frame in animation.iter().flat_map(|animation| &animation.frames) {
                     frames.push(view.sprite(renderer, frame)?);
                 }
             }
@@ -541,6 +541,16 @@ impl View {
                 self.list.sprite(sprite.texture, placed);
             }
         }
+        for shot in &world.combat.shots {
+            let def = world.defs.bullet(shot.def);
+            if let Some(sprite) = &self.bullet_sprites[shot.def.0 as usize] {
+                let position = shot.previous_position.lerp(shot.position, blend);
+                let placed = sprite
+                    .placed(position.extend(Z_BULLETS), def.scale, shot.rotation, [false, false])
+                    .with_color(srgb_to_linear(def.color));
+                self.list.sprite(sprite.texture, placed);
+            }
+        }
         if let (Some(beam), Some(gun)) = (&world.combat.beam, world.current_gun()) {
             // The beam leaves the gun, so it moves with the blended player.
             let origin = beam.origin + (player_position - world.player.position);
@@ -629,7 +639,7 @@ impl View {
             let sprite = match enemy.animation {
                 Some((animation, started)) => {
                     let frames = &sprites.animations[animation.index()];
-                    let fps = def.animations[animation.index()].fps as f64;
+                    let fps = def.animations[animation.index()].as_ref().map_or(1.0, |animation| animation.fps as f64);
                     let frame = ((now - started).max(0.0) * fps) as usize % frames.len().max(1);
                     frames.get(frame).unwrap_or(&sprites.idle)
                 }
@@ -869,7 +879,7 @@ struct SpriteGroup {
 struct EnemySprites {
     idle: ResolvedSprite,
     /// Indexed by `Animation::index`.
-    animations: [Vec<ResolvedSprite>; 8],
+    animations: [Vec<ResolvedSprite>; 9],
     bodies: Vec<ResolvedSprite>,
 }
 

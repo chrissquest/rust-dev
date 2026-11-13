@@ -1,5 +1,42 @@
 {
   "enemies": {
+    "Crab": {
+      "animations": {
+        "idle": {
+          "fps": 12.0,
+          "frames": ["crab_0", "crab_1", "crab_2", "crab_3", "crab_4", "crab_5", "crab_6", "crab_7", "crab_8", "crab_9", "crab_10", "crab_11", "crab_12"]
+        }
+      },
+      "color": [0.9717, 0.7563, 0.7563, 1.0],
+      "dead_sprites": ["crab_dead_1", "crab_dead_2"],
+      "drag": 15.0,
+      "freezable": true,
+      "loot": [
+        {
+          "drop": "Data Drop",
+          "weight": 30.0
+        },
+        {
+          "drop": "Health Drop",
+          "weight": 10.0
+        }
+      ],
+      "mass": 1.0,
+      "max_health": 200.0,
+      "offset": [0.0, 0.0],
+      "ranged": {
+        "attack_range": 2.5,
+        "bullet": "Enemy Bullet",
+        "damage": 50.0,
+        "fire_interval": 1.0,
+        "follow_range": 50.0,
+        "move_speed": 1000.0,
+        "spotting_length": 5.0,
+        "wander_interval": 0.25
+      },
+      "size": [0.2, 0.5],
+      "sprite": "crab_0"
+    },
     "EnemyTank": {
       "animations": {
         "attack_down": {
@@ -169,6 +206,67 @@
           }
         },
         "wander_interval": 0.25
+      }
+    },
+    "multi-turret_1": {
+      "animations": {},
+      "dead_sprites": [],
+      "drag": 35.0,
+      "freezable": false,
+      "loot": [
+        {
+          "drop": "Data Drop 2",
+          "weight": 30.0
+        },
+        {
+          "drop": "Health Drop",
+          "weight": 10.0
+        }
+      ],
+      "mass": 1.0,
+      "max_health": 500.0,
+      "offset": [-0.0017, -0.0074],
+      "size": [0.5183, 0.5379],
+      "sprite": "multi-turret_1",
+      "turret": {
+        "attack_range": 3.0,
+        "bullet": "Enemy Bullet",
+        "damage": 50.0,
+        "fire_interval": 1.3,
+        "muzzles": [
+          {
+            "angle": 0.0,
+            "offset": [0.218, 0.0]
+          },
+          {
+            "angle": 135.0,
+            "offset": [-0.209, 0.206]
+          },
+          {
+            "angle": 90.0,
+            "offset": [0.002, 0.216]
+          },
+          {
+            "angle": 180.0,
+            "offset": [-0.219, -0.002]
+          },
+          {
+            "angle": -45.0,
+            "offset": [0.206, -0.198]
+          },
+          {
+            "angle": -90.0,
+            "offset": [0.002, -0.216]
+          },
+          {
+            "angle": -135.0,
+            "offset": [-0.209, -0.197]
+          },
+          {
+            "angle": 45.0,
+            "offset": [0.212, 0.199]
+          }
+        ]
       }
     }
   }

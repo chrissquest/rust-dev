@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (piece 1 of 5 done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (pieces 1 and 2a done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -51,7 +51,8 @@ for the UI pass: chests' health bars.
 
 Step 4, enemies, is split into five pieces, agreed with the owner: (1) enemy
 basics and the Warrior, (2) ranged enemies (Crab, the turret, LASERCrab) and their
-shots hurting the player, (3) dashers (Drone and the dashing AI), (4) explosions
+shots hurting the player (done as 2a, Crab and turret; 2b is LASERCrab's
+sweeping beam), (3) dashers (Drone and the dashing AI), (4) explosions
 hurting the player and enemies walking into them, plus EffectGrate, (5) the boss
 (Priest) and its bar.
 
@@ -63,7 +64,11 @@ invulnerability; at 0 health the player restarts the room (placeholder). The hub
 gun room has a practice EnemyTank, so homing shots fired from the spawn chase it.
 Not yet: enemies and player pushing each other, door barriers, hurt flash.
 
-**Next: step 4 piece 2, ranged enemies.** Convert each new kind of data in
+Piece 2a is done: `Ai::Ranged` (Crab) and `Ai::Turret` in `sim/enemy.rs`, bites
+on touch (`TouchDef`, Unity's `BasicAIAttack`), and enemy bullets
+(`Combat::shots`, `enemy::step_shots`), defined in `guns.json` beside the players'.
+
+**Next: step 4 piece 2b, the LASERCrab** (`RangedAI_Laser.cs`'s sweeping beam). Convert each new kind of data in
 `cos-convert` when the step needs it, not before.
 
 ### How to work here

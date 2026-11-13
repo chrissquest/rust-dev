@@ -284,7 +284,9 @@ impl World {
             }
         }
 
-        enemy::step_enemies(&mut self.combat.targets, &defs, &self.room, &mut self.player, now, &mut self.rng);
+        let combat = &mut self.combat;
+        enemy::step_enemies(&mut combat.targets, &mut combat.shots, &defs, &self.room, &mut self.player, now, &mut self.rng);
+        enemy::step_shots(&mut combat.shots, &mut combat.effects, &defs, &self.room, &mut self.player, now);
         self.combat.step(&defs, &self.room, self.player.position, now, &mut self.rng);
         if self.player.health <= 0.0 {
             // Placeholder until the full loop (step 7): Unity's `PlayerData.Die`

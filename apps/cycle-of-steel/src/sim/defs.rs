@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::data::{
     AnimationFile, BulletFile, DropKind, EffectFile, EnemiesFile, ExplosionFile, GunFile, GunKind, GunsFile,
-    LootEntryFile, LootFile, OffsetBoxFile, ShakeFile,
+    LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -41,12 +41,15 @@ pub enum Direction {
 /// What an enemy's Animator can be playing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Animation {
+    /// The controller the Animator starts with, if it has one.
+    Idle,
     Run(Direction),
     Attack(Direction),
 }
 
 impl Animation {
-    pub const ALL: [Animation; 8] = [
+    pub const ALL: [Animation; 9] = [
+        Animation::Idle,
         Animation::Run(Direction::Right),
         Animation::Run(Direction::Left),
         Animation::Run(Direction::Up),
@@ -65,6 +68,7 @@ impl Animation {
     /// Its key in `enemies.json`. Unity calls running up "back" and down "front".
     fn key(self) -> &'static str {
         match self {
+            Animation::Idle => "idle",
             Animation::Run(Direction::Right) => "run_right",
             Animation::Run(Direction::Left) => "run_left",
             Animation::Run(Direction::Up) => "run_back",
@@ -104,6 +108,42 @@ pub struct WarriorDef {
 }
 
 #[derive(Clone, Debug)]
+pub struct RangedDef {
+    pub follow_range: f32,
+    pub attack_range: f32,
+    pub move_speed: f32,
+    pub wander_interval: f32,
+    pub fire_interval: f32,
+    pub damage: f32,
+    pub spotting_length: f32,
+    pub bullet: BulletId,
+}
+
+#[derive(Clone, Debug)]
+pub struct TurretDef {
+    pub attack_range: f32,
+    pub fire_interval: f32,
+    pub damage: f32,
+    pub bullet: BulletId,
+    pub muzzles: Vec<MuzzleFile>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TouchDef {
+    pub damage: f32,
+    pub damage_cooldown: f32,
+    pub reach: OffsetBox,
+}
+
+/// How an enemy behaves: one of Unity's AI scripts.
+#[derive(Clone, Debug)]
+pub enum Ai {
+    Warrior(WarriorDef),
+    Ranged(RangedDef),
+    Turret(TurretDef),
+}
+
+#[derive(Clone, Debug)]
 pub struct EnemyDef {
     pub name: String,
     pub max_health: f32,
@@ -118,9 +158,10 @@ pub struct EnemyDef {
     pub freezable: bool,
     pub loot: Vec<LootEntry>,
     pub dead_sprites: Vec<String>,
-    pub warrior: WarriorDef,
-    /// Indexed by [`Animation::index`].
-    pub animations: [AnimationFile; 8],
+    pub ai: Ai,
+    pub touch: Option<TouchDef>,
+    /// Indexed by [`Animation::index`]; `None` where it has no such animation.
+    pub animations: [Option<AnimationFile>; 9],
 }
 
 #[derive(Clone, Debug)]
@@ -234,6 +275,7 @@ pub struct Defs {
     pub drops: Vec<DropDef>,
     pub enemies: Vec<EnemyDef>,
     gun_by_name: HashMap<String, GunId>,
+    bullet_by_name: HashMap<String, BulletId>,
     enemy_by_name: HashMap<String, EnemyId>,
     /// Loot pools by name, for enemies' loot to name them too.
     pool_by_name: HashMap<String, PoolId>,
@@ -266,6 +308,7 @@ impl Defs {
             .enumerate()
             .map(|(index, name)| (name.as_str(), BulletId(index as u16)))
             .collect();
+        defs.bullet_by_name = bullet_ids.iter().map(|(name, id)| (name.to_string(), *id)).collect();
         for name in &bullet_names {
             let BulletFile { sprite, color, scale, size, time_to_live, piercing, effect, homing, drag, freeze } =
                 file.bullets[*name].clone();
@@ -405,17 +448,57 @@ impl Defs {
                 .map(|entry| self.loot_entry(entry, Some(&pools)))
                 .collect::<Result<Vec<_>>>()
                 .with_context(|| format!("in enemy `{name}`"))?;
-            let warrior = &enemy.warrior;
-            let swing = |key: &str| -> Result<OffsetBox> {
-                Ok((*warrior.swings.get(key).with_context(|| format!("enemy `{name}` has no `{key}` swing"))?).into())
+            let bullet = |name: &str| -> Result<BulletId> {
+                self.bullet_by_name.get(name).copied().with_context(|| format!("enemy fires unknown bullet `{name}`"))
             };
-            let animation = |animation: Animation| -> Result<AnimationFile> {
-                let file = enemy
-                    .animations
-                    .get(animation.key())
-                    .with_context(|| format!("enemy `{name}` has no `{}` animation", animation.key()))?;
-                anyhow::ensure!(!file.frames.is_empty() && file.fps > 0.0, "enemy `{name}`: `{}` is empty", animation.key());
-                Ok(file.clone())
+            let mut animations: [Option<AnimationFile>; 9] = Default::default();
+            for (slot, animation) in animations.iter_mut().zip(Animation::ALL) {
+                if let Some(file) = enemy.animations.get(animation.key()) {
+                    anyhow::ensure!(!file.frames.is_empty() && file.fps > 0.0, "enemy `{name}`: `{}` is empty", animation.key());
+                    *slot = Some(file.clone());
+                }
+            }
+            let ai = match (&enemy.warrior, &enemy.ranged, &enemy.turret) {
+                (Some(warrior), None, None) => {
+                    let swing = |key: &str| -> Result<OffsetBox> {
+                        Ok((*warrior.swings.get(key).with_context(|| format!("enemy `{name}` has no `{key}` swing"))?).into())
+                    };
+                    for animation in &Animation::ALL[1..] {
+                        anyhow::ensure!(
+                            animations[animation.index()].is_some(),
+                            "enemy `{name}` has no `{}` animation",
+                            animation.key()
+                        );
+                    }
+                    Ai::Warrior(WarriorDef {
+                        spotting_length: warrior.spotting_length,
+                        follow_range: warrior.follow_range,
+                        move_speed: warrior.move_speed,
+                        wander_interval: warrior.wander_interval,
+                        damage: warrior.damage,
+                        damage_cooldown: warrior.damage_cooldown,
+                        reach: warrior.reach.into(),
+                        swings: [swing("right")?, swing("left")?, swing("up")?, swing("down")?],
+                    })
+                }
+                (None, Some(ranged), None) => Ai::Ranged(RangedDef {
+                    follow_range: ranged.follow_range,
+                    attack_range: ranged.attack_range,
+                    move_speed: ranged.move_speed,
+                    wander_interval: ranged.wander_interval,
+                    fire_interval: ranged.fire_interval,
+                    damage: ranged.damage,
+                    spotting_length: ranged.spotting_length,
+                    bullet: bullet(&ranged.bullet)?,
+                }),
+                (None, None, Some(turret)) => Ai::Turret(TurretDef {
+                    attack_range: turret.attack_range,
+                    fire_interval: turret.fire_interval,
+                    damage: turret.damage,
+                    bullet: bullet(&turret.bullet)?,
+                    muzzles: turret.muzzles.clone(),
+                }),
+                _ => anyhow::bail!("enemy `{name}` must have exactly one AI"),
             };
             self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
             self.enemies.push(EnemyDef {
@@ -431,26 +514,13 @@ impl Defs {
                 freezable: enemy.freezable,
                 loot,
                 dead_sprites: enemy.dead_sprites.clone(),
-                warrior: WarriorDef {
-                    spotting_length: warrior.spotting_length,
-                    follow_range: warrior.follow_range,
-                    move_speed: warrior.move_speed,
-                    wander_interval: warrior.wander_interval,
-                    damage: warrior.damage,
-                    damage_cooldown: warrior.damage_cooldown,
-                    reach: warrior.reach.into(),
-                    swings: [swing("right")?, swing("left")?, swing("up")?, swing("down")?],
-                },
-                animations: [
-                    animation(Animation::ALL[0])?,
-                    animation(Animation::ALL[1])?,
-                    animation(Animation::ALL[2])?,
-                    animation(Animation::ALL[3])?,
-                    animation(Animation::ALL[4])?,
-                    animation(Animation::ALL[5])?,
-                    animation(Animation::ALL[6])?,
-                    animation(Animation::ALL[7])?,
-                ],
+                ai,
+                touch: enemy.touch.map(|touch| TouchDef {
+                    damage: touch.damage,
+                    damage_cooldown: touch.damage_cooldown,
+                    reach: touch.reach.into(),
+                }),
+                animations,
             });
         }
         Ok(self)
@@ -558,7 +628,22 @@ pub(crate) mod tests {
                   "run_back": {"fps": 12, "frames": ["rb0"]}, "run_front": {"fps": 12, "frames": ["rf0"]},
                   "attack_right": {"fps": 12, "frames": ["ar0"]}, "attack_left": {"fps": 12, "frames": ["al0"]},
                   "attack_up": {"fps": 12, "frames": ["au0"]}, "attack_down": {"fps": 12, "frames": ["ad0"]}}
-            }}}"#,
+              },
+              "shooter": {
+                "max_health": 200, "sprite": "crab", "size": [0.2, 0.5], "mass": 1, "drag": 15, "freezable": true,
+                "loot": [], "dead_sprites": ["crab_dead"],
+                "ranged": {"follow_range": 50, "attack_range": 2.5, "move_speed": 1000, "wander_interval": 0.25,
+                           "fire_interval": 1, "damage": 50, "spotting_length": 5, "bullet": "round"},
+                "touch": {"damage": 100, "damage_cooldown": 1.5, "reach": {"size": [0.225, 0.52]}},
+                "animations": {"idle": {"fps": 12, "frames": ["c0", "c1", "c2"]}}
+              },
+              "turret": {
+                "max_health": 500, "sprite": "turret", "size": [0.52, 0.54], "mass": 1, "drag": 35, "freezable": false,
+                "loot": [], "dead_sprites": [],
+                "turret": {"attack_range": 3, "fire_interval": 1.3, "damage": 50, "bullet": "round",
+                           "muzzles": [{"offset": [0.218, 0], "angle": 0}, {"offset": [0, 0.216], "angle": 90}]}
+              }
+            }}"#,
         )
         .unwrap();
         test_gun_defs().with_loot(&loot).unwrap().with_enemies(&enemies).unwrap()

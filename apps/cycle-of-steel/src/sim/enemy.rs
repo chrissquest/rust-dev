@@ -1,7 +1,21 @@
-//! Enemies: Unity's `Warrior` AI, which both the Warrior and the EnemyTank run.
+//! Enemies and the shots they fire.
 //!
 //! An enemy is a [`Target`] with an [`Enemy`] attached: bullets, beams and blasts
-//! find it like any target, and this module moves it and lets it swing.
+//! find it like any target, and this module moves it and lets it fight. Each runs
+//! one of Unity's AI scripts:
+//!
+//! - `Warrior` (the Warrior and the EnemyTank), below.
+//! - `RangedAI` (the Crab): wanders, follows the player once it has seen them,
+//!   and inside `attackRange` stands and fires a bullet at them every
+//!   `fireInterval`. Its push is scaled by the frame time, so unlike the
+//!   Warrior's its speed does not depend on Unity's frame rate.
+//! - `RangedAITurret`: never moves by itself; while the player is within
+//!   `attackRange` it fires from every muzzle at once every `fireInterval`, sight
+//!   or no sight.
+//!
+//! Some also bite whoever touches them (`BasicAIAttack`). Their shots
+//! (`EnemyBullet`) fly straight, hurt the player and stop on them or on a wall,
+//! leaving a splash; they fly over ledges and through enemies and chests.
 //!
 //! The warrior wanders, picking a new direction every `wanderInterval`. Once the
 //! player is within `followRange` and in plain sight it follows them for
@@ -13,8 +27,10 @@ use crystal_engine::glam::Vec2;
 
 use super::DT;
 use super::collide::move_box;
-use super::combat::{Target, UNITY_STEP, boxes_overlap, drag_kept, ray_hits_box};
-use super::defs::{Animation, Defs, Direction, EnemyDef, EnemyId, OffsetBox};
+use super::combat::{Effect, Target, UNITY_STEP, boxes_overlap, bullet_hits_wall, drag_kept, ray_hits_box};
+use super::defs::{
+    Ai, Animation, BulletId, Defs, Direction, EnemyDef, EnemyId, OffsetBox, RangedDef, TouchDef, TurretDef, WarriorDef,
+};
 use super::player::{self, Player};
 use super::rng::Rng;
 use super::room::{CAMERA_BLOCK, Room};
@@ -32,6 +48,25 @@ const SWING_WINDUP: f64 = 0.5;
 const SWING_HITTING: f64 = 0.4;
 /// Running animations change only above this speed (`Warrior.Update`).
 const ANIMATION_SPEED: f32 = 0.2;
+/// `RangedAI.Attack` sets its bullet's speed to this.
+const RANGED_SHOT_SPEED: f32 = 3.0;
+/// `RangedAITurret.Attack` sets each bullet's velocity to its muzzle's unit `right`.
+const TURRET_SHOT_SPEED: f32 = 1.0;
+/// Room for this many enemy shots before the oldest makes way.
+pub const SHOT_CAPACITY: usize = 256;
+
+/// A bullet an enemy fired (`EnemyBullet`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Shot {
+    pub def: BulletId,
+    pub position: Vec2,
+    pub previous_position: Vec2,
+    pub velocity: Vec2,
+    /// Which way the sprite points, counter-clockwise radians.
+    pub rotation: f32,
+    pub time_left: f32,
+    pub damage: f32,
+}
 
 /// An enemy's state beside its [`Target`].
 #[derive(Clone, Debug, PartialEq)]
@@ -49,6 +84,8 @@ pub struct Enemy {
     last_wander: f64,
     last_swing: f64,
     hitting_until: f64,
+    last_fire: f64,
+    last_touch: f64,
     /// The swing in progress: its direction and when it started.
     pub swing: Option<(Direction, f64)>,
     /// What its Animator plays and since when. `None` until it first moves.
@@ -70,6 +107,8 @@ impl Enemy {
             last_wander: f64::NEG_INFINITY,
             last_swing: f64::NEG_INFINITY,
             hitting_until: f64::NEG_INFINITY,
+            last_fire: f64::NEG_INFINITY,
+            last_touch: f64::NEG_INFINITY,
             swing: None,
             animation: None,
         }
@@ -87,13 +126,18 @@ impl Enemy {
 /// A target that is an enemy, standing at `origin`.
 pub fn spawn(defs: &Defs, enemy: EnemyId, origin: Vec2, id: u32) -> Target {
     let def = defs.enemy(enemy);
+    let mut state = Enemy::new(enemy, def.mass, origin);
+    // An Animator given a controller in the prefab plays it from the start.
+    if def.animations[Animation::Idle.index()].is_some() {
+        state.animation = Some((Animation::Idle, 0.0));
+    }
     Target {
         id,
         position: origin + Vec2::from(def.offset),
         half: Vec2::from(def.half),
         origin,
         chest: None,
-        enemy: Some(Enemy::new(enemy, def.mass, origin)),
+        enemy: Some(state),
         health: def.max_health,
         max_health: def.max_health,
         last_hit: f64::NEG_INFINITY,
@@ -101,29 +145,196 @@ pub fn spawn(defs: &Defs, enemy: EnemyId, origin: Vec2, id: u32) -> Target {
     }
 }
 
-/// One step of every enemy among `targets`: think, swing, move.
-pub fn step_enemies(targets: &mut [Target], defs: &Defs, room: &Room, player: &mut Player, now: f64, rng: &mut Rng) {
+/// One step of every enemy among `targets`: think, fight, move. Shots fired go
+/// into `shots`.
+#[allow(clippy::too_many_arguments)]
+pub fn step_enemies(
+    targets: &mut [Target],
+    shots: &mut Vec<Shot>,
+    defs: &Defs,
+    room: &Room,
+    player: &mut Player,
+    now: f64,
+    rng: &mut Rng,
+) {
     for index in 0..targets.len() {
         let Some(enemy) = &targets[index].enemy else {
             continue;
         };
         let def = defs.enemy(enemy.def);
-        let force = think(targets, index, def, room, player.position, now, rng);
-        swing(&mut targets[index], def, player, now);
-        move_enemy(targets, index, def, room, force);
+        let push = match &def.ai {
+            Ai::Warrior(warrior) => {
+                let heading = think(targets, index, warrior, room, player.position, now, rng);
+                swing(&mut targets[index], warrior, player, now);
+                heading * warrior_acceleration(warrior, def)
+            }
+            Ai::Ranged(ranged) => {
+                let heading = think_ranged(targets, index, ranged, defs, room, player.position, now, rng, shots);
+                heading * ranged_acceleration(ranged, def)
+            }
+            Ai::Turret(turret) => {
+                fire_turret(&mut targets[index], turret, defs, player.position, now, shots);
+                Vec2::ZERO
+            }
+        };
+        if let Some(touch) = def.touch {
+            bite(&mut targets[index], touch, player, now);
+        }
+        move_enemy(targets, index, def, room, push);
+    }
+}
+
+/// Moves enemy shots and resolves what they hit (`EnemyBullet`): the player is
+/// hurt (if not just hurt) and the shot ends there; a wall ends it too. Either
+/// way it leaves its splash in its own colour.
+pub fn step_shots(
+    shots: &mut Vec<Shot>,
+    effects: &mut Vec<Effect>,
+    defs: &Defs,
+    room: &Room,
+    player: &mut Player,
+    now: f64,
+) {
+    shots.retain_mut(|shot| {
+        let def = defs.bullet(shot.def);
+        shot.previous_position = shot.position;
+        shot.position += shot.velocity * DT;
+        shot.time_left -= DT;
+        let half = Vec2::from(def.half);
+        let hit_player = boxes_overlap(shot.position, half, player.position, player::HALF_SIZE);
+        if hit_player {
+            player.hurt(shot.damage, now);
+        }
+        if hit_player || bullet_hits_wall(room, shot.position, half) {
+            if let Some(effect) = def.effect {
+                if effects.len() == effects.capacity() {
+                    effects.remove(0);
+                }
+                effects.push(Effect {
+                    def: effect,
+                    position: shot.position,
+                    rotation: shot.rotation,
+                    color: def.color,
+                    time_left: defs.effect(effect).time_to_live,
+                });
+            }
+            return false;
+        }
+        shot.time_left > 0.0
+    });
+}
+
+fn fire(shots: &mut Vec<Shot>, defs: &Defs, bullet: BulletId, position: Vec2, velocity: Vec2, rotation: f32, damage: f32) {
+    if shots.len() == shots.capacity() {
+        shots.remove(0);
+    }
+    shots.push(Shot {
+        def: bullet,
+        position,
+        previous_position: position,
+        velocity,
+        rotation,
+        time_left: defs.bullet(bullet).time_to_live,
+        damage,
+    });
+}
+
+/// `RangedAI.Update`: the direction it pushes in this step, if any, firing as it
+/// decides to. It acts only while the player is in its screen-sized block.
+#[allow(clippy::too_many_arguments)]
+fn think_ranged(
+    targets: &mut [Target],
+    index: usize,
+    ai: &RangedDef,
+    defs: &Defs,
+    room: &Room,
+    player: Vec2,
+    now: f64,
+    rng: &mut Rng,
+    shots: &mut Vec<Shot>,
+) -> Vec2 {
+    let origin = targets[index].origin;
+    if block_of(origin) != block_of(player) {
+        return Vec2::ZERO;
+    }
+    let distance = origin.distance(player);
+    let (in_attack, in_follow) = (distance < ai.attack_range, distance < ai.follow_range);
+    let spotting = targets[index].enemy.as_ref().expect("an enemy").spotting_timer;
+    let attacking = in_attack && spotting > 0.0;
+    let following = !attacking && in_follow && spotting > 0.0;
+    // Wandering looks only when the player is near; the other two always look.
+    let seen = (attacking || following || in_attack || in_follow) && in_sight(targets, index, room, player);
+
+    let enemy = targets[index].enemy.as_mut().expect("an enemy");
+    let push = if attacking {
+        if now - enemy.last_fire > (ai.fire_interval / DIFFICULTY) as f64 {
+            // `Attack`: straight at the player, the sprite turned to face back.
+            let direction = (player - origin).normalize_or_zero();
+            fire(shots, defs, ai.bullet, origin, direction * RANGED_SHOT_SPEED, (-direction).to_angle(), ai.damage);
+            enemy.last_fire = now;
+        }
+        Vec2::ZERO
+    } else if following {
+        enemy.heading = player - origin;
+        enemy.heading.normalize_or_zero()
+    } else {
+        if now - enemy.last_wander > ai.wander_interval as f64 {
+            let mut pick = || (rng.unit() * 3.0).floor().min(2.0) - 1.0;
+            enemy.heading = Vec2::new(pick(), pick());
+            enemy.last_wander = now;
+        }
+        enemy.heading.normalize_or_zero()
+    };
+    if seen {
+        enemy.spotting_timer = ai.spotting_length;
+    }
+    if attacking || following {
+        enemy.spotting_timer -= DT;
+    }
+    push
+}
+
+/// `RangedAITurret.Update`: every muzzle fires at once while the player is near.
+fn fire_turret(target: &mut Target, ai: &TurretDef, defs: &Defs, player: Vec2, now: f64, shots: &mut Vec<Shot>) {
+    let origin = target.origin;
+    let enemy = target.enemy.as_mut().expect("an enemy");
+    if block_of(origin) != block_of(player)
+        || origin.distance(player) >= ai.attack_range
+        || now - enemy.last_fire <= (ai.fire_interval / DIFFICULTY) as f64
+    {
+        return;
+    }
+    for muzzle in &ai.muzzles {
+        let angle = muzzle.angle.to_radians();
+        // The bullet keeps its muzzle's rotation, so its sprite is not turned round
+        // as the Crab's is.
+        let velocity = Vec2::from_angle(angle) * TURRET_SHOT_SPEED;
+        fire(shots, defs, ai.bullet, origin + Vec2::from(muzzle.offset), velocity, angle, ai.damage);
+    }
+    enemy.last_fire = now;
+}
+
+/// `BasicAIAttack.OnTriggerStay2D`: touching the box hurts, at most every
+/// cooldown. The cooldown restarts even when the player was still invulnerable.
+fn bite(target: &mut Target, touch: TouchDef, player: &mut Player, now: f64) {
+    let origin = target.origin;
+    let enemy = target.enemy.as_mut().expect("an enemy");
+    if touches(origin, touch.reach, player.position) && now - enemy.last_touch > touch.damage_cooldown as f64 {
+        player.hurt(touch.damage, now);
+        enemy.last_touch = now;
     }
 }
 
 /// `Warrior.Update`: the direction it pushes in this step, if any. It acts only
 /// while the player is in the same screen-sized block of the world.
-fn think(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room, player: Vec2, now: f64, rng: &mut Rng) -> Vec2 {
+#[allow(clippy::too_many_arguments)]
+fn think(targets: &mut [Target], index: usize, warrior: &WarriorDef, room: &Room, player: Vec2, now: f64, rng: &mut Rng) -> Vec2 {
     let origin = targets[index].origin;
     let in_sight = |targets: &[Target]| in_sight(targets, index, room, player);
     let enemy = targets[index].enemy.as_ref().expect("an enemy");
     if block_of(origin) != block_of(player) || enemy.swing.is_some() {
         return Vec2::ZERO;
     }
-    let warrior = &def.warrior;
     let in_range = origin.distance(player) < warrior.follow_range;
     let following = in_range && enemy.spotting_timer > 0.0;
     let seen = in_range && in_sight(targets);
@@ -177,8 +388,7 @@ fn in_sight(targets: &[Target], index: usize, room: &Room, player: Vec2) -> bool
 /// from an axis; a heading exactly diagonal or zero (both common while
 /// wandering) picks none, and the warrior then stands frozen for good. Here such
 /// a swing is aimed at the player instead.
-fn swing(target: &mut Target, def: &EnemyDef, player: &mut Player, now: f64) {
-    let warrior = &def.warrior;
+fn swing(target: &mut Target, warrior: &WarriorDef, player: &mut Player, now: f64) {
     let origin = target.origin;
     let enemy = target.enemy.as_mut().expect("an enemy");
 
@@ -207,9 +417,9 @@ fn swing(target: &mut Target, def: &EnemyDef, player: &mut Player, now: f64) {
     }
 }
 
-/// Pushes the enemy by `force` (a unit direction or zero), applies drag, and
-/// moves it through the room. Walls and ledges stop it, and so do chests.
-fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room, force: Vec2) {
+/// Pushes the enemy with acceleration `push`, applies drag, and moves it through
+/// the room. Walls and ledges stop it, and so do chests.
+fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room, push: Vec2) {
     let (before, after) = targets.split_at_mut(index);
     let (target, after) = after.split_first_mut().expect("index is in range");
     let solids = before
@@ -221,7 +431,7 @@ fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room,
     let enemy = target.enemy.as_mut().expect("an enemy");
 
     enemy.previous_origin = target.origin;
-    enemy.velocity += force * push_acceleration(def) * DT;
+    enemy.velocity += push * DT;
     enemy.velocity *= drag_kept(def.drag + added_drag);
     let half = Vec2::from(def.half);
     let center = target.origin + Vec2::from(def.offset);
@@ -236,10 +446,17 @@ fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room,
     target.origin = moved.position - Vec2::from(def.offset);
 }
 
-/// Units/s^2 from Unity's per-frame push of `moveSpeed * difficulty` on its mass,
-/// summed over each 0.02 s physics step.
-fn push_acceleration(def: &EnemyDef) -> f32 {
-    def.warrior.move_speed * DIFFICULTY * UNITY_FRAME_RATE * UNITY_STEP / def.mass
+/// Units/s^2 from the Warrior's per-frame push of `moveSpeed * difficulty` on
+/// its mass, summed over each 0.02 s physics step.
+fn warrior_acceleration(warrior: &WarriorDef, def: &EnemyDef) -> f32 {
+    warrior.move_speed * DIFFICULTY * UNITY_FRAME_RATE * UNITY_STEP / def.mass
+}
+
+/// Units/s^2 from `RangedAI`'s push of `moveSpeed * deltaTime` each frame: summed
+/// over a 0.02 s physics step that is `moveSpeed * 0.02`, whatever the frame
+/// rate. The Crab's 1000 against its drag of 15 tops out near 0.93 units/s.
+fn ranged_acceleration(ranged: &RangedDef, def: &EnemyDef) -> f32 {
+    ranged.move_speed * UNITY_STEP / def.mass
 }
 
 /// Whether the player's box overlaps a box placed relative to `origin`.
@@ -291,11 +508,74 @@ mod tests {
         spawn(defs, defs.enemy_named("brute").unwrap(), origin, 0)
     }
 
-    fn run(targets: &mut [Target], defs: &Defs, room: &Room, player: &mut Player, steps: u32) {
+    fn run(targets: &mut [Target], defs: &Defs, room: &Room, player: &mut Player, steps: u32) -> Vec<Shot> {
         let mut rng = Rng::new(5);
+        let mut shots = Vec::with_capacity(SHOT_CAPACITY);
+        let mut effects = Vec::with_capacity(8);
         for tick in 0..steps {
-            step_enemies(targets, defs, room, player, tick as f64 * DT as f64, &mut rng);
+            let now = tick as f64 * DT as f64;
+            step_enemies(targets, &mut shots, defs, room, player, now, &mut rng);
+            step_shots(&mut shots, &mut effects, defs, room, player, now);
         }
+        shots
+    }
+
+    #[test]
+    fn a_crab_closes_in_then_stands_and_shoots() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut player = Player::new(Vec2::new(4.0, 3.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("shooter").unwrap(), Vec2::new(10.0, 3.0), 0)];
+        run(&mut targets, &defs, &room, &mut player, 60 * 10);
+        let distance = targets[0].origin.distance(player.position);
+        assert!(distance < 2.6, "it came within its attack range: {distance}");
+        assert!(player.health < player::MAX_HEALTH, "and its shots landed: {}", player.health);
+        assert!(matches!(targets[0].enemy.as_ref().unwrap().animation, Some((Animation::Idle, _))));
+    }
+
+    #[test]
+    fn a_crab_that_never_sees_the_player_only_wanders() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        // Out of its block: it does nothing at all.
+        let mut player = Player::new(Vec2::new(20.0, 3.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("shooter").unwrap(), Vec2::new(10.0, 3.0), 0)];
+        let shots = run(&mut targets, &defs, &room, &mut player, 120);
+        assert!(shots.is_empty());
+        assert_eq!(targets[0].origin, Vec2::new(10.0, 3.0));
+    }
+
+    #[test]
+    fn a_turret_fires_every_muzzle_only_while_the_player_is_near() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut far = Player::new(Vec2::new(8.0, 3.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("turret").unwrap(), Vec2::new(4.0, 3.0), 0)];
+        assert!(run(&mut targets, &defs, &room, &mut far, 120).is_empty(), "4 units is beyond its 3");
+
+        let mut near = Player::new(Vec2::new(4.0, 5.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("turret").unwrap(), Vec2::new(4.0, 3.0), 0)];
+        let shots = run(&mut targets, &defs, &room, &mut near, 1);
+        assert_eq!(shots.len(), 2, "one per muzzle");
+        assert_eq!(shots[0].velocity, Vec2::new(1.0, 0.0));
+        assert!((shots[1].velocity - Vec2::new(0.0, 1.0)).length() < 1e-6);
+        // At 1 unit per second the upward shot reaches a player 1 unit above.
+        let mut close = Player::new(Vec2::new(4.0, 4.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("turret").unwrap(), Vec2::new(4.0, 3.0), 0)];
+        run(&mut targets, &defs, &room, &mut close, 60);
+        assert_eq!(close.health, player::MAX_HEALTH - 50.0);
+    }
+
+    #[test]
+    fn a_bite_hurts_on_touch_at_most_every_cooldown() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut player = Player::new(Vec2::new(8.0, 3.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("shooter").unwrap(), Vec2::new(8.1, 3.0), 0)];
+        // Shots and bites together, over 1.4 s: the bite lands at once, and the
+        // player's 0.5 s of invulnerability spaces out the rest.
+        run(&mut targets, &defs, &room, &mut player, 1);
+        assert_eq!(player.health, player::MAX_HEALTH - 100.0);
     }
 
     #[test]
@@ -328,8 +608,9 @@ mod tests {
         let def = defs.enemy(defs.enemy_named("brute").unwrap());
         // v = (v + 10 * 1.2 * 0.02) * (1 - 20 * 0.02) settles at 0.36.
         let mut speed = 0.0_f32;
+        let Ai::Warrior(warrior) = &def.ai else { panic!("a warrior") };
         for _ in 0..600 {
-            speed = (speed + push_acceleration(def) * DT) * drag_kept(def.drag);
+            speed = (speed + warrior_acceleration(warrior, def) * DT) * drag_kept(def.drag);
         }
         assert!((speed - 0.36).abs() < 0.03, "{speed}");
     }

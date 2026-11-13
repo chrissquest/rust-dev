@@ -670,8 +670,10 @@ mod tests {
         let tank = world.combat.targets.iter().position(|target| target.enemy.is_some()).unwrap();
         let def = world.defs.enemy(world.combat.targets[tank].enemy.as_ref().unwrap().def);
         // `EnemyTank.prefab`: Killable maxHealth 1000; Warrior damage 350, followRange 5.
-        assert_eq!((def.max_health, def.warrior.damage, def.warrior.follow_range), (1000.0, 350.0, 5.0));
-        assert_eq!(def.animations[0].frames.len(), 12, "run_right has 12 frames");
+        let crate::sim::defs::Ai::Warrior(warrior) = &def.ai else { panic!("the tank is a Warrior") };
+        assert_eq!((def.max_health, warrior.damage, warrior.follow_range), (1000.0, 350.0, 5.0));
+        let run_right = crate::sim::defs::Animation::Run(crate::sim::defs::Direction::Right);
+        assert_eq!(def.animations[run_right.index()].as_ref().unwrap().frames.len(), 12, "run_right has 12 frames");
         // Stand right beside it in the gun room, without its health packs healing.
         world.combat.drops.clear();
         world.player.position = world.combat.targets[tank].origin + Vec2::new(0.3, 0.0);
@@ -711,6 +713,30 @@ mod tests {
                 assert!(world.data_cells > 0, "the data cells were collected");
             }
         }
+    }
+
+    #[test]
+    fn the_real_crab_and_turret_shoot_unitys_bullets() {
+        use crate::sim::defs::Ai;
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        let mut world = load_world(&assets, "e1", 1).expect("e1 loads");
+        let kind = |world: &World, name: &str| world.defs.enemy_named(name).unwrap();
+        let (crab, turret) = (kind(&world, "Crab"), kind(&world, "multi-turret_1"));
+        let Ai::Ranged(ranged) = &world.defs.enemy(crab).ai else { panic!("the Crab is ranged") };
+        // `Crab.prefab`: RangedAI attackRange 2.5, fireInterval 1, damage 50; Killable 200.
+        assert_eq!((ranged.attack_range, ranged.fire_interval, ranged.damage), (2.5, 1.0, 50.0));
+        assert_eq!(world.defs.enemy(crab).max_health, 200.0);
+        let Ai::Turret(muzzles) = &world.defs.enemy(turret).ai else { panic!("the turret is a turret") };
+        assert_eq!(muzzles.muzzles.len(), 8);
+        assert_eq!(world.defs.bullet(muzzles.bullet).time_to_live, 2.0, "`Enemy Bullet` lives 2 s");
+
+        // Stand 1 unit beside the turret: within a second its eight shots are out.
+        let at = world.combat.targets.iter().find(|target| target.enemy.as_ref().is_some_and(|enemy| enemy.def == turret)).unwrap().origin;
+        world.combat.targets.retain(|target| target.enemy.as_ref().is_some_and(|enemy| enemy.def == turret) && target.origin == at);
+        world.player.position = at + Vec2::new(1.0, 0.0);
+        world.player.previous_position = world.player.position;
+        world.step(&Input::default());
+        assert_eq!(world.combat.shots.len(), 8);
     }
 
     #[test]

@@ -102,8 +102,18 @@ where you spawn and interact. Interact again on the spot inside to leave.
   not push each other yet, the player does not flash when hurt, and the doors'
   barriers are not in.
 
+- **Crabs and turrets.** The Crab (200 health) runs Unity's `RangedAI`: it
+  wanders, follows the player once it has seen them, and within 2.5 units stands
+  and fires a bullet at them every second (50 damage, 3 units/s). It also bites
+  whoever touches it (100, at most every 1.5 s). The turret (`multi-turret_1`,
+  500 health) runs `RangedAITurret`: while the player is within 3 units it fires
+  from all eight muzzles every 1.3 s, sight or no sight. Their bullets fly over
+  ledges and through enemies and chests, stop at walls or the player, and leave
+  a small splash. The Crab's push is scaled by Unity's frame time, so its speed
+  (about 0.93 units/s) does not depend on the frame-rate assumption.
+
 Not in yet:
-the other enemies; lighting (rooms look flatter and brighter than in
+the LASERCrab, Drones and the boss; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
@@ -135,6 +145,7 @@ cargo run -p cycle-of-steel -- --screenshot fire.png --give shotgun_1 --aim 1,0 
 cargo run -p cycle-of-steel -- --screenshot beam.png --give laser_2 --aim -1,0.6 --ticks 8
 cargo run -p cycle-of-steel -- --screenshot chests.png --room n1 --whole-room
 cargo run -p cycle-of-steel -- --screenshot warrior.png --room n1 --ticks 300
+cargo run -p cycle-of-steel -- --screenshot ranged.png --room e1 --whole-room
 ```
 
 `--room` picks any file under `assets/rooms`; `--whole-room` frames all of it, for
@@ -205,7 +216,7 @@ src/
     guns.rs      one gun's fire timer and heat
     combat.rs    bullets, hit effects, targets and chests, guns on the floor
     loot.rs      rolling a broken chest's loot; drops flying to the player
-    enemy.rs     the Warrior AI: wander, follow, swing
+    enemy.rs     enemy AIs (Warrior, ranged, turret), bites, enemy shots
     elemental.rs being frozen (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells

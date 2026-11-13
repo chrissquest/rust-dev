@@ -1,8 +1,11 @@
 //! Enemy prefabs -> `enemies.json`.
 //!
 //! An enemy is a prefab under `Prefabs/Enemies` with a `Killable` (health, loot,
-//! the body it leaves) and one AI script. Only the AIs the port has reached are
-//! converted; each new one is added here when its step needs it.
+//! the body it leaves) and one AI script: `Warrior`, `RangedAI` or
+//! `RangedAITurret` so far, each written under its own key. Other AIs are added
+//! here when their step needs them. A `BasicAIAttack` on a child (a bite on
+//! touch) is written as `touch`. The bullets ranged enemies fire are written to
+//! `guns.json` with the players' (see `guns.rs`).
 //!
 //! Enemies are the first things here with animations. A Unity animation is an
 //! `AnimatorController` whose one state plays a clip; the clip keys the sprite.
@@ -44,7 +47,7 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         let name = path.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
         let documents = project.documents(&path)?;
         let prefab = Prefab::new(&documents);
-        let Some((root, _, warrior)) = root_script(project, &prefab, &["Warrior"]) else {
+        let Some((root, script, ai_body)) = root_script(project, &prefab, &AI_SCRIPTS) else {
             continue;
         };
         let Some((_, _, killable)) = root_script(project, &prefab, &["Killable"]) else {
@@ -91,61 +94,83 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         enemy.insert("loot".into(), Json::Array(loot));
         enemy.insert("dead_sprites".into(), json!(dead_sprites(project, killable.get("deathObject"), &mut out)?));
 
-        let mut ai = Map::new();
-        for (key, field) in [
-            ("spotting_length", "spottingLength"),
-            ("follow_range", "followRange"),
-            ("move_speed", "moveSpeed"),
-            ("wander_interval", "wanderInterval"),
-            ("damage", "damage"),
-            ("damage_cooldown", "damageCooldown"),
-        ] {
-            ai.insert(key.into(), number(warrior.get(field).f32()));
-        }
-        // The always-on trigger that starts a swing is the child named `AttackCollider`.
-        match documents.iter().find(|document| {
-            document.class == "GameObject" && document.body.get("m_Name").str() == "AttackCollider"
-        }) {
-            Some(object) => {
-                if let Some((size, offset)) = box_of(&prefab, object) {
-                    ai.insert("reach".into(), json!({ "size": size, "offset": offset }));
-                }
-            }
-            None => out.warnings.push(format!("enemy `{name}` has no AttackCollider")),
-        }
-        let mut swings = Map::new();
-        for (key, field) in [
-            ("right", "colliderAttackRight"),
-            ("left", "colliderAttackLeft"),
-            ("up", "colliderAttackUp"),
-            ("down", "colliderAttackDown"),
-        ] {
-            if let Some((size, offset)) =
-                prefab.get(warrior.get(field).get("fileID").i64()).and_then(|object| box_of(&prefab, object))
-            {
-                swings.insert(key.into(), json!({ "size": size, "offset": offset }));
-            }
-        }
-        ai.insert("swings".into(), Json::Object(swings));
-        enemy.insert("warrior".into(), Json::Object(ai));
-
         let mut animations = Map::new();
-        for (key, field) in [
-            ("run_right", "runRight"),
-            ("run_left", "runLeft"),
-            ("run_front", "runFront"),
-            ("run_back", "runBack"),
-            ("attack_right", "attackRight"),
-            ("attack_left", "attackLeft"),
-            ("attack_up", "attackUp"),
-            ("attack_down", "attackDown"),
-        ] {
-            match animation(project, warrior.get(field).get("guid").str(), &mut out)? {
-                Some(animation) => {
-                    animations.insert(key.into(), animation);
+        // The controller the Animator starts with, if any: Warriors have none and
+        // show their plain sprite until they move.
+        if let Some(animator) = prefab.component(root, "Animator")
+            && let Some(idle) = animation(project, animator.body.get("m_Controller").get("guid").str(), &mut out)?
+        {
+            animations.insert("idle".into(), idle);
+        }
+        match script.as_str() {
+            "Warrior" => {
+                enemy.insert("warrior".into(), warrior(&name, &documents, &prefab, ai_body, &mut out));
+                for (key, field) in [
+                    ("run_right", "runRight"),
+                    ("run_left", "runLeft"),
+                    ("run_front", "runFront"),
+                    ("run_back", "runBack"),
+                    ("attack_right", "attackRight"),
+                    ("attack_left", "attackLeft"),
+                    ("attack_up", "attackUp"),
+                    ("attack_down", "attackDown"),
+                ] {
+                    match animation(project, ai_body.get(field).get("guid").str(), &mut out)? {
+                        Some(animation) => {
+                            animations.insert(key.into(), animation);
+                        }
+                        None => out.warnings.push(format!("enemy `{name}`: animation `{field}` could not be read")),
+                    }
                 }
-                None => out.warnings.push(format!("enemy `{name}`: animation `{field}` could not be read")),
             }
+            "RangedAI" => {
+                let mut ai = numbers(
+                    ai_body,
+                    &[
+                        ("follow_range", "followRange"),
+                        ("attack_range", "attackRange"),
+                        ("move_speed", "moveSpeed"),
+                        ("wander_interval", "wanderInterval"),
+                        ("fire_interval", "fireInterval"),
+                        ("damage", "damage"),
+                        ("spotting_length", "spottingLength"),
+                    ],
+                );
+                ai.insert("bullet".into(), json!(project.stem_of(ai_body.get("bulletFab").get("guid").str())));
+                enemy.insert("ranged".into(), Json::Object(ai));
+            }
+            _ => {
+                let mut ai = numbers(
+                    ai_body,
+                    &[("attack_range", "attackRange"), ("fire_interval", "fireInterval"), ("damage", "damage")],
+                );
+                ai.insert("bullet".into(), json!(project.stem_of(ai_body.get("bulletFab").get("guid").str())));
+                let origin = prefab.world_of_object(root).position;
+                let mut muzzles = Vec::new();
+                for point in ai_body.get("bulletSpawnPoints").seq() {
+                    if let Some(transform) = prefab.get(point.get("fileID").i64()) {
+                        let placement = prefab.world(transform);
+                        muzzles.push(json!({
+                            "offset": pair(placement.position[0] - origin[0], placement.position[1] - origin[1]),
+                            "angle": number(placement.rotation.to_degrees()),
+                        }));
+                    }
+                }
+                ai.insert("muzzles".into(), Json::Array(muzzles));
+                enemy.insert("turret".into(), Json::Object(ai));
+            }
+        }
+        if let Some((object, body)) = documents.iter().find_map(|document| {
+            (document.class == "MonoBehaviour"
+                && project.stem_of(script_guid(document)).as_deref() == Some("BasicAIAttack"))
+            .then(|| prefab.object_of(document).map(|object| (object, &document.body)))
+            .flatten()
+        }) {
+            let mut touch = numbers(body, &[("damage", "damage"), ("damage_cooldown", "damageCooldown")]);
+            if let Some((size, offset)) = box_of(&prefab, object) {
+                touch.insert("reach".into(), json!({ "size": size, "offset": offset }));
+            }
+            enemy.insert("touch".into(), Json::Object(touch));
         }
         enemy.insert("animations".into(), Json::Object(animations));
         enemies.insert(name, Json::Object(enemy));
@@ -157,6 +182,56 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         sprites: out.sprites,
         warnings: out.warnings,
     })
+}
+
+/// The AI scripts converted so far.
+const AI_SCRIPTS: [&str; 3] = ["Warrior", "RangedAI", "RangedAITurret"];
+
+/// Numeric fields of a script as (key, Unity field) pairs.
+fn numbers(body: &Value, fields: &[(&str, &str)]) -> Map<String, Json> {
+    fields.iter().map(|(key, field)| (key.to_string(), number(body.get(field).f32()))).collect()
+}
+
+/// The `Warrior` script's numbers and its reach and swing boxes.
+fn warrior(name: &str, documents: &[Document], prefab: &Prefab, body: &Value, out: &mut Out) -> Json {
+    let mut ai = numbers(
+        body,
+        &[
+            ("spotting_length", "spottingLength"),
+            ("follow_range", "followRange"),
+            ("move_speed", "moveSpeed"),
+            ("wander_interval", "wanderInterval"),
+            ("damage", "damage"),
+            ("damage_cooldown", "damageCooldown"),
+        ],
+    );
+    // The always-on trigger that starts a swing is the child named `AttackCollider`.
+    match documents
+        .iter()
+        .find(|document| document.class == "GameObject" && document.body.get("m_Name").str() == "AttackCollider")
+    {
+        Some(object) => {
+            if let Some((size, offset)) = box_of(prefab, object) {
+                ai.insert("reach".into(), json!({ "size": size, "offset": offset }));
+            }
+        }
+        None => out.warnings.push(format!("enemy `{name}` has no AttackCollider")),
+    }
+    let mut swings = Map::new();
+    for (key, field) in [
+        ("right", "colliderAttackRight"),
+        ("left", "colliderAttackLeft"),
+        ("up", "colliderAttackUp"),
+        ("down", "colliderAttackDown"),
+    ] {
+        if let Some((size, offset)) =
+            prefab.get(body.get(field).get("fileID").i64()).and_then(|object| box_of(prefab, object))
+        {
+            swings.insert(key.into(), json!({ "size": size, "offset": offset }));
+        }
+    }
+    ai.insert("swings".into(), Json::Object(swings));
+    Json::Object(ai)
 }
 
 /// An object's `BoxCollider2D` as (`size`, `offset`) in world units, scaled as
@@ -203,6 +278,9 @@ fn dead_sprites(project: &Project, reference: &Value, out: &mut Out) -> Result<V
 
 /// The animation an `AnimatorController` plays: its first state's clip.
 fn animation(project: &Project, controller_guid: &str, out: &mut Out) -> Result<Option<Json>> {
+    if controller_guid.is_empty() {
+        return Ok(None);
+    }
     let Some(controller) = project.path_of(controller_guid).map(Path::to_path_buf) else {
         return Ok(None);
     };
