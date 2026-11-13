@@ -123,6 +123,13 @@ pub fn convert(project: &Project) -> Result<ConvertedGuns> {
         {
             tables.warnings.push(format!("{}: no usable enemy bullet", path.display()));
         }
+        // So do the explosions enemies leave when they die.
+        if let Some((_, _, body)) = root_script(project, &prefab, &["Killable"])
+            && body.get("explosive").bool()
+            && effect(project, body.get("explosionPrefab").get("guid").str(), &mut tables)?.is_none()
+        {
+            tables.warnings.push(format!("{}: no usable death explosion", path.display()));
+        }
     }
 
     Ok(ConvertedGuns {
@@ -290,10 +297,14 @@ fn effect(project: &Project, guid: &str, tables: &mut Tables) -> Result<Option<S
             .component(root, "CircleCollider2D")
             .map(|collider| collider.body.get("m_Radius").f32())
             .unwrap_or(0.0);
-        entry.insert(
-            "explosion".into(),
-            json!({ "damage": number(body.get("Damage").f32()), "radius": number(radius) }),
-        );
+        // The blast reaches as far as the scaled circle, but `ExplosionScript`
+        // divides its knockback by the collider's own, unscaled radius.
+        let scale = prefab.world_of_object(root).scale[0];
+        let mut explosion = json!({ "damage": number(body.get("Damage").f32()), "radius": number(radius * scale) });
+        if scale != 1.0 {
+            explosion["knockback_radius"] = number(radius);
+        }
+        entry.insert("explosion".into(), explosion);
     }
 
     tables.effects.insert(name.clone(), Json::Object(entry));

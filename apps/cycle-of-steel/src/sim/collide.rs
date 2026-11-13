@@ -8,7 +8,7 @@
 
 use crystal_engine::glam::Vec2;
 
-use super::room::Room;
+use super::room::{Cell, Room};
 
 /// The result of [`move_box`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -29,14 +29,36 @@ pub fn move_box(
     half: Vec2,
     delta: Vec2,
 ) -> Moved {
+    move_box_through(room, solids, position, half, delta, false)
+}
+
+/// [`move_box`] for something that flies: ledges do not stop it, only walls.
+pub fn move_flyer(
+    room: &Room,
+    solids: impl Iterator<Item = (Vec2, Vec2)> + Clone,
+    position: Vec2,
+    half: Vec2,
+    delta: Vec2,
+) -> Moved {
+    move_box_through(room, solids, position, half, delta, true)
+}
+
+fn move_box_through(
+    room: &Room,
+    solids: impl Iterator<Item = (Vec2, Vec2)> + Clone,
+    position: Vec2,
+    half: Vec2,
+    delta: Vec2,
+    flying: bool,
+) -> Moved {
     debug_assert!(
         delta.x.abs() <= room.cell && delta.y.abs() <= room.cell,
         "delta {delta} exceeds one cell"
     );
 
     let mut position = position;
-    let hit_x = move_axis(room, solids.clone(), &mut position, half, delta.x, Axis::X);
-    let hit_y = move_axis(room, solids, &mut position, half, delta.y, Axis::Y);
+    let hit_x = move_axis(room, solids.clone(), &mut position, half, delta.x, Axis::X, flying);
+    let hit_y = move_axis(room, solids, &mut position, half, delta.y, Axis::Y, flying);
     Moved {
         position,
         hit_x,
@@ -57,6 +79,7 @@ fn move_axis(
     half: Vec2,
     amount: f32,
     axis: Axis,
+    flying: bool,
 ) -> bool {
     if amount == 0.0 {
         return false;
@@ -73,7 +96,8 @@ fn move_axis(
     let mut hit = false;
     for y in min_y..=max_y {
         for x in min_x..=max_x {
-            if !room.blocks_walker(x, y) {
+            let blocks = if flying { room.cell_at(x, y) == Cell::Wall } else { room.blocks_walker(x, y) };
+            if !blocks {
                 continue;
             }
             hit = true;

@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::data::{
     AnimationFile, BulletFile, DropKind, EffectFile, EnemiesFile, ExplosionFile, GunFile, GunKind, GunsFile,
-    LaserFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
+    DroneFile, LaserFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -142,6 +142,7 @@ pub enum Ai {
     Ranged(RangedDef),
     Turret(TurretDef),
     Laser(LaserFile),
+    Drone(DroneFile),
 }
 
 #[derive(Clone, Debug)]
@@ -161,6 +162,10 @@ pub struct EnemyDef {
     pub dead_sprites: Vec<String>,
     pub ai: Ai,
     pub touch: Option<TouchDef>,
+    pub flying: bool,
+    /// The effect it leaves when it dies, which hurts what is near.
+    pub explosion: Option<EffectId>,
+    pub detonate: Option<OffsetBox>,
     /// Indexed by [`Animation::index`]; `None` where it has no such animation.
     pub animations: [Option<AnimationFile>; 9],
 }
@@ -277,6 +282,7 @@ pub struct Defs {
     pub enemies: Vec<EnemyDef>,
     gun_by_name: HashMap<String, GunId>,
     bullet_by_name: HashMap<String, BulletId>,
+    effect_by_name: HashMap<String, EffectId>,
     enemy_by_name: HashMap<String, EnemyId>,
     /// Loot pools by name, for enemies' loot to name them too.
     pool_by_name: HashMap<String, PoolId>,
@@ -297,6 +303,7 @@ impl Defs {
             .enumerate()
             .map(|(index, name)| (name.as_str(), EffectId(index as u16)))
             .collect();
+        defs.effect_by_name = effect_ids.iter().map(|(name, id)| (name.to_string(), *id)).collect();
         for name in &effect_names {
             let EffectFile { sprite, color, scale, time_to_live, explosion } = file.effects[*name].clone();
             defs.effects.push(EffectDef { sprite, color, scale, time_to_live, explosion });
@@ -459,8 +466,8 @@ impl Defs {
                     *slot = Some(file.clone());
                 }
             }
-            let ai = match (&enemy.warrior, &enemy.ranged, &enemy.turret, &enemy.laser) {
-                (Some(warrior), None, None, None) => {
+            let ai = match (&enemy.warrior, &enemy.ranged, &enemy.turret, &enemy.laser, &enemy.drone) {
+                (Some(warrior), None, None, None, None) => {
                     let swing = |key: &str| -> Result<OffsetBox> {
                         Ok((*warrior.swings.get(key).with_context(|| format!("enemy `{name}` has no `{key}` swing"))?).into())
                     };
@@ -482,7 +489,7 @@ impl Defs {
                         swings: [swing("right")?, swing("left")?, swing("up")?, swing("down")?],
                     })
                 }
-                (None, Some(ranged), None, None) => Ai::Ranged(RangedDef {
+                (None, Some(ranged), None, None, None) => Ai::Ranged(RangedDef {
                     follow_range: ranged.follow_range,
                     attack_range: ranged.attack_range,
                     move_speed: ranged.move_speed,
@@ -492,18 +499,28 @@ impl Defs {
                     spotting_length: ranged.spotting_length,
                     bullet: bullet(&ranged.bullet)?,
                 }),
-                (None, None, Some(turret), None) => Ai::Turret(TurretDef {
+                (None, None, Some(turret), None, None) => Ai::Turret(TurretDef {
                     attack_range: turret.attack_range,
                     fire_interval: turret.fire_interval,
                     damage: turret.damage,
                     bullet: bullet(&turret.bullet)?,
                     muzzles: turret.muzzles.clone(),
                 }),
-                (None, None, None, Some(laser)) => Ai::Laser(laser.clone()),
+                (None, None, None, Some(laser), None) => Ai::Laser(laser.clone()),
+                (None, None, None, None, Some(drone)) => Ai::Drone(*drone),
                 _ => anyhow::bail!("enemy `{name}` must have exactly one AI"),
+            };
+            let explosion = match &enemy.explosion {
+                Some(effect) => Some(
+                    *self.effect_by_name.get(effect).with_context(|| format!("enemy `{name}` leaves unknown effect `{effect}`"))?,
+                ),
+                None => None,
             };
             self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
             self.enemies.push(EnemyDef {
+                flying: enemy.flying,
+                explosion,
+                detonate: enemy.detonate.map(Into::into),
                 name: name.clone(),
                 max_health: enemy.max_health,
                 sprite: enemy.sprite.clone(),
@@ -644,6 +661,13 @@ pub(crate) mod tests {
                 "loot": [], "dead_sprites": [],
                 "turret": {"attack_range": 3, "fire_interval": 1.3, "damage": 50, "bullet": "round",
                            "muzzles": [{"offset": [0.218, 0], "angle": 0}, {"offset": [0, 0.216], "angle": 90}]}
+              },
+              "drone": {
+                "max_health": 200, "sprite": "drone", "scale": [0.5, 0.5], "size": [0.23, 0.11], "mass": 1,
+                "drag": 35, "freezable": true, "flying": true, "explosion": "blast",
+                "detonate": {"size": [0.34, 0.26]},
+                "loot": [], "dead_sprites": [],
+                "drone": {"follow_range": 5, "move_speed": 1, "wander_interval": 0}
               },
               "laser_crab": {
                 "max_health": 200, "sprite": "crab", "size": [0.2, 0.5], "mass": 1, "drag": 15, "freezable": true,

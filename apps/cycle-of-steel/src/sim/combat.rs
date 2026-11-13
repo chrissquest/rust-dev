@@ -10,6 +10,7 @@ use crystal_engine::glam::Vec2;
 use super::defs::{BulletId, ChestId, Defs, EffectId, GunDef};
 use super::elemental::Elemental;
 use super::guns::Gun;
+use super::player::Player;
 use super::enemy::{Enemy, SHOT_CAPACITY, Shot};
 use super::loot::{DROP_CAPACITY, Drop, PICKUP_CAPACITY, Remains, RemainsKind, Spawned, spill};
 use super::rng::Rng;
@@ -286,11 +287,14 @@ impl Combat {
     /// nearest the player, not the one nearest themselves (`HomingBullet.Update`
     /// compares `DistanceToPlayer`), so every homing bullet in flight agrees on
     /// one target. Ties go to the earlier target, as Unity's loop does.
-    pub fn step(&mut self, defs: &Defs, room: &Room, player: Vec2, now: f64, rng: &mut Rng) {
+    pub fn step(&mut self, defs: &Defs, room: &Room, player: &mut Player, now: f64, rng: &mut Rng) {
+        let player_position = player.position;
         let chased = self
             .targets
             .iter()
-            .min_by(|a, b| a.position.distance_squared(player).total_cmp(&b.position.distance_squared(player)))
+            .min_by(|a, b| {
+                a.position.distance_squared(player_position).total_cmp(&b.position.distance_squared(player_position))
+            })
             .map(|target| target.position);
 
         let mut index = 0;
@@ -352,7 +356,7 @@ impl Combat {
                         time_left: effect_def.time_to_live,
                     });
                     if let Some(explosion) = effect_def.explosion {
-                        explode(&mut self.targets, &mut self.damage_numbers, bullet.position, explosion, now, rng);
+                        explode(&mut self.targets, &mut self.damage_numbers, player, bullet.position, explosion, now, rng);
                     }
                 }
                 self.bullets.swap_remove(index);
@@ -363,7 +367,7 @@ impl Combat {
             }
         }
 
-        self.break_dead_targets(defs, rng);
+        self.break_dead_targets(defs, player, now, rng);
         for elemental in self.targets.iter_mut().filter_map(|target| target.elemental.as_mut()) {
             elemental.step();
         }
@@ -383,7 +387,7 @@ impl Combat {
     /// Removes every target out of health, as `Killable.Die`: a chest spills its
     /// loot where it stood and leaves its remains. Order is kept, as homing
     /// bullets break ties by it.
-    fn break_dead_targets(&mut self, defs: &Defs, rng: &mut Rng) {
+    fn break_dead_targets(&mut self, defs: &Defs, player: &mut Player, now: f64, rng: &mut Rng) {
         let mut index = 0;
         while index < self.targets.len() {
             if self.targets[index].health > 0.0 {
@@ -399,6 +403,24 @@ impl Combat {
             if let Some(enemy) = &target.enemy {
                 let def = defs.enemy(enemy.def);
                 spill(&def.loot, defs, target.origin, rng, &mut out);
+                // `Killable.Die`: an explosive enemy leaves its explosion, which
+                // hurts the player and whatever else is near, as any blast does.
+                if let Some(effect) = def.explosion {
+                    let effect_def = defs.effect(effect);
+                    if self.effects.len() == self.effects.capacity() {
+                        self.effects.remove(0);
+                    }
+                    self.effects.push(Effect {
+                        def: effect,
+                        position: target.origin,
+                        rotation: 0.0,
+                        color: effect_def.color,
+                        time_left: effect_def.time_to_live,
+                    });
+                    if let Some(explosion) = effect_def.explosion {
+                        explode(&mut self.targets, &mut self.damage_numbers, player, target.origin, explosion, now, rng);
+                    }
+                }
                 if !def.dead_sprites.is_empty() {
                     // `RandomBodyScript`: `Random.Range(0, count)`.
                     let pick = ((rng.unit() * def.dead_sprites.len() as f32) as usize).min(def.dead_sprites.len() - 1);
@@ -448,11 +470,13 @@ impl Combat {
 /// - Unity's trigger lasts the effect's whole 0.3 s, so an enemy walking into the
 ///   blast late is still hurt. Targets do not move yet, so damage is dealt once,
 ///   when the explosion appears. Revisit with enemies (step 4).
-/// - Unity's explosion hurts the player too, the bazooka's owner included. The
-///   player has no health yet.
+///
+/// It hurts the player too, the bazooka's owner included, and pushes them the
+/// same way, as `PlayerData.DamagePlayer` does: only when the blow lands.
 fn explode(
     targets: &mut [Target],
     numbers: &mut Vec<DamageNumber>,
+    player: &mut Player,
     center: Vec2,
     explosion: ExplosionFile,
     now: f64,
@@ -462,8 +486,14 @@ fn explode(
         if circle_overlaps_box(center, explosion.radius, target.position, target.half) {
             // `ExplosionScript` reports its damage as a crit, so it shows as one,
             // and pushes away from the centre by three times the offset over the radius.
-            let knockback = (target.origin - center) / explosion.radius * 3.0;
+            let knockback = (target.origin - center) / explosion.knockback_radius.unwrap_or(explosion.radius) * 3.0;
             hurt(target, numbers, explosion.damage, true, knockback, now, rng);
+        }
+    }
+    if circle_overlaps_box(center, explosion.radius, player.position, super::player::HALF_SIZE) {
+        let knockback = (player.position - center) / explosion.knockback_radius.unwrap_or(explosion.radius) * 3.0;
+        if player.hurt(explosion.damage, now) {
+            player.velocity += knockback;
         }
     }
 }
@@ -607,7 +637,7 @@ mod tests {
         assert_eq!(combat.solids().count(), 1);
         let mut rng = Rng::new(3);
         combat.targets[0].health = 0.0;
-        combat.step(&defs, &room, Vec2::new(2.0, 2.0), 0.0, &mut rng);
+        combat.step(&defs, &room, &mut Player::new(Vec2::new(2.0, 2.0)), 0.0, &mut rng);
         assert!(combat.targets.is_empty());
         assert_eq!(combat.solids().count(), 0, "a broken chest no longer blocks");
         assert_eq!(combat.remains, vec![Remains { kind: RemainsKind::Chest(chest), position: origin }]);
@@ -662,8 +692,9 @@ mod tests {
 
     fn run(combat: &mut Combat, defs: &Defs, room: &Room, steps: u32) {
         let mut rng = Rng::new(9);
+        let mut player = Player::new(PLAYER);
         for step in 0..steps {
-            combat.step(defs, room, PLAYER, step as f64 * DT as f64, &mut rng);
+            combat.step(defs, room, &mut player, step as f64 * DT as f64, &mut rng);
         }
     }
 

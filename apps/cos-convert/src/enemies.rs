@@ -2,7 +2,8 @@
 //!
 //! An enemy is a prefab under `Prefabs/Enemies` with a `Killable` (health, loot,
 //! the body it leaves) and one AI script: `Warrior`, `RangedAI`,
-//! `RangedAITurret` or `RangedAI_Laser` so far, each written under its own key. Other AIs are added
+//! `RangedAITurret`, `RangedAI_Laser` or `DashAIDrone` so far, each written
+//! under its own key. Other AIs are added
 //! here when their step needs them. A `BasicAIAttack` on a child (a bite on
 //! touch) is written as `touch`. The bullets ranged enemies fire are written to
 //! `guns.json` with the players' (see `guns.rs`).
@@ -84,6 +85,13 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
                 && project.stem_of(script_guid(component)).as_deref() == Some("ElementalEffectHandler")
         });
         enemy.insert("freezable".into(), json!(freezable));
+        // The `FlyingEnemy` physics layer does not collide with ledges.
+        if root.body.get("m_Layer").i64() == FLYING_LAYER {
+            enemy.insert("flying".into(), json!(true));
+        }
+        if killable.get("explosive").bool() {
+            enemy.insert("explosion".into(), json!(project.stem_of(killable.get("explosionPrefab").get("guid").str())));
+        }
         let mut loot = Vec::new();
         for entry in killable.get("lootPool").seq() {
             match project.stem_of(entry.get("drop").get("guid").str()) {
@@ -139,6 +147,13 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
                 ai.insert("bullet".into(), json!(project.stem_of(ai_body.get("bulletFab").get("guid").str())));
                 enemy.insert("ranged".into(), Json::Object(ai));
             }
+            "DashAIDrone" => {
+                let ai = numbers(
+                    ai_body,
+                    &[("follow_range", "followRange"), ("move_speed", "moveSpeed"), ("wander_interval", "wanderInterval")],
+                );
+                enemy.insert("drone".into(), Json::Object(ai));
+            }
             "RangedAI_Laser" => {
                 let mut ai = numbers(
                     ai_body,
@@ -182,6 +197,17 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
                 enemy.insert("turret".into(), Json::Object(ai));
             }
         }
+        // `ExplosionTrigger`: a box that makes the enemy die, and so explode, when
+        // the player enters it.
+        if let Some(object) = documents.iter().find_map(|document| {
+            (document.class == "MonoBehaviour"
+                && project.stem_of(script_guid(document)).as_deref() == Some("ExplosionTrigger"))
+            .then(|| prefab.object_of(document))
+            .flatten()
+        }) && let Some((size, offset)) = box_of(&prefab, object)
+        {
+            enemy.insert("detonate".into(), json!({ "size": size, "offset": offset }));
+        }
         if let Some((object, body)) = documents.iter().find_map(|document| {
             (document.class == "MonoBehaviour"
                 // The class is `BasicAIAttack`; its file is `MeleeAttack.cs`.
@@ -207,8 +233,11 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
     })
 }
 
+/// Unity's `FlyingEnemy` layer (`TagManager.asset`).
+const FLYING_LAYER: i64 = 6;
+
 /// The AI scripts converted so far.
-const AI_SCRIPTS: [&str; 4] = ["Warrior", "RangedAI", "RangedAITurret", "RangedAI_Laser"];
+const AI_SCRIPTS: [&str; 5] = ["Warrior", "RangedAI", "RangedAITurret", "RangedAI_Laser", "DashAIDrone"];
 
 /// Numeric fields of a script as (key, Unity field) pairs.
 fn numbers(body: &Value, fields: &[(&str, &str)]) -> Map<String, Json> {

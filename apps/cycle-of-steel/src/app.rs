@@ -744,6 +744,31 @@ mod tests {
     }
 
     #[test]
+    fn a_real_drone_that_touches_the_player_explodes_for_200() {
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        let mut world = load_world(&assets, "e1", 1).expect("e1 loads");
+        let drone = world.defs.enemy_named("Drone").unwrap();
+        let def = world.defs.enemy(drone);
+        // `Drone.prefab`: on the FlyingEnemy layer, explosive; `Explosion.prefab`:
+        // Damage 200, radius 0.4422 at scale 2.
+        assert!(def.flying);
+        let blast = world.defs.effect(def.explosion.unwrap()).explosion.unwrap();
+        assert_eq!(blast.damage, 200.0);
+        assert!((blast.radius - 0.8843).abs() < 1e-3);
+
+        let at = world.combat.targets.iter().find(|target| target.enemy.as_ref().is_some_and(|enemy| enemy.def == drone)).unwrap().origin;
+        world.combat.targets.retain(|target| target.origin == at);
+        world.combat.drops.clear();
+        world.player.position = at;
+        world.player.previous_position = at;
+        world.step(&Input::default());
+        assert!(world.combat.targets.is_empty(), "it died at once");
+        assert_eq!(world.player.last_hurt, 0.0, "its explosion hurt the player");
+        // 200 off, unless the health pack it can drop landed on the player too.
+        assert!(world.player.health == 800.0 || world.player.health == 900.0, "{}", world.player.health);
+    }
+
+    #[test]
     fn the_hubs_drops_fly_to_the_player_and_count() {
         use crate::data::DropKind;
         let mut world = hub();

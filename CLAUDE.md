@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (pieces 1 and 2 done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (pieces 1 to 3 done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -71,7 +71,19 @@ on touch (`TouchDef`, Unity's `BasicAIAttack`), and enemy bullets
 Piece 2b is done: `Ai::Laser` (LASERCrab) with its sight, warning and firing
 lines (`Enemy::beam`, drawn by `View::draw_enemy_beams`).
 
-**Next: step 4 piece 3, dashers** (Drone: `DashAIDrone.cs`; `DashAI.cs`). Convert each new kind of data in
+Piece 3 is done: `Ai::Drone` (rises, drifts, flies over ledges via
+`collide::move_flyer`), `ExplosionTrigger` (`EnemyDef::detonate`) and explosive
+deaths. Explosions now hurt and push the player (`combat::explode`), which was
+part of piece 4. `DashAI.cs` is used by no prefab and is not ported.
+
+Open question for the owner: Unity 2D (Box2D) applies linear drag as
+`v / (1 + drag * dt)`, but the port uses `v * (1 - drag * dt)` everywhere
+(`combat::drag_kept`, the player's `RESPONSE`). For high drags (Drones 35,
+Warriors 20) that makes things much slower; the player would top out near 2.2
+rather than 1.82 units/s. Not changed without the owner's say.
+
+**Next: step 4 piece 4**: explosions lasting their 0.3 s (hurting what walks in)
+and EffectGrate hazards. Then piece 5, the boss. Convert each new kind of data in
 `cos-convert` when the step needs it, not before.
 
 ### How to work here

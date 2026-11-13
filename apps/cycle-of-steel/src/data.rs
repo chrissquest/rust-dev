@@ -282,8 +282,12 @@ pub struct BulletFile {
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 pub struct ExplosionFile {
     pub damage: f32,
-    /// World units, from the prefab's `CircleCollider2D`.
+    /// World units, from the prefab's `CircleCollider2D` and its scale.
     pub radius: f32,
+    /// `ExplosionScript` divides its push by the collider's own radius, which a
+    /// scaled prefab's blast reaches beyond. Absent when they are the same.
+    #[serde(default)]
+    pub knockback_radius: Option<f32>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -413,6 +417,19 @@ pub struct EnemyFile {
     pub turret: Option<TurretFile>,
     #[serde(default)]
     pub laser: Option<LaserFile>,
+    #[serde(default)]
+    pub drone: Option<DroneFile>,
+    /// On the `FlyingEnemy` layer: ledges do not stop it.
+    #[serde(default)]
+    pub flying: bool,
+    /// The effect it leaves when it dies (`Killable.explosive`), a key of
+    /// `guns.json`'s effects.
+    #[serde(default)]
+    pub explosion: Option<String>,
+    /// A box that kills it, and so sets off its explosion, when the player enters
+    /// it (`ExplosionTrigger`).
+    #[serde(default)]
+    pub detonate: Option<OffsetBoxFile>,
     /// A bite on touch (`BasicAIAttack`), beside its AI.
     #[serde(default)]
     pub touch: Option<TouchFile>,
@@ -433,6 +450,14 @@ pub struct RangedFile {
     pub spotting_length: f32,
     /// A key of `guns.json`'s bullets.
     pub bullet: String,
+}
+
+/// Unity's `DashAIDrone`.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct DroneFile {
+    pub follow_range: f32,
+    pub move_speed: f32,
+    pub wander_interval: f32,
 }
 
 /// Unity's `RangedAI_Laser`: follows, then sweeps a beam at the player.

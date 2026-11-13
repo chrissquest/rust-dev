@@ -120,8 +120,19 @@ where you spawn and interact. Interact again on the spot inside to leave.
   stand still while attacking. The lines fade in from clear at the crab, as
   Unity's `LineRenderer` draws them. Not yet: the sparks where the beam lands.
 
+- **Drones and explosions.** Drones (200 health) run Unity's `DashAIDrone`:
+  they jitter about at random until the player is within 5 units, then rise
+  (Unity grows them from half size to just over full over 11 frames) and drift
+  towards the player. They fly over ledges. Touching the player makes a Drone
+  die on the spot, and like every explosive enemy it then explodes: 200 to
+  everything within 0.88 units, the player included, pushing them away.
+  Explosions now hurt the player too, the bazooka's own included, as in Unity:
+  standing in your own blast costs 200. A Drone's drift is very slow (about 0.07
+  units/s at the 60 frames a second assumed for Unity's per-frame push, against
+  its drag of 35).
+
 Not in yet:
-Drones and the boss; lighting (rooms look flatter and brighter than in
+the boss; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
@@ -225,7 +236,7 @@ src/
     guns.rs      one gun's fire timer and heat
     combat.rs    bullets, hit effects, targets and chests, guns on the floor
     loot.rs      rolling a broken chest's loot; drops flying to the player
-    enemy.rs     enemy AIs (Warrior, ranged, turret, laser), bites, enemy shots
+    enemy.rs     enemy AIs (Warrior, ranged, turret, laser, drone), bites, shots
     elemental.rs being frozen (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells

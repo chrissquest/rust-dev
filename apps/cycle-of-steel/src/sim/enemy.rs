@@ -18,6 +18,11 @@
 //!   red beam sweeps towards the player at `laserRotSpeed` and hurts them every
 //!   `damageRate` it touches them. It stands still while attacking.
 //!
+//! - `DashAIDrone`: hovers about at random; once the player is within
+//!   `followRange` it rises (Unity grows it over its first 11 frames) and drifts
+//!   towards them. It flies over ledges. Touching the player makes it die on the
+//!   spot (`ExplosionTrigger`), and like every explosive enemy it then explodes.
+//!
 //! Some also bite whoever touches them (`BasicAIAttack`). Their shots
 //! (`EnemyBullet`) fly straight, hurt the player and stop on them or on a wall,
 //! leaving a splash; they fly over ledges and through enemies and chests.
@@ -31,12 +36,12 @@
 use crystal_engine::glam::Vec2;
 
 use super::DT;
-use super::collide::move_box;
+use super::collide::{move_box, move_flyer};
 use super::combat::{Effect, Target, UNITY_STEP, boxes_overlap, bullet_hits_wall, drag_kept, ray_hits_box};
 use super::defs::{
     Ai, Animation, BulletId, Defs, Direction, EnemyDef, EnemyId, OffsetBox, RangedDef, TouchDef, TurretDef, WarriorDef,
 };
-use crate::data::LaserFile;
+use crate::data::{DroneFile, LaserFile};
 use super::player::{self, Player};
 use super::rng::Rng;
 use super::room::{CAMERA_BLOCK, Room};
@@ -132,6 +137,10 @@ pub struct Enemy {
     last_fire: f64,
     last_touch: f64,
     laser: LaserState,
+    /// How many frames a Drone has risen so far (`DashAIDrone.firstSight`).
+    pub risen: u8,
+    /// A Drone's smoothed wander direction (`targetGrav`).
+    drift: Vec2,
     /// A LASERCrab's line, while it shows.
     pub beam: Option<EnemyBeam>,
     /// The swing in progress: its direction and when it started.
@@ -166,6 +175,8 @@ impl Enemy {
                 sight_end: origin,
             },
             beam: None,
+            risen: 0,
+            drift: Vec2::ZERO,
             swing: None,
             animation: None,
         }
@@ -241,7 +252,15 @@ pub fn step_enemies(
                 let heading = think_laser(targets, index, laser, room, player, now, rng);
                 heading * laser.move_speed * UNITY_STEP / def.mass
             }
+            Ai::Drone(drone) => think_drone(&mut targets[index], drone, def, player.position, now, rng),
         };
+        if let Some(area) = def.detonate {
+            let target = &mut targets[index];
+            if touches(target.origin, grown(area, target, def), player.position) {
+                // `ExplosionTrigger` calls `Killable.Die` at once.
+                target.health = 0.0;
+            }
+        }
         if let Some(touch) = def.touch {
             bite(&mut targets[index], touch, player, now);
         }
@@ -495,6 +514,67 @@ fn fire_laser(targets: &mut [Target], index: usize, ai: &LaserFile, room: &Room,
     }
 }
 
+/// How many frames a Drone grows for once it first sees the player, and by how
+/// much each frame (`DashAIDrone.Update`: `firstSight <= 10`, `+= 0.05`).
+const DRONE_RISE_FRAMES: u8 = 11;
+const DRONE_RISE_STEP: f32 = 0.05;
+/// `DashAIDrone.Follow` pushes with this times difficulty, every frame.
+const DRONE_FOLLOW_FORCE: f32 = 7.0;
+/// `DashAIDrone.Wander` eases its direction towards the new one at this many
+/// units per second.
+const DRONE_DRIFT_RATE: f32 = 4.0;
+
+/// `DashAIDrone.Update`: the acceleration it pushes with. Wandering sets its
+/// velocity outright, so that is done here and no push is returned.
+fn think_drone(target: &mut Target, ai: &DroneFile, def: &EnemyDef, player: Vec2, now: f64, rng: &mut Rng) -> Vec2 {
+    let origin = target.origin;
+    if block_of(origin) != block_of(player) {
+        return Vec2::ZERO;
+    }
+    let enemy = target.enemy.as_mut().expect("an enemy");
+    if origin.distance(player) <= ai.follow_range {
+        if enemy.risen < DRONE_RISE_FRAMES {
+            enemy.risen += 1;
+        }
+        let toward = (player - origin).normalize_or_zero();
+        // A push every frame, not scaled by frame time, taken at 60 frames a second.
+        return toward * DRONE_FOLLOW_FORCE * DIFFICULTY * UNITY_FRAME_RATE * UNITY_STEP / def.mass;
+    }
+    // A wander interval of 0 picks a new direction every frame.
+    if now - enemy.last_wander > ai.wander_interval as f64 {
+        let mut pick = || (rng.unit() * 3.0).floor().min(2.0) - 1.0;
+        enemy.heading = Vec2::new(pick(), pick());
+        enemy.last_wander = now;
+    }
+    let wanted = enemy.heading.normalize_or_zero();
+    let gap = wanted - enemy.drift;
+    let reach = DRONE_DRIFT_RATE * DT;
+    enemy.drift = if gap.length() <= reach { wanted } else { enemy.drift + gap.normalize() * reach };
+    enemy.velocity = enemy.drift * ai.move_speed;
+    Vec2::ZERO
+}
+
+/// How much bigger than its prefab a risen Drone is: its scale went from the
+/// prefab's to that plus 0.05 a frame, and its colliders grew with it.
+fn growth(enemy: &Enemy, def: &EnemyDef) -> f32 {
+    (def.scale[0] + DRONE_RISE_STEP * enemy.risen as f32) / def.scale[0]
+}
+
+/// A box of the enemy's, grown as the enemy has grown.
+fn grown(area: OffsetBox, target: &Target, def: &EnemyDef) -> OffsetBox {
+    let factor = target.enemy.as_ref().map_or(1.0, |enemy| growth(enemy, def));
+    OffsetBox {
+        half: [area.half[0] * factor, area.half[1] * factor],
+        offset: [area.offset[0] * factor, area.offset[1] * factor],
+    }
+}
+
+/// The scale an enemy is drawn at: its prefab's, plus what a Drone has risen.
+pub fn drawn_scale(enemy: &Enemy, def: &EnemyDef) -> [f32; 2] {
+    let factor = growth(enemy, def);
+    [def.scale[0] * factor, def.scale[1] * factor]
+}
+
 /// An angle brought into -pi..=pi, for turning the short way round.
 fn wrap_angle(angle: f32) -> f32 {
     let turn = std::f32::consts::TAU;
@@ -635,14 +715,20 @@ fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room,
         .filter(|other| other.chest.is_some())
         .map(|other| (other.position, other.half));
     let added_drag = target.elemental.as_ref().map_or(0.0, |elemental| elemental.added_drag());
+    let body = grown(OffsetBox { half: def.half, offset: def.offset }, target, def);
     let enemy = target.enemy.as_mut().expect("an enemy");
 
     enemy.previous_origin = target.origin;
     enemy.velocity += push * DT;
     enemy.velocity *= drag_kept(def.drag + added_drag);
-    let half = Vec2::from(def.half);
-    let center = target.origin + Vec2::from(def.offset);
-    let moved = move_box(room, solids, center, half, enemy.velocity * DT);
+    let half = Vec2::from(body.half);
+    let center = target.origin + Vec2::from(body.offset);
+    let delta = enemy.velocity * DT;
+    let moved = if def.flying {
+        move_flyer(room, solids, center, half, delta)
+    } else {
+        move_box(room, solids, center, half, delta)
+    };
     if moved.hit_x {
         enemy.velocity.x = 0.0;
     }
@@ -650,7 +736,8 @@ fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room,
         enemy.velocity.y = 0.0;
     }
     target.position = moved.position;
-    target.origin = moved.position - Vec2::from(def.offset);
+    target.half = half;
+    target.origin = moved.position - Vec2::from(body.offset);
 }
 
 /// Units/s^2 from the Warrior's per-frame push of `moveSpeed * difficulty` on
@@ -795,6 +882,35 @@ mod tests {
         }
         assert_eq!(&phases[..3], &[BeamPhase::Sight, BeamPhase::Warning, BeamPhase::Firing], "{phases:?}");
         assert!(player.health < player::MAX_HEALTH, "the beam burned: {}", player.health);
+    }
+
+    #[test]
+    fn a_drone_rises_drifts_in_and_blows_up_on_the_player() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let drone = defs.enemy_named("drone").unwrap();
+        let mut player = Player::new(Vec2::new(4.0, 2.0));
+        let mut targets = vec![spawn(&defs, drone, Vec2::new(4.6, 2.0), 0)];
+        let mut rng = Rng::new(5);
+        let mut shots = Vec::new();
+        step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
+        assert_eq!(targets[0].enemy.as_ref().unwrap().risen, 1, "it saw the player and began to rise");
+        let mut tick = 1;
+        while targets[0].health > 0.0 && tick < 60 * 30 {
+            step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, tick as f64 * DT as f64, &mut rng);
+            tick += 1;
+        }
+        assert_eq!(targets[0].health, 0.0, "touching the player set it off");
+        let enemy = targets[0].enemy.as_ref().unwrap();
+        assert_eq!(enemy.risen, DRONE_RISE_FRAMES);
+        assert!((drawn_scale(enemy, defs.enemy(drone))[0] - 1.05).abs() < 1e-5, "grown from 0.5 to 1.05");
+    }
+
+    #[test]
+    fn a_drone_flies_over_ledges() {
+        let defs = test_defs();
+        assert!(defs.enemy(defs.enemy_named("drone").unwrap()).flying);
+        assert!(!defs.enemy(defs.enemy_named("brute").unwrap()).flying);
     }
 
     #[test]

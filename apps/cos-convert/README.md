@@ -68,12 +68,14 @@ the `Spawner` prefabs those lines name: `multiple` (every line rolls) or not
 
 `enemies.json` holds, by prefab name, every enemy under `Prefabs/Enemies` whose AI
 is ported (`Warrior`, which the EnemyTank also runs, `RangedAI`,
-`RangedAITurret` and `RangedAI_Laser`): its `Killable`
+`RangedAITurret`, `RangedAI_Laser` and `DashAIDrone`): its `Killable`
 numbers and `loot`, the bodies its `deathObject` can show (`dead_sprites`), its
 sprite, `scale`, `color`, solid box, rigidbody `mass` and `drag`, whether it can
 be frozen, the AI's numbers under `warrior` (with its `reach` and four `swings`
-boxes), `ranged`, `turret` (with its `muzzles`: offset and angle) or `laser` (with the
-beam's `width` from its `LineRenderer`), a bite on
+boxes), `ranged`, `turret` (with its `muzzles`: offset and angle), `laser` (with the
+beam's `width` from its `LineRenderer`) or `drone`, `flying` for the
+`FlyingEnemy` layer, `explosion` (the effect an explosive `Killable` leaves, in
+`guns.json`), `detonate` (an `ExplosionTrigger` box), a bite on
 touch under `touch` (`BasicAIAttack`), and its `animations` (`idle` is the
 controller its Animator starts with). Ranged enemies name their bullet, a key of
 `guns.json`'s `bullets`, where enemy bullets are written beside the players'. Boxes are in world units with the prefab's scale
@@ -122,7 +124,10 @@ src/
   json.rs      JSON output that keeps a row of tiles on one line
 ```
 
-Not converted yet: the other enemies' AIs (Drone, Priest), the player's animations (the game
+An explosion's `radius` is its circle's at the prefab's scale; a scaled one also
+has `knockback_radius`, the unscaled radius Unity divides its push by.
+
+Not converted yet: the boss's AI (Priest), the player's animations (the game
 slices its sheets itself), and audio.
 
 Copied textures are left writable: some files in the Unity project are read-only,

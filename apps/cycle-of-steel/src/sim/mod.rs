@@ -287,7 +287,7 @@ impl World {
         let combat = &mut self.combat;
         enemy::step_enemies(&mut combat.targets, &mut combat.shots, &defs, &self.room, &mut self.player, now, &mut self.rng);
         enemy::step_shots(&mut combat.shots, &mut combat.effects, &defs, &self.room, &mut self.player, now);
-        self.combat.step(&defs, &self.room, self.player.position, now, &mut self.rng);
+        self.combat.step(&defs, &self.room, &mut self.player, now, &mut self.rng);
         if self.player.health <= 0.0 {
             // Placeholder until the full loop (step 7): Unity's `PlayerData.Die`
             // ends the run; here the player simply starts the room again.

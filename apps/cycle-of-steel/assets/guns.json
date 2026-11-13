@@ -96,6 +96,17 @@
       "sprite": "Splash_8x8",
       "time_to_live": 0.2
     },
+    "Explosion": {
+      "color": [0.934, 0.5143, 0.2071, 1.0],
+      "explosion": {
+        "damage": 200.0,
+        "knockback_radius": 0.4422,
+        "radius": 0.8843
+      },
+      "scale": [2.0, 2.0],
+      "sprite": "explosion",
+      "time_to_live": 0.3
+    },
     "Explosion 1": {
       "color": [0.934, 0.5143, 0.2071, 1.0],
       "explosion": {

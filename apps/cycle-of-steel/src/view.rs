@@ -655,7 +655,7 @@ impl View {
             let color = if frozen { FROZEN_TINT } else { def.color };
             let position = enemy.previous_origin.lerp(target.origin, blend);
             let placed = sprite
-                .placed(position.extend(Z_ENTITIES), def.scale, 0.0, [false, false])
+                .placed(position.extend(Z_ENTITIES), crate::sim::enemy::drawn_scale(enemy, def), 0.0, [false, false])
                 .with_color(srgb_to_linear(color));
             self.list.sprite(sprite.texture, placed);
         }
