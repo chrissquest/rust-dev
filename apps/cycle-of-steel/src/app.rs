@@ -27,7 +27,6 @@ use winit::window::{Fullscreen, Window, WindowId};
 use crate::assets::AssetSource;
 use crate::data::{DungeonFile, EnemiesFile, GunsFile, LootFile, RoomFile};
 use crate::sim::dungeon;
-use crate::sim::rng::Rng;
 use crate::input::{Action, Bindings, Gamepads, InputState, StickVisual, TouchControls};
 use crate::sim::defs::Defs;
 use crate::sim::room::Room;
@@ -92,6 +91,8 @@ struct Graphics {
     surface: WindowSurface,
     renderer: Renderer2d,
     view: View,
+    /// The world's `room_version` the view last uploaded.
+    room_version: u64,
 }
 
 struct App {
@@ -143,6 +144,7 @@ impl App {
             surface,
             renderer,
             view,
+            room_version: self.world.room_version,
         })
     }
 
@@ -197,6 +199,13 @@ impl App {
             match event {
                 Event::Shake(shake) => graphics.view.start_shake(shake),
             }
+        }
+        // A new floor rebuilt the room: upload it again.
+        if graphics.room_version != self.world.room_version {
+            if let Err(error) = graphics.view.set_room(&mut graphics.renderer, &self.world.room) {
+                log::error!("could not redraw the room: {error:#}");
+            }
+            graphics.room_version = self.world.room_version;
         }
         let frame = match graphics.surface.acquire() {
             Ok(frame) => frame,
@@ -359,31 +368,25 @@ pub const DUNGEON: &str = "dungeon";
 
 fn load_world(assets: &AssetSource, room: &str, seed: u32) -> Result<World> {
     let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?.with_loot(&LootFile::load(assets)?)?.with_enemies(&EnemiesFile::load(assets)?)?);
-    if room == DUNGEON {
-        let (room, floor) = load_dungeon(assets, seed)?;
-        let mut world = World::new(room, defs, seed);
-        world.floor = Some(floor);
+    // The hub is the start of a run: a floor waits beside it. `dungeon` starts
+    // the run inside the floor's spawn room.
+    if room == DEFAULT_ROOM || room == DUNGEON {
+        let settings = DungeonFile::load(assets)?;
+        let mut rooms = std::collections::HashMap::new();
+        for name in dungeon::RunAssets::room_names(&settings) {
+            let file = RoomFile::load(assets, &name)?;
+            rooms.insert(name, file);
+        }
+        let hub = RoomFile::load(assets, DEFAULT_ROOM)?;
+        let mut world = World::new_run(dungeon::RunAssets { settings, rooms, hub }, defs, seed)?;
+        if room == DUNGEON {
+            world.enter_dungeon();
+        }
         return Ok(world);
     }
     Ok(World::new(Room::from_file(RoomFile::load(assets, room)?), defs, seed))
 }
 
-/// Generates a floor from `seed` and joins its rooms into one room.
-fn load_dungeon(assets: &AssetSource, seed: u32) -> Result<(Room, dungeon::Floor)> {
-    let settings = DungeonFile::load(assets)?;
-    let layout = dungeon::generate(&settings, &mut Rng::new(seed));
-    let mut files = std::collections::HashMap::new();
-    for planned in &layout.rooms {
-        if !files.contains_key(&planned.name) {
-            files.insert(planned.name.clone(), RoomFile::load(assets, &planned.name)?);
-        }
-    }
-    let (floor_file, spawn) = dungeon::build(&layout, &files)?;
-    let floor = dungeon::floor_rooms(&layout, &files, &settings);
-    let mut room = Room::from_file(floor_file);
-    room.place_spawn(spawn);
-    Ok((room, floor))
-}
 
 /// A seed that differs from launch to launch. The simulation itself never reads
 /// the clock; this is the one place randomness comes in from outside.
@@ -523,7 +526,9 @@ mod tests {
     fn the_hub_has_guns_a_target_and_a_free_spawn() {
         let world = hub();
         assert!(world.combat.pickups.len() >= 10, "the gun room's guns: {}", world.combat.pickups.len());
-        assert_eq!(world.combat.targets.len(), 2, "the test dummy and the gun room's EnemyTank");
+        let start_x = world.floor.as_ref().expect("a floor waits beside the hub").start_x;
+        let hub_targets = world.combat.targets.iter().filter(|target| target.origin.x < start_x).count();
+        assert_eq!(hub_targets, 2, "the test dummy and the gun room's EnemyTank");
         assert!(world.combat.targets[0].enemy.is_none());
         let tank = world.combat.targets[1].enemy.as_ref().expect("an enemy");
         assert_eq!(world.defs.enemy(tank.def).name, "EnemyTank");
@@ -712,7 +717,8 @@ mod tests {
 
         world.combat.targets[tank].health = 0.0;
         world.step(&Input::default());
-        assert!(world.combat.targets.iter().all(|target| target.enemy.is_none()));
+        let start_x = world.floor.as_ref().unwrap().start_x;
+        assert!(world.combat.targets.iter().filter(|target| target.origin.x < start_x).all(|target| target.enemy.is_none()));
         assert!(matches!(world.combat.remains[0].kind, crate::sim::loot::RemainsKind::Body(..)));
     }
 
@@ -851,7 +857,8 @@ mod tests {
             .rooms
             .iter()
             .position(|room| {
-                room.doors.left
+                // A door tile in its left doorway, the room's first column.
+                room.seal.iter().any(|tile| tile.cell == (room.block.0 * 32, room.block.1 * 18 + 9))
                     && world.combat.targets.iter().any(|target| target.enemy.as_ref().is_some_and(|enemy| enemy.counted && enemy.home == room.block))
             })
             .expect("seed 1 has a room with enemies and a left door");
@@ -879,6 +886,76 @@ mod tests {
         assert!(!world.floor.as_ref().unwrap().rooms[index].sealed, "cleared, it opened");
         assert!(!world.room.box_hits_solid(doorway, Vec2::splat(0.05)));
         assert_eq!(block_of(world.player.position), block);
+    }
+
+    #[test]
+    fn walking_out_of_the_hub_enters_the_dungeon_and_the_exit_leads_back() {
+        use crate::sim::combat::Interaction;
+        let mut world = hub();
+        let start_x = world.floor.as_ref().unwrap().start_x;
+        // `ExitHub`: the hub's right-hand block is the way out.
+        let (entrance, _) = world.combat.entrances[0];
+        world.player.position = entrance;
+        world.step(&Input::default());
+        assert!(world.player.position.x > start_x, "in the dungeon");
+        assert!(!world.room.box_hits_solid(world.player.position, HALF_SIZE));
+
+        // The exit room's stairs: interact on them.
+        let (stairs, _) = world.combat.exits[0];
+        world.teleport(stairs);
+        assert!(matches!(world.interaction(), Some(Interaction::Exit(_))));
+        world.player.health = 300.0;
+        let version = world.room_version;
+        interact(&mut world);
+        assert!(world.player.position.x < start_x, "back in the hub");
+        assert_eq!(world.player.health, world.player.max_health, "healed");
+        assert_eq!(world.room_version, version, "an uncleared floor stays");
+        assert_eq!(world.difficulty, 1.0);
+
+        // Cleared all but two rooms: the next floor is new and harder.
+        world.floor.as_mut().unwrap().rooms_cleared = world.floor.as_ref().unwrap().rooms.len() - 2;
+        world.teleport(world.combat.exits[0].0);
+        interact(&mut world);
+        assert_eq!(world.room_version, version + 1, "a new floor");
+        assert_eq!(world.difficulty, 2.0);
+        assert!(world.combat.targets.iter().any(|target| target.origin.x > start_x && target.enemy.is_some()));
+    }
+
+    #[test]
+    fn dying_in_the_dungeon_wakes_in_the_hub_with_a_new_floor() {
+        let mut world = load_world(&AssetSource::folder(None).unwrap(), DUNGEON, 1).unwrap();
+        let start_x = world.floor.as_ref().unwrap().start_x;
+        let version = world.room_version;
+        world.player.health = 0.0;
+        world.step(&Input::default());
+        assert!(world.player.position.x < start_x);
+        assert_eq!(world.player.health, world.player.max_health);
+        assert_eq!(world.room_version, version + 1);
+    }
+
+    #[test]
+    fn the_boss_room_shuts_the_player_in_until_the_boss_dies() {
+        use crate::sim::dungeon::RoomKind;
+        let mut world = load_world(&AssetSource::folder(None).unwrap(), DUNGEON, 1).unwrap();
+        let floor = world.floor.as_ref().unwrap();
+        let boss = floor.rooms.iter().position(|room| room.kind == RoomKind::Boss).unwrap();
+        let block = floor.rooms[boss].block;
+        assert!(floor.rooms[boss].seal.iter().any(|tile| tile.solid), "its wall closes the way it was entered");
+        let middle = Vec2::new(block.0 as f32 * 16.0 + 8.0, block.1 as f32 * 9.0 + 2.0);
+        world.teleport(world.room.nearest_open_point(middle) - Vec2::new(0.0, 9.0));
+        world.player.position = world.room.nearest_open_point(middle);
+        world.step(&Input::default());
+        assert!(world.floor.as_ref().unwrap().rooms[boss].sealed);
+        for target in &mut world.combat.targets {
+            if target.enemy.as_ref().is_some_and(|enemy| enemy.home == block) {
+                target.health = 0.0;
+            }
+        }
+        world.step(&Input::default());
+        world.step(&Input::default());
+        let floor = world.floor.as_ref().unwrap();
+        assert!(!floor.rooms[boss].sealed, "open again once the boss is dead");
+        assert_eq!(floor.rooms_cleared, 1);
     }
 
     #[test]

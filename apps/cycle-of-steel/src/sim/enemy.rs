@@ -59,8 +59,6 @@ use super::room::{CAMERA_BLOCK, Room};
 /// rate. As for drops, one Unity frame is taken to be 1/60 s. A Warrior then
 /// tops out near 0.6 units/s, an EnemyTank (drag 15) near 0.8.
 const UNITY_FRAME_RATE: f32 = 60.0;
-/// `PlayerData.difficulty`: 1 on a new save. It scales how hard enemies push.
-const DIFFICULTY: f32 = 1.0;
 /// `Warrior.SwingHitCheck`: the blow lands this long after the swing starts...
 const SWING_WINDUP: f64 = 0.5;
 /// ...and hurts for this long (`hittingCooldown`), at most once.
@@ -294,6 +292,7 @@ pub fn step_enemies(
     targets: &mut [Target],
     barriers: &[(Vec2, Vec2)],
     shots: &mut Vec<Shot>,
+    difficulty: f32,
     defs: &Defs,
     room: &Room,
     player: &mut Player,
@@ -309,21 +308,21 @@ pub fn step_enemies(
             Ai::Warrior(warrior) => {
                 let heading = think(targets, index, warrior, room, player.position, now, rng);
                 swing(&mut targets[index], warrior, player, now);
-                heading * warrior_acceleration(warrior, def)
+                heading * warrior_acceleration(warrior, def, difficulty)
             }
             Ai::Ranged(ranged) => {
-                let heading = think_ranged(targets, index, ranged, defs, room, player.position, now, rng, shots);
+                let heading = think_ranged(targets, index, ranged, difficulty, defs, room, player.position, now, rng, shots);
                 heading * ranged_acceleration(ranged, def)
             }
             Ai::Turret(turret) => {
-                fire_turret(&mut targets[index], turret, defs, player.position, now, shots);
+                fire_turret(&mut targets[index], turret, difficulty, defs, player.position, now, shots);
                 Vec2::ZERO
             }
             Ai::Laser(laser) => {
                 let heading = think_laser(targets, index, laser, room, player, now, rng);
                 heading * laser.move_speed * UNITY_STEP / def.mass
             }
-            Ai::Drone(drone) => think_drone(&mut targets[index], drone, def, player.position, now, rng),
+            Ai::Drone(drone) => think_drone(&mut targets[index], drone, difficulty, def, player.position, now, rng),
             Ai::Boss(boss) => think_boss(targets, index, boss, def, defs, room, player, now, rng, shots),
         };
         if let Some(area) = def.detonate {
@@ -412,6 +411,7 @@ fn think_ranged(
     targets: &mut [Target],
     index: usize,
     ai: &RangedDef,
+    difficulty: f32,
     defs: &Defs,
     room: &Room,
     player: Vec2,
@@ -433,7 +433,7 @@ fn think_ranged(
 
     let enemy = targets[index].enemy.as_mut().expect("an enemy");
     let push = if attacking {
-        if now - enemy.last_fire > (ai.fire_interval / DIFFICULTY) as f64 {
+        if now - enemy.last_fire > (ai.fire_interval / difficulty) as f64 {
             // `Attack`: straight at the player, the sprite turned to face back.
             let direction = (player - origin).normalize_or_zero();
             fire(shots, defs, ai.bullet, origin, direction * RANGED_SHOT_SPEED, (-direction).to_angle(), ai.damage);
@@ -711,7 +711,7 @@ const DRONE_DRIFT_RATE: f32 = 4.0;
 
 /// `DashAIDrone.Update`: the acceleration it pushes with. Wandering sets its
 /// velocity outright, so that is done here and no push is returned.
-fn think_drone(target: &mut Target, ai: &DroneFile, def: &EnemyDef, player: Vec2, now: f64, rng: &mut Rng) -> Vec2 {
+fn think_drone(target: &mut Target, ai: &DroneFile, difficulty: f32, def: &EnemyDef, player: Vec2, now: f64, rng: &mut Rng) -> Vec2 {
     let origin = target.origin;
     if block_of(origin) != block_of(player) {
         return Vec2::ZERO;
@@ -723,7 +723,7 @@ fn think_drone(target: &mut Target, ai: &DroneFile, def: &EnemyDef, player: Vec2
         }
         let toward = (player - origin).normalize_or_zero();
         // A push every frame, not scaled by frame time, taken at 60 frames a second.
-        return toward * DRONE_FOLLOW_FORCE * DIFFICULTY * UNITY_FRAME_RATE * UNITY_STEP / def.mass;
+        return toward * DRONE_FOLLOW_FORCE * difficulty * UNITY_FRAME_RATE * UNITY_STEP / def.mass;
     }
     // A wander interval of 0 picks a new direction every frame.
     if now - enemy.last_wander > ai.wander_interval as f64 {
@@ -767,12 +767,12 @@ fn wrap_angle(angle: f32) -> f32 {
 }
 
 /// `RangedAITurret.Update`: every muzzle fires at once while the player is near.
-fn fire_turret(target: &mut Target, ai: &TurretDef, defs: &Defs, player: Vec2, now: f64, shots: &mut Vec<Shot>) {
+fn fire_turret(target: &mut Target, ai: &TurretDef, difficulty: f32, defs: &Defs, player: Vec2, now: f64, shots: &mut Vec<Shot>) {
     let origin = target.origin;
     let enemy = target.enemy.as_mut().expect("an enemy");
     if block_of(origin) != block_of(player)
         || origin.distance(player) >= ai.attack_range
-        || now - enemy.last_fire <= (ai.fire_interval / DIFFICULTY) as f64
+        || now - enemy.last_fire <= (ai.fire_interval / difficulty) as f64
     {
         return;
     }
@@ -928,8 +928,8 @@ fn move_enemy(targets: &mut [Target], barriers: &[(Vec2, Vec2)], index: usize, d
 
 /// Units/s^2 from the Warrior's per-frame push of `moveSpeed * difficulty` on
 /// its mass, summed over each 0.02 s physics step.
-fn warrior_acceleration(warrior: &WarriorDef, def: &EnemyDef) -> f32 {
-    warrior.move_speed * DIFFICULTY * UNITY_FRAME_RATE * UNITY_STEP / def.mass
+fn warrior_acceleration(warrior: &WarriorDef, def: &EnemyDef, difficulty: f32) -> f32 {
+    warrior.move_speed * difficulty * UNITY_FRAME_RATE * UNITY_STEP / def.mass
 }
 
 /// Units/s^2 from `RangedAI`'s push of `moveSpeed * deltaTime` each frame: summed
@@ -994,7 +994,7 @@ mod tests {
         let mut effects = Vec::with_capacity(8);
         for tick in 0..steps {
             let now = tick as f64 * DT as f64;
-            step_enemies(targets, &[], &mut shots, defs, room, player, now, &mut rng);
+            step_enemies(targets, &[], &mut shots, 1.0, defs, room, player, now, &mut rng);
             step_shots(&mut shots, &mut effects, defs, room, player, now);
         }
         shots
@@ -1059,7 +1059,7 @@ mod tests {
             let now = tick as f64 * DT as f64;
             // Keep the player in place, out of its bite.
             player.position = Vec2::new(4.0, 2.0);
-            step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, now, &mut rng);
+            step_enemies(&mut targets, &[], &mut shots, 1.0, &defs, &room, &mut player, now, &mut rng);
             if let Some(beam) = targets[0].enemy.as_ref().unwrap().beam
                 && phases.last() != Some(&beam.phase)
             {
@@ -1079,11 +1079,11 @@ mod tests {
         let mut targets = vec![spawn(&defs, drone, Vec2::new(4.6, 2.0), 0)];
         let mut rng = Rng::new(5);
         let mut shots = Vec::new();
-        step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
+        step_enemies(&mut targets, &[], &mut shots, 1.0, &defs, &room, &mut player, 0.0, &mut rng);
         assert_eq!(targets[0].enemy.as_ref().unwrap().risen, 1, "it saw the player and began to rise");
         let mut tick = 1;
         while targets[0].health > 0.0 && tick < 60 * 30 {
-            step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, tick as f64 * DT as f64, &mut rng);
+            step_enemies(&mut targets, &[], &mut shots, 1.0, &defs, &room, &mut player, tick as f64 * DT as f64, &mut rng);
             tick += 1;
         }
         assert_eq!(targets[0].health, 0.0, "touching the player set it off");
@@ -1111,7 +1111,7 @@ mod tests {
         for tick in 0..60 * 30 {
             let now = tick as f64 * DT as f64;
             player.health = player::MAX_HEALTH;
-            step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, now, &mut rng);
+            step_enemies(&mut targets, &[], &mut shots, 1.0, &defs, &room, &mut player, now, &mut rng);
             let attack = targets[0].enemy.as_ref().unwrap().boss.attack;
             if attacks.last().map(|(last, _)| *last) != Some(attack) {
                 attacks.push((attack, tick));
@@ -1135,7 +1135,7 @@ mod tests {
         state.until = 100.0;
         let mut rng = Rng::new(3);
         let mut shots = Vec::new();
-        step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
+        step_enemies(&mut targets, &[], &mut shots, 1.0, &defs, &room, &mut player, 0.0, &mut rng);
         assert_eq!(player.health, player::MAX_HEALTH - 20.0);
         let beam = targets[0].enemy.as_ref().unwrap().boss.beams[0].unwrap();
         assert!((beam.length - (3.0 - player::HALF_SIZE.x)).abs() < 1e-3, "it stops on the player: {}", beam.length);
@@ -1191,7 +1191,7 @@ mod tests {
         let mut speed = 0.0_f32;
         let Ai::Warrior(warrior) = &def.ai else { panic!("a warrior") };
         for _ in 0..600 {
-            speed = (speed + warrior_acceleration(warrior, def) * DT) * drag_kept(def.drag);
+            speed = (speed + warrior_acceleration(warrior, def, 1.0) * DT) * drag_kept(def.drag);
         }
         assert!((speed - 0.6).abs() < 0.03, "{speed}");
     }

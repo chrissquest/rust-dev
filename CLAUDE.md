@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon (pieces 1 and 2 of 4), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon (pieces 1 to 3 of 4), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -76,10 +76,15 @@ cells made walls) when the player enters it with counted enemies left
 (`World::update_rooms`, `Enemy::counted` and `home`), and opens them when they
 die; room barriers keep enemies in (`Combat::barriers`).
 
-**Next: step 5 piece 3**: the way in from the hub, the exit room (`ExitDungeon`:
-full heal, back to the hub, the next floor harder) and the boss room's locking
-(it is a `SpawnRoom` with `doorsInverseGenerated`).
-`cos-convert` when the step needs it, not before.
+Piece 3 is done: a run is the hub with a floor built one empty block to its
+right (`World::new_run`, `dungeon::build` with the hub), the default start.
+`ExitHub` markers enter the dungeon, `ExitDungeon` (interact) leaves it, with a
+new, harder floor (`World::difficulty`) once all but two rooms are cleared;
+death respawns in the hub on a new floor; `World::new_floor` rebuilds the room
+and bumps `room_version` so the view re-uploads it. The boss room seals with its
+wall layers (`SealTile`) and, unlike Unity, opens when the boss dies.
+
+**Next: step 5 piece 4, the minimap** (`Menus/MapMenu.cs`).
 
 ### How to work here
 

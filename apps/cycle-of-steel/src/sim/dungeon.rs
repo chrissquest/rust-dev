@@ -21,7 +21,7 @@ use crystal_engine::glam::Vec2;
 
 use super::rng::Rng;
 use super::room::{Cell, Room};
-use crate::data::{DoorTilesFile, DoorsFile, DungeonFile, LayerFile, RoomFile};
+use crate::data::{DoorsFile, DungeonFile, LayerFile, RoomFile};
 
 /// `DungeonGenerator`'s give-up count: rounds in a row that add no room.
 const MAX_TRIES: u32 = 7;
@@ -178,43 +178,64 @@ fn opposite(index: usize) -> usize {
     [1, 0, 3, 2][index]
 }
 
+/// What a run's floors are made from: the generator's settings, every room it
+/// can pick, and the hub they are built beside.
+#[derive(Clone, Debug)]
+pub struct RunAssets {
+    pub settings: DungeonFile,
+    pub rooms: HashMap<String, RoomFile>,
+    pub hub: RoomFile,
+}
+
+impl RunAssets {
+    /// The room files a floor can use, by name.
+    pub fn room_names(settings: &DungeonFile) -> Vec<String> {
+        let mut names: Vec<String> = settings.by_doors.values().flatten().cloned().collect();
+        names.extend([&settings.open_room, &settings.spawn_room, &settings.exit_room, &settings.boss_room].map(Clone::clone));
+        names.sort();
+        names.dedup();
+        names
+    }
+}
+
 /// A floor while it is played: its rooms, and which are sealed.
 #[derive(Clone, Debug)]
 pub struct Floor {
     pub rooms: Vec<FloorRoom>,
-    pub door_tiles: DoorTilesFile,
+    /// Where the floor starts in the world: everything left of this is the hub.
+    pub start_x: f32,
+    /// Where entering the dungeon puts the player (`Player.TeleportDungeon`).
+    pub entry: Vec2,
+    /// Rooms whose enemies have all died (`DungeonGenerator.ClearedRoom`).
+    pub rooms_cleared: usize,
 }
 
-/// What a door tile is, of the three `SealRoom` places.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DoorPiece {
-    Top,
-    Bottom,
-    Vertical,
+/// A tile a sealed room shows, and the cell it closes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SealTile {
+    pub cell: (i32, i32),
+    pub sprite: String,
+    /// A room tile's transform: quarter turns, plus 4 for mirrored.
+    pub transform: u8,
+    pub solid: bool,
+    /// What the cell was before the room sealed.
+    before: Cell,
 }
-
-/// The most cells one room's doors can cover: 4 + 2 + 3 + 3.
-const DOOR_CELLS: usize = 12;
 
 #[derive(Clone, Debug)]
 pub struct FloorRoom {
-    /// Its screen-sized block in the floor.
+    /// Its screen-sized block in the world.
     pub block: (i32, i32),
     pub kind: RoomKind,
-    /// Its doorways that `SealRoom` closes with door tiles.
-    pub doors: DoorsFile,
+    /// What sealing it puts in place: door tiles in a picked room's doorways
+    /// (`RoomScript.SealRoom`), wall layers on the boss room's open sides
+    /// (`SpawnRoom.SealRoom`).
+    pub seal: Vec<SealTile>,
     pub sealed: bool,
-    /// While sealed: the cells its door tiles cover, what each is, and the cell
-    /// each covered before.
-    cells: [((i32, i32), DoorPiece, Cell); DOOR_CELLS],
-    cell_count: usize,
-}
-
-impl FloorRoom {
-    /// The door tiles in place while it is sealed.
-    pub fn door_cells(&self) -> impl Iterator<Item = ((i32, i32), DoorPiece)> + '_ {
-        self.cells[..self.cell_count].iter().map(|&(cell, piece, _)| (cell, piece))
-    }
+    /// Whether it had counted enemies when the floor was made, and whether they
+    /// have all died since.
+    pub had_enemies: bool,
+    pub cleared: bool,
 }
 
 impl Floor {
@@ -222,114 +243,139 @@ impl Floor {
         self.rooms.iter().position(|room| room.block == block)
     }
 
-    /// `RoomScript.SealRoom`: door tiles in each of the room's doorways, at the
-    /// cells the script names; those whose tile collides block.
+    /// Puts the room's seal in place; tiles that collide make their cells walls.
     pub fn seal(&mut self, index: usize, room: &mut Room) {
         let floor_room = &mut self.rooms[index];
         if floor_room.sealed {
             return;
         }
-        let base = (floor_room.block.0 * ROOM_CELLS[0] as i32, floor_room.block.1 * ROOM_CELLS[1] as i32);
-        let doors = floor_room.doors;
-        let mut place: Vec<((i32, i32), DoorPiece)> = Vec::with_capacity(DOOR_CELLS);
-        if doors.top {
-            place.extend([((15, 17), DoorPiece::Top), ((16, 17), DoorPiece::Top)]);
-            place.extend([((15, 16), DoorPiece::Bottom), ((16, 16), DoorPiece::Bottom)]);
-        }
-        if doors.bottom {
-            place.extend([((15, 0), DoorPiece::Top), ((16, 0), DoorPiece::Top)]);
-        }
-        if doors.left {
-            place.extend([((0, 8), DoorPiece::Vertical), ((0, 9), DoorPiece::Vertical), ((0, 10), DoorPiece::Vertical)]);
-        }
-        if doors.right {
-            place.extend([((31, 8), DoorPiece::Vertical), ((31, 9), DoorPiece::Vertical), ((31, 10), DoorPiece::Vertical)]);
-        }
-        floor_room.cell_count = 0;
-        for ((x, y), piece) in place {
-            let cell = (base.0 + x, base.1 + y);
-            let before = room.cell_at(cell.0, cell.1);
-            let tile = match piece {
-                DoorPiece::Top => &self.door_tiles.top,
-                DoorPiece::Bottom => &self.door_tiles.bottom,
-                DoorPiece::Vertical => &self.door_tiles.vertical,
-            };
+        for tile in &mut floor_room.seal {
+            tile.before = room.cell_at(tile.cell.0, tile.cell.1);
             if tile.solid {
-                room.set_cell(cell.0, cell.1, Cell::Wall);
+                room.set_cell(tile.cell.0, tile.cell.1, Cell::Wall);
             }
-            floor_room.cells[floor_room.cell_count] = (cell, piece, before);
-            floor_room.cell_count += 1;
         }
         floor_room.sealed = true;
     }
 
-    /// `RoomScript.UnsealRoom`: the door tiles go and the cells are as they were.
+    /// `RoomScript.UnsealRoom`: the seal goes and the cells are as they were.
     pub fn unseal(&mut self, index: usize, room: &mut Room) {
         let floor_room = &mut self.rooms[index];
-        for &((x, y), _, before) in &floor_room.cells[..floor_room.cell_count] {
-            room.set_cell(x, y, before);
+        for tile in &floor_room.seal {
+            room.set_cell(tile.cell.0, tile.cell.1, tile.before);
         }
-        floor_room.cell_count = 0;
         floor_room.sealed = false;
     }
 }
 
-/// Joins the layout's rooms into one room, each at its place on the grid, and
-/// says where the player starts: the middle of the spawn room.
-pub fn build(layout: &Layout, files: &HashMap<String, RoomFile>) -> Result<(RoomFile, Vec2)> {
+/// Where a floor goes: on its own, or to the right of the hub, one empty block
+/// beyond it, as Unity's scene keeps the hub apart from the dungeon.
+pub struct Built {
+    pub file: RoomFile,
+    pub floor: Floor,
+}
+
+/// Joins the layout's rooms into one room, each at its place on the grid, after
+/// `hub` if given. The world's spawn stays the hub's when there is one;
+/// otherwise it is where entering the dungeon puts the player.
+pub fn build(
+    layout: &Layout,
+    files: &HashMap<String, RoomFile>,
+    settings: &DungeonFile,
+    hub: Option<&RoomFile>,
+) -> Result<Built> {
     let min_x = layout.rooms.iter().map(|room| room.coord.0).min().context("an empty layout")?;
     let min_y = layout.rooms.iter().map(|room| room.coord.1).min().context("an empty layout")?;
     let max_x = layout.rooms.iter().map(|room| room.coord.0).max().unwrap_or(min_x);
     let max_y = layout.rooms.iter().map(|room| room.coord.1).max().unwrap_or(min_y);
-    let columns = (max_x - min_x + 1) as usize * ROOM_CELLS[0];
-    let rows = (max_y - min_y + 1) as usize * ROOM_CELLS[1];
-
-    let mut floor = RoomFile {
-        name: "dungeon".to_string(),
-        size: [columns as u32, rows as u32],
-        cell: 0.5,
-        palette: Vec::new(),
-        layers: Vec::new(),
-        decorations: Vec::new(),
-        objects: Vec::new(),
-        markers: Vec::new(),
-        barriers: Vec::new(),
-        doors: DoorsFile::default(),
+    // The floor's first block: past the hub and one empty block more.
+    let start_block = match hub {
+        Some(hub) => (hub.size[0] as usize).div_ceil(ROOM_CELLS[0]) as i32 + 1,
+        None => 0,
     };
-    let mut palette_index: HashMap<String, i32> = HashMap::new();
-    // One floor layer per (sorting layer, order, ledge), in order of first sight.
-    let mut layer_index: HashMap<(String, i32, bool), usize> = HashMap::new();
-    let mut spawn = Vec2::ZERO;
+    let floor_columns = (max_x - min_x + 1) as usize * ROOM_CELLS[0];
+    let floor_rows = (max_y - min_y + 1) as usize * ROOM_CELLS[1];
+    let columns = start_block as usize * ROOM_CELLS[0] + floor_columns;
+    let rows = floor_rows.max(hub.map_or(0, |hub| hub.size[1] as usize));
 
+    let mut joined = Joined {
+        file: RoomFile {
+            name: "dungeon".to_string(),
+            size: [columns as u32, rows as u32],
+            cell: 0.5,
+            palette: Vec::new(),
+            layers: Vec::new(),
+            decorations: Vec::new(),
+            objects: Vec::new(),
+            markers: Vec::new(),
+            barriers: Vec::new(),
+            doors: DoorsFile::default(),
+        },
+        palette_index: HashMap::new(),
+        layer_index: HashMap::new(),
+    };
+    if let Some(hub) = hub {
+        joined.add(hub, (0, 0), |layer| layer.enabled);
+    }
+
+    let mut floor = Floor {
+        rooms: Vec::new(),
+        start_x: start_block as f32 * ROOM_SIZE.x,
+        entry: Vec2::ZERO,
+        rooms_cleared: 0,
+    };
     for room in &layout.rooms {
         let file = files.get(&room.name).with_context(|| format!("room `{}` was not loaded", room.name))?;
-        let cells = (
-            (room.coord.0 - min_x) as usize * ROOM_CELLS[0],
-            (room.coord.1 - min_y) as usize * ROOM_CELLS[1],
-        );
-        let offset = Vec2::new(cells.0 as f32, cells.1 as f32) * floor.cell;
+        let block = (start_block + room.coord.0 - min_x, room.coord.1 - min_y);
+        let cells = (block.0 as usize * ROOM_CELLS[0], block.1 as usize * ROOM_CELLS[1]);
         if room.kind == RoomKind::Spawn {
-            spawn = offset + ROOM_SIZE * 0.5;
+            // `Player.TeleportDungeon`: 3 left of and 2 above the room's middle.
+            floor.entry = Vec2::new(block.0 as f32, block.1 as f32) * ROOM_SIZE + ROOM_SIZE * 0.5 + Vec2::new(-3.0, 2.0);
         }
-        let remap: Vec<i32> = file
+        joined.add(file, cells, |layer| layer_shown(layer, room));
+        floor.rooms.push(FloorRoom {
+            block,
+            kind: room.kind,
+            seal: seal_tiles(room, file, settings, cells),
+            sealed: false,
+            had_enemies: false,
+            cleared: false,
+        });
+    }
+    Ok(Built { file: joined.file, floor })
+}
+
+/// A room file being joined from others.
+struct Joined {
+    file: RoomFile,
+    palette_index: HashMap<String, i32>,
+    /// One joined layer per (sorting layer, order, ledge), in order of first sight.
+    layer_index: HashMap<(String, i32, bool), usize>,
+}
+
+impl Joined {
+    /// Copies `room` in with its bottom-left cell at `cells`, keeping the layers
+    /// `shown` lets through.
+    fn add(&mut self, room: &RoomFile, cells: (usize, usize), shown: impl Fn(&LayerFile) -> bool) {
+        let [columns, rows] = [self.file.size[0] as usize, self.file.size[1] as usize];
+        let offset = Vec2::new(cells.0 as f32, cells.1 as f32) * self.file.cell;
+        let remap: Vec<i32> = room
             .palette
             .iter()
             .map(|name| {
-                let next = palette_index.len() as i32;
-                *palette_index.entry(name.clone()).or_insert_with(|| {
-                    floor.palette.push(name.clone());
+                let next = self.palette_index.len() as i32;
+                *self.palette_index.entry(name.clone()).or_insert_with(|| {
+                    self.file.palette.push(name.clone());
                     next
                 })
             })
             .collect();
 
-        for layer in &file.layers {
-            if !layer_shown(layer, room) {
-                continue;
-            }
+        for layer in room.layers.iter().filter(|layer| shown(layer)) {
             let key = (layer.sorting_layer.clone(), layer.order, layer.ledge);
-            let index = *layer_index.entry(key).or_insert_with(|| {
-                floor.layers.push(LayerFile {
+            let layers = &mut self.file.layers;
+            let index = *self.layer_index.entry(key).or_insert_with(|| {
+                layers.push(LayerFile {
                     name: layer.name.clone(),
                     sorting_layer: layer.sorting_layer.clone(),
                     order: layer.order,
@@ -338,9 +384,9 @@ pub fn build(layout: &Layout, files: &HashMap<String, RoomFile>) -> Result<(Room
                     tiles: vec![vec![-1; columns]; rows],
                     solid: None,
                 });
-                floor.layers.len() - 1
+                layers.len() - 1
             });
-            let merged = &mut floor.layers[index];
+            let merged = &mut self.file.layers[index];
             let room_rows = layer.tiles.len();
             for (row_from_top, row) in layer.tiles.iter().enumerate() {
                 let floor_row = rows - 1 - (cells.1 + room_rows - 1 - row_from_top);
@@ -367,55 +413,105 @@ pub fn build(layout: &Layout, files: &HashMap<String, RoomFile>) -> Result<(Room
         }
 
         let moved = |position: [f32; 2]| (Vec2::from(position) + offset).to_array();
-        for decoration in &file.decorations {
+        for decoration in &room.decorations {
             let mut decoration = decoration.clone();
             decoration.position = moved(decoration.position);
-            floor.decorations.push(decoration);
+            self.file.decorations.push(decoration);
         }
-        for object in &file.objects {
+        for object in &room.objects {
             let mut object = object.clone();
             object.position = moved(object.position);
-            floor.objects.push(object);
+            self.file.objects.push(object);
         }
-        for barrier in &file.barriers {
+        for barrier in &room.barriers {
             let mut barrier = *barrier;
             barrier.center = moved(barrier.center);
-            floor.barriers.push(barrier);
+            self.file.barriers.push(barrier);
         }
-        for marker in &file.markers {
+        for marker in &room.markers {
             let mut marker = marker.clone();
             marker.position = moved(marker.position);
             if let Some(bounds) = &mut marker.bounds {
                 bounds.center = moved(bounds.center);
             }
-            floor.markers.push(marker);
+            self.file.markers.push(marker);
         }
     }
-    Ok((floor, spawn))
 }
 
-/// The floor's rooms as they are played, in the blocks `build` put them in.
-pub fn floor_rooms(layout: &Layout, files: &HashMap<String, RoomFile>, settings: &DungeonFile) -> Floor {
-    let min_x = layout.rooms.iter().map(|room| room.coord.0).min().unwrap_or(0);
-    let min_y = layout.rooms.iter().map(|room| room.coord.1).min().unwrap_or(0);
-    let rooms = layout
-        .rooms
-        .iter()
-        .map(|room| FloorRoom {
-            block: (room.coord.0 - min_x, room.coord.1 - min_y),
-            kind: room.kind,
-            // Only rooms picked for their doors seal with door tiles.
-            doors: if room.kind == RoomKind::Random {
-                files.get(&room.name).map(|file| file.doors).unwrap_or_default()
-            } else {
-                DoorsFile::default()
-            },
-            sealed: false,
-            cells: [((0, 0), DoorPiece::Top, Cell::Free); DOOR_CELLS],
-            cell_count: 0,
-        })
-        .collect();
-    Floor { rooms, door_tiles: settings.door_tiles.clone() }
+/// What sealing a room puts in place. A picked room seals its doorways with
+/// door tiles at the cells `RoomScript.SealRoom` names. The boss room is a
+/// `SpawnRoom` whose sides are flipped on `Start` (`doorsInverseGenerated`), so
+/// sealing it switches on the wall layers of the sides that lead somewhere,
+/// shutting the player in with the boss. The spawn and exit rooms never seal:
+/// they have no enemies.
+fn seal_tiles(room: &PlannedRoom, file: &RoomFile, settings: &DungeonFile, cells: (usize, usize)) -> Vec<SealTile> {
+    let base = (cells.0 as i32, cells.1 as i32);
+    let mut tiles = Vec::new();
+    match room.kind {
+        RoomKind::Random => {
+            let doors = file.doors;
+            let tile = |x: i32, y: i32, door: &crate::data::DoorTileFile| SealTile {
+                cell: (base.0 + x, base.1 + y),
+                sprite: door.sprite.clone(),
+                transform: 0,
+                solid: door.solid,
+                before: Cell::Free,
+            };
+            let door = &settings.door_tiles;
+            if doors.top {
+                tiles.extend([tile(15, 17, &door.top), tile(16, 17, &door.top)]);
+                tiles.extend([tile(15, 16, &door.bottom), tile(16, 16, &door.bottom)]);
+            }
+            if doors.bottom {
+                tiles.extend([tile(15, 0, &door.top), tile(16, 0, &door.top)]);
+            }
+            if doors.left {
+                tiles.extend((8..=10).map(|y| tile(0, y, &door.vertical)));
+            }
+            if doors.right {
+                tiles.extend((8..=10).map(|y| tile(31, y, &door.vertical)));
+            }
+        }
+        RoomKind::Boss => {
+            let [top, bottom, left, right] = room.closed;
+            for layer in &file.layers {
+                let open_side = match layer.name.as_str() {
+                    "TopWall" => !top,
+                    "BottomWall" => !bottom,
+                    "LeftWall" => !left,
+                    "RightWall" => !right,
+                    _ => false,
+                };
+                if layer.enabled || !open_side {
+                    continue;
+                }
+                let rows = layer.tiles.len();
+                for (row_from_top, row) in layer.tiles.iter().enumerate() {
+                    let y = (rows - 1 - row_from_top) as i32;
+                    for (x, &value) in row.iter().enumerate() {
+                        if value < 0 {
+                            continue;
+                        }
+                        let solid = layer
+                            .solid
+                            .as_ref()
+                            .and_then(|solid| solid.get(row_from_top))
+                            .is_some_and(|line| line.as_bytes().get(x) == Some(&b'#'));
+                        tiles.push(SealTile {
+                            cell: (base.0 + x as i32, base.1 + y),
+                            sprite: file.palette[(value / 8) as usize].clone(),
+                            transform: (value % 8) as u8,
+                            solid,
+                            before: Cell::Free,
+                        });
+                    }
+                }
+            }
+        }
+        RoomKind::Spawn | RoomKind::Exit => {}
+    }
+    tiles
 }
 
 /// Whether a room's layer is drawn: enabled ones always, and the spawn, exit and

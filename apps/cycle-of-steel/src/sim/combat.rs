@@ -146,6 +146,8 @@ pub enum Interaction {
     Pickup(usize),
     /// An index into [`Combat::teleports`].
     Teleport(usize),
+    /// An index into [`Combat::exits`]: the exit room's stairs out.
+    Exit(usize),
 }
 
 #[derive(Default)]
@@ -168,6 +170,10 @@ pub struct Combat {
     pub grates: Vec<Grate>,
     /// The boxes at doorways that keep enemies in their room, as (centre, half size).
     pub barriers: Vec<(Vec2, Vec2)>,
+    /// Interact here to leave the dungeon (`ExitDungeon`), as (centre, half size).
+    pub exits: Vec<(Vec2, Vec2)>,
+    /// Walk in here to enter the dungeon (`ExitHub`), as (centre, half size).
+    pub entrances: Vec<(Vec2, Vec2)>,
 }
 
 /// A floor grate over water or lava (`EffectGrate`): a trigger box that wets or
@@ -222,6 +228,8 @@ impl Combat {
             blasts: Vec::with_capacity(BLAST_CAPACITY),
             grates: Vec::new(),
             barriers: Vec::new(),
+            exits: Vec::new(),
+            entrances: Vec::new(),
         }
     }
 
@@ -516,8 +524,10 @@ impl Combat {
             .enumerate()
             .map(|(index, teleport)| (Interaction::Teleport(index), teleport.position, teleport.half));
 
+        let exits = self.exits.iter().enumerate().map(|(index, &(center, half))| (Interaction::Exit(index), center, half));
         pickups
             .chain(teleports)
+            .chain(exits)
             .filter(|(_, position, half)| boxes_overlap(player, player_half, *position, *half))
             .min_by(|(_, a, _), (_, b, _)| a.distance_squared(player).total_cmp(&b.distance_squared(player)))
             .map(|(interaction, _, _)| interaction)
@@ -679,7 +689,7 @@ pub(super) fn circle_overlaps_box(center: Vec2, radius: f32, box_center: Vec2, h
     nearest.distance_squared(center) < radius * radius
 }
 
-pub(super) fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {
+pub fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {
     let gap = (a - b).abs();
     gap.x < a_half.x + b_half.x && gap.y < a_half.y + b_half.y
 }

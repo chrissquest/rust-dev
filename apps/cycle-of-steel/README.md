@@ -152,8 +152,19 @@ where you spawn and interact. Interact again on the spot inside to leave.
   Unity's attack angles run on `Time.time`, the game's clock; here they run on
   the room's.
 
-- **Dungeon floors.** `--room dungeon` plays a generated floor (a new one each
-  launch; screenshots and tests use seed 1). It is Unity's `DungeonGenerator`:
+- **Runs.** The game starts in the hub with a generated floor waiting one empty
+  screen to its right, as Unity's scene keeps them apart. Walking into the hub's
+  right-hand block (`ExitHub`) puts the player in the floor's spawn room; the
+  exit room's stairs (`ExitDungeon`, interact) heal them and take them back to
+  the hub, and if all but two of the floor's rooms were cleared the floor is
+  replaced by a new one and enemies get harder (difficulty 2: they push harder
+  and fire faster). Dying wakes the player in the hub, healed, with a new floor;
+  Unity's 5 second death screen and its reload of the last save wait for step 7.
+  The boss room shuts the player in with the Priest, closing the way they came
+  with its wall layers, and opens once the Priest dies; in Unity it never
+  reopened. `--room dungeon` starts a run inside the spawn room.
+- **Dungeon floors.** Each floor is Unity's `DungeonGenerator` (a new one each
+  launch; screenshots and tests use seed 1):
   from the spawn in the middle of a 10 by 10 grid it grows 8 rooms outwards a
   layer at a time, each touching only the room it grew from; the last room of
   the outermost layer is the exit, with the boss room beside it. Each grown room
@@ -167,8 +178,7 @@ where you spawn and interact. Interact again on the spot inside to leave.
   so the door does not close on them (`PlayerData.Update`, `RoomScript`); when
   the last enemy counted for the room dies, the doors open. Barriers at every
   doorway keep enemies in their own room. Not yet: the arrows Unity shows
-  towards the opened doors, the way in from the hub and out through the exit,
-  the boss room's locking, the minimap.
+  towards the opened doors, the exit room's dialogue, the minimap.
 
 Not in yet:
 lighting (rooms look flatter and brighter than in

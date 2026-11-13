@@ -99,6 +99,11 @@ impl Room {
         }
     }
 
+    /// The open floor nearest `point`, where a character can stand.
+    pub fn nearest_open_point(&self, point: Vec2) -> Vec2 {
+        self.nearest_open(point)
+    }
+
     /// Puts the spawn at the open floor nearest `wanted`.
     pub fn place_spawn(&mut self, wanted: Vec2) {
         self.spawn = self.nearest_open(wanted);

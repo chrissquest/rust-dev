@@ -37,6 +37,12 @@ pub const TICK_RATE: u32 = 60;
 /// Seconds per simulation step.
 pub const DT: f32 = 1.0 / TICK_RATE as f32;
 
+/// Mixed into the world's seed for the first floor's layout, so it is not drawn
+/// from the same numbers as the world's own.
+const FLOOR_SEED_MIX: u32 = 0x9e37_79b9;
+/// `DungeonGenerator.LeftDungeon` sets difficulty to this after a cleared floor.
+const CLEARED_DIFFICULTY: f32 = 2.0;
+
 /// How far further in `PlayerData.Update` moves a player entering a room that
 /// seals, in units.
 const ROOM_ENTRY_STEP: f32 = 0.75;
@@ -89,8 +95,16 @@ pub struct World {
     pub selected_slot: usize,
     /// The currency the player picks up (`PlayerData.dataCells`).
     pub data_cells: u32,
-    /// A dungeon floor's rooms, when the world is one.
+    /// A dungeon floor's rooms, when the world has one.
     pub floor: Option<dungeon::Floor>,
+    /// What a new floor is made from, when the world is a run: the hub with a
+    /// floor beside it.
+    run: Option<dungeon::RunAssets>,
+    /// `PlayerData.difficulty`: 1 on a new save, 2 once a floor has been
+    /// cleared and left. It scales how hard enemies push and how often they fire.
+    pub difficulty: f32,
+    /// Goes up whenever the room is rebuilt (a new floor), for the view to redraw it.
+    pub room_version: u64,
     /// The block the player was in last step, to notice them entering a room.
     last_block: (i32, i32),
     /// Steps taken since the world was created.
@@ -109,80 +123,7 @@ impl World {
         let mut combat = Combat::new();
 
         if let Some(file) = &room.file {
-            // The dummy comes first, so that it keeps the first place among targets.
-            for barrier in &file.barriers {
-                combat.barriers.push((Vec2::from(barrier.center), Vec2::from(barrier.size) * 0.5));
-            }
-            for marker in file.markers.iter().filter(|marker| marker.has_script("Killable")) {
-                let Some(bounds) = marker.bounds else {
-                    continue;
-                };
-                let health = marker.number("Killable.maxHealth").unwrap_or(1.0);
-                combat.targets.push(Target {
-                    id: combat.targets.len() as u32,
-                    position: Vec2::from(bounds.center),
-                    half: Vec2::from(bounds.size) * 0.5,
-                    origin: Vec2::from(bounds.center),
-                    chest: None,
-                    enemy: None,
-                    health,
-                    max_health: health,
-                    last_hit: f64::NEG_INFINITY,
-                    // The hub's dummy has none, so nothing freezes it, as in Unity.
-                    elemental: marker.has_script("ElementalEffectHandler").then(Elemental::default),
-                });
-            }
-            for object in &file.objects {
-                let position = Vec2::from(object.position);
-                if object.prefab == "EffectGrate" {
-                    combat.grates.push(grate(object, position));
-                    continue;
-                }
-                if let Some(gun) = defs.gun_named(&object.prefab) {
-                    combat.pickups.push(Pickup { gun: Gun::new(gun), position });
-                } else if let Some(drop) = defs.drop_named(&object.prefab) {
-                    // Rooms set some drops' worth: the hub's are worth far more.
-                    let field = match defs.drop_def(drop).kind {
-                        DropKind::Data => "DataDrop.value",
-                        DropKind::Heal => "HealDrop.value",
-                    };
-                    let value = object.overrides.get(field).and_then(|value| value.parse().ok());
-                    combat.drops.push(Drop::new(drop, value.unwrap_or(defs.drop_def(drop).value), position));
-                } else if let Some(enemy) = defs.enemy_named(&object.prefab) {
-                    let mut target = enemy::spawn(&defs, enemy, position, combat.targets.len() as u32);
-                    if let Some(state) = &mut target.enemy {
-                        // `Killable.safeToUpdateRoomCounter`: under the room's `Enemies`.
-                        state.counted = defs.enemy(enemy).counts_as_enemy && object.group.as_deref() == Some("Enemies");
-                    }
-                    combat.targets.push(target);
-                } else if let Some(chest) = defs.chest_named(&object.prefab) {
-                    let def = defs.chest(chest);
-                    combat.targets.push(Target {
-                        id: combat.targets.len() as u32,
-                        position: position + Vec2::from(def.offset),
-                        half: Vec2::from(def.half),
-                        origin: position,
-                        chest: Some(chest),
-                        enemy: None,
-                        health: def.max_health,
-                        max_health: def.max_health,
-                        last_hit: f64::NEG_INFINITY,
-                        // Chests have no `ElementalEffectHandler`.
-                        elemental: None,
-                    });
-                }
-            }
-            // Unity's `DebugRoom` and `DebugRoomExit`: interact on the spot to be
-            // moved by a fixed amount, into the gun room and back out of it.
-            for (script, offset) in [("DebugRoom", Vec2::new(7.0, 0.0)), ("DebugRoomExit", Vec2::new(0.0, -2.5))] {
-                for marker in file.markers.iter().filter(|marker| marker.has_script(script)) {
-                    let (position, half) = match marker.bounds {
-                        Some(bounds) => (Vec2::from(bounds.center), Vec2::from(bounds.size) * 0.5),
-                        None => (Vec2::from(marker.position), Vec2::splat(0.1)),
-                    };
-                    combat.teleports.push(Teleport { position, half, offset });
-                }
-            }
+            populate(&mut combat, file, &defs, |_| true);
         }
 
         Self {
@@ -194,10 +135,110 @@ impl World {
             selected_slot: 0,
             data_cells: 0,
             floor: None,
+            run: None,
+            difficulty: 1.0,
+            room_version: 0,
             last_block: enemy::block_of(player_position),
             tick: 0,
             rng: Rng::new(seed),
             events: Vec::new(),
+        }
+    }
+
+    /// A run: the hub, with a floor generated beside it, as Unity's scene keeps
+    /// the hub and the dungeon apart. The player starts in the hub.
+    pub fn new_run(assets: dungeon::RunAssets, defs: Arc<Defs>, seed: u32) -> anyhow::Result<Self> {
+        let mut layout_rng = Rng::new(seed ^ FLOOR_SEED_MIX);
+        let layout = dungeon::generate(&assets.settings, &mut layout_rng);
+        let built = dungeon::build(&layout, &assets.rooms, &assets.settings, Some(&assets.hub))?;
+        let mut world = Self::new(Room::from_file(built.file), defs, seed);
+        world.floor = Some(built.floor);
+        world.mark_rooms();
+        world.run = Some(assets);
+        Ok(world)
+    }
+
+    /// A new floor in place of the old one: the hub and whatever is in it stay;
+    /// everything on the old floor goes (`DungeonGenerator.Init`).
+    fn new_floor(&mut self) {
+        let Some(run) = &self.run else {
+            return;
+        };
+        let layout = dungeon::generate(&run.settings, &mut self.rng);
+        let Ok(built) = dungeon::build(&layout, &run.rooms, &run.settings, Some(&run.hub)) else {
+            return;
+        };
+        let start_x = built.floor.start_x;
+        let in_hub = |position: Vec2| position.x < start_x;
+        let combat = &mut self.combat;
+        combat.targets.retain(|target| in_hub(target.origin));
+        combat.pickups.retain(|pickup| in_hub(pickup.position));
+        combat.drops.retain(|drop| in_hub(drop.position));
+        combat.remains.retain(|remains| in_hub(remains.position));
+        combat.grates.retain(|grate| in_hub(grate.position));
+        combat.barriers.retain(|(center, _)| in_hub(*center));
+        combat.teleports.retain(|teleport| in_hub(teleport.position));
+        combat.exits.retain(|(center, _)| in_hub(*center));
+        combat.entrances.retain(|(center, _)| in_hub(*center));
+        combat.bullets.clear();
+        combat.shots.clear();
+        combat.blasts.clear();
+        combat.effects.clear();
+        combat.damage_numbers.clear();
+        self.room = Room::from_file(built.file);
+        if let Some(file) = &self.room.file {
+            populate(&mut self.combat, file, &self.defs, |position| !in_hub(position));
+        }
+        self.floor = Some(built.floor);
+        self.mark_rooms();
+        self.room_version += 1;
+    }
+
+    /// Notes which rooms of the floor start with enemies to clear.
+    fn mark_rooms(&mut self) {
+        let Some(floor) = &mut self.floor else {
+            return;
+        };
+        for room in &mut floor.rooms {
+            room.had_enemies = self
+                .combat
+                .targets
+                .iter()
+                .filter_map(|target| target.enemy.as_ref())
+                .any(|enemy| enemy.counted && enemy.home == room.block);
+        }
+    }
+
+    /// Puts the player somewhere at once: no blending across the jump, no speed
+    /// carried, and no room entered on the way.
+    pub fn teleport(&mut self, position: Vec2) {
+        self.player.position = position;
+        self.player.previous_position = position;
+        self.player.velocity = Vec2::ZERO;
+        self.last_block = enemy::block_of(position);
+    }
+
+    /// `ExitHub` then `Player.TeleportDungeon`: into the floor's spawn room.
+    pub fn enter_dungeon(&mut self) {
+        if let Some(entry) = self.floor.as_ref().map(|floor| floor.entry) {
+            let entry = self.room.nearest_open_point(entry);
+            self.teleport(entry);
+        }
+    }
+
+    /// `ExitDungeon.OnInteract` and `DungeonGenerator.LeftDungeon`: healed and
+    /// back in the hub; a floor with all but two of its rooms cleared is
+    /// replaced by a new one, and enemies get harder.
+    fn leave_dungeon(&mut self) {
+        self.player.health = self.player.max_health;
+        let spawn = self.room.spawn;
+        self.teleport(spawn);
+        let Some(floor) = &self.floor else {
+            return;
+        };
+        if floor.rooms_cleared + 2 >= floor.rooms.len() {
+            self.difficulty = CLEARED_DIFFICULTY;
+            self.new_floor();
         }
     }
 
@@ -242,6 +283,9 @@ impl World {
         let now = self.time();
 
         self.player.step(input, &self.room, self.combat.solids());
+        if self.combat.entrances.iter().any(|&(center, half)| combat::boxes_overlap(self.player.position, player::HALF_SIZE, center, half)) {
+            self.enter_dungeon();
+        }
         self.update_rooms();
 
         if let Some(slot) = input.select_slot {
@@ -254,6 +298,7 @@ impl World {
         if input.interact {
             match self.interaction() {
                 Some(Interaction::Pickup(index)) => self.pick_up(index),
+                Some(Interaction::Exit(_)) => self.leave_dungeon(),
                 Some(Interaction::Teleport(index)) => {
                     self.player.position += self.combat.teleports[index].offset;
                     // No blending across the jump: the player is simply there.
@@ -310,13 +355,18 @@ impl World {
         }
 
         let combat = &mut self.combat;
-        enemy::step_enemies(&mut combat.targets, &combat.barriers, &mut combat.shots, &defs, &self.room, &mut self.player, now, &mut self.rng);
+        enemy::step_enemies(&mut combat.targets, &combat.barriers, &mut combat.shots, self.difficulty, &defs, &self.room, &mut self.player, now, &mut self.rng);
         enemy::step_shots(&mut combat.shots, &mut combat.effects, &defs, &self.room, &mut self.player, now);
         self.combat.step(&defs, &self.room, &mut self.player, now, &mut self.rng);
         if self.player.health <= 0.0 {
-            // Placeholder until the full loop (step 7): Unity's `PlayerData.Die`
-            // ends the run; here the player simply starts the room again.
-            self.player = Player::new(self.room.spawn);
+            // `PlayerData.Die` and `Respawn`: back in the hub, healed, with a new
+            // floor. Unity's 5 second death screen and its reload of the last
+            // save (losing what was picked up) wait for menus and saves (step 7).
+            // A world that is one room simply starts it again.
+            self.player.health = self.player.max_health;
+            let spawn = self.room.spawn;
+            self.teleport(spawn);
+            self.new_floor();
         }
 
         let (player, data_cells) = (&mut self.player, &mut self.data_cells);
@@ -363,7 +413,15 @@ impl World {
             }
         }
         for index in 0..floor.rooms.len() {
-            if floor.rooms[index].sealed && !enemies_left(&self.combat.targets, floor.rooms[index].block) {
+            let room = &floor.rooms[index];
+            if (room.sealed || (room.had_enemies && !room.cleared)) && !enemies_left(&self.combat.targets, room.block) {
+                // `RoomScript.SubEnemyCount`: the last one died. Unlike Unity,
+                // the boss room opens too: there its walls stayed, shutting the
+                // player in for good.
+                if !room.cleared && room.had_enemies {
+                    floor.rooms[index].cleared = true;
+                    floor.rooms_cleared += 1;
+                }
                 floor.unseal(index, &mut self.room);
             }
         }
@@ -394,6 +452,95 @@ impl World {
             }
         }
     }
+}
+
+/// Adds what a room file holds to `combat`, keeping only what stands where
+/// `keep` says: barriers, the dummy, guns, drops, enemies, chests, grates, and
+/// the hub's and dungeon's ways in and out.
+fn populate(combat: &mut Combat, file: &crate::data::RoomFile, defs: &Defs, keep: impl Fn(Vec2) -> bool) {
+    let mut next_id = combat.targets.iter().map(|target| target.id + 1).max().unwrap_or(0);
+    let mut id = || {
+        next_id += 1;
+        next_id - 1
+    };
+    for barrier in file.barriers.iter().filter(|barrier| keep(Vec2::from(barrier.center))) {
+        combat.barriers.push((Vec2::from(barrier.center), Vec2::from(barrier.size) * 0.5));
+    }
+    // The dummy comes first, so that it keeps the first place among targets.
+    for marker in file.markers.iter().filter(|marker| marker.has_script("Killable")) {
+        let Some(bounds) = marker.bounds.filter(|bounds| keep(Vec2::from(bounds.center))) else {
+            continue;
+        };
+        let health = marker.number("Killable.maxHealth").unwrap_or(1.0);
+        combat.targets.push(Target {
+            id: id(),
+            position: Vec2::from(bounds.center),
+            half: Vec2::from(bounds.size) * 0.5,
+            origin: Vec2::from(bounds.center),
+            chest: None,
+            enemy: None,
+            health,
+            max_health: health,
+            last_hit: f64::NEG_INFINITY,
+            // The hub's dummy has none, so nothing freezes it, as in Unity.
+            elemental: marker.has_script("ElementalEffectHandler").then(Elemental::default),
+        });
+    }
+    for object in file.objects.iter().filter(|object| keep(Vec2::from(object.position))) {
+        let position = Vec2::from(object.position);
+        if object.prefab == "EffectGrate" {
+            combat.grates.push(grate(object, position));
+            continue;
+        }
+        if let Some(gun) = defs.gun_named(&object.prefab) {
+            combat.pickups.push(Pickup { gun: Gun::new(gun), position });
+        } else if let Some(drop) = defs.drop_named(&object.prefab) {
+            // Rooms set some drops' worth: the hub's are worth far more.
+            let field = match defs.drop_def(drop).kind {
+                DropKind::Data => "DataDrop.value",
+                DropKind::Heal => "HealDrop.value",
+            };
+            let value = object.overrides.get(field).and_then(|value| value.parse().ok());
+            combat.drops.push(Drop::new(drop, value.unwrap_or(defs.drop_def(drop).value), position));
+        } else if let Some(enemy) = defs.enemy_named(&object.prefab) {
+            let mut target = enemy::spawn(defs, enemy, position, id());
+            if let Some(state) = &mut target.enemy {
+                // `Killable.safeToUpdateRoomCounter`: under the room's `Enemies`.
+                state.counted = defs.enemy(enemy).counts_as_enemy && object.group.as_deref() == Some("Enemies");
+            }
+            combat.targets.push(target);
+        } else if let Some(chest) = defs.chest_named(&object.prefab) {
+            let def = defs.chest(chest);
+            combat.targets.push(Target {
+                id: id(),
+                position: position + Vec2::from(def.offset),
+                half: Vec2::from(def.half),
+                origin: position,
+                chest: Some(chest),
+                enemy: None,
+                health: def.max_health,
+                max_health: def.max_health,
+                last_hit: f64::NEG_INFINITY,
+                // Chests have no `ElementalEffectHandler`.
+                elemental: None,
+            });
+        }
+    }
+    fn boxes<'a>(file: &'a crate::data::RoomFile, script: &'a str) -> impl Iterator<Item = (Vec2, Vec2)> + 'a {
+        file.markers.iter().filter(move |marker| marker.has_script(script)).map(|marker| match marker.bounds {
+            Some(bounds) => (Vec2::from(bounds.center), Vec2::from(bounds.size) * 0.5),
+            None => (Vec2::from(marker.position), Vec2::splat(0.1)),
+        })
+    }
+    // Unity's `DebugRoom` and `DebugRoomExit`: interact on the spot to be moved
+    // by a fixed amount, into the gun room and back out of it.
+    for (script, offset) in [("DebugRoom", Vec2::new(7.0, 0.0)), ("DebugRoomExit", Vec2::new(0.0, -2.5))] {
+        for (position, half) in boxes(file, script).filter(|(position, _)| keep(*position)) {
+            combat.teleports.push(Teleport { position, half, offset });
+        }
+    }
+    combat.exits.extend(boxes(file, "ExitDungeon").filter(|(position, _)| keep(*position)));
+    combat.entrances.extend(boxes(file, "ExitHub").filter(|(position, _)| keep(*position)));
 }
 
 /// A placed `EffectGrate`. Every placement in the rooms sets its box and, all
