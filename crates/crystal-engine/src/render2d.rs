@@ -50,6 +50,8 @@ const CAMERA_UNIFORM_SIZE: u64 = 80;
 /// How many layers the light buffer has: groups of sprites lit alike.
 pub const LIGHT_LAYERS: u32 = 8;
 const LIGHT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+/// One light's shadows: 1 where walls hide it.
+const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
 /// Unity's `m_LightRenderTextureScale`: the light buffer is half the target's size.
 const LIGHT_SCALE: u32 = 2;
 const INSTANCE_SIZE: u64 = std::mem::size_of::<Sprite>() as u64;
@@ -193,15 +195,53 @@ struct LightVertex {
     color: [f32; 4],
 }
 
-/// The lights of one frame, each for a set of layers (a bit mask).
+/// The lights of one frame, each for a set of layers (a bit mask), and the wall
+/// edges that shadow them.
 #[derive(Default)]
 pub struct LightList {
     points: Vec<(u32, PointLight)>,
     /// Triangles of polygon lights, three vertices each.
     triangles: Vec<(u32, [LightVertex; 3])>,
+    /// Lights walls shadow, drawn one at a time after their shadow mask.
+    shadowed: Vec<ShadowedLight>,
+    /// The triangles of shadowed polygon lights; each light names its range.
+    shadowed_vertices: Vec<LightVertex>,
+    /// Edges that throw shadows, and the layers their shadows fall on. Kept
+    /// from frame to frame.
+    occluders: Vec<[[f32; 2]; 2]>,
+    occluder_layers: u32,
     /// Reused while drawing.
     scratch_points: Vec<PointLight>,
     scratch_vertices: Vec<LightVertex>,
+    scratch_shadows: Vec<LightVertex>,
+    scratch_drawn: Vec<ShadowedDraw>,
+}
+
+#[derive(Clone, Copy)]
+struct ShadowedLight {
+    layers: u32,
+    /// Where shadows are thrown from, and how far the light reaches.
+    origin: [f32; 2],
+    reach: f32,
+    shape: ShadowedShape,
+}
+
+#[derive(Clone, Copy)]
+enum ShadowedShape {
+    /// Its colour's alpha holds the shadow strength.
+    Point(PointLight),
+    /// A range of `LightList::shadowed_vertices`.
+    Polygon { start: u32, end: u32 },
+}
+
+/// Where a shadowed light's data landed in this frame's buffers.
+#[derive(Clone, Copy)]
+struct ShadowedDraw {
+    layers: u32,
+    shadows: (u32, u32),
+    /// A point light's instance, or a polygon's vertices.
+    point: Option<u32>,
+    vertices: (u32, u32),
 }
 
 impl LightList {
@@ -209,9 +249,12 @@ impl LightList {
         Self::default()
     }
 
+    /// Forgets the lights, keeping the occluders.
     pub fn clear(&mut self) {
         self.points.clear();
         self.triangles.clear();
+        self.shadowed.clear();
+        self.shadowed_vertices.clear();
     }
 
     /// Adds a point light to the layers whose bits `layers` sets.
@@ -227,6 +270,65 @@ impl LightList {
             self.triangles.push((layers, [vertex(a), vertex(b), vertex(c)]));
         }
     }
+
+    /// A point light the occluders shadow: inside their shadows, on the layers
+    /// they shadow, it is `1 - strength` as bright.
+    pub fn shadowed_point(&mut self, layers: u32, mut light: PointLight, strength: f32) {
+        light.color[3] = strength;
+        self.shadowed.push(ShadowedLight {
+            layers,
+            origin: light.position,
+            reach: light.outer_radius,
+            shape: ShadowedShape::Point(light),
+        });
+    }
+
+    /// A polygon light the occluders shadow, its shadows thrown from `origin`.
+    pub fn shadowed_polygon(&mut self, layers: u32, points: &[[f32; 2]], mut color: [f32; 4], origin: [f32; 2], strength: f32) {
+        color[3] = strength;
+        let start = self.shadowed_vertices.len() as u32;
+        for [a, b, c] in triangulate(points) {
+            let vertex = |position: [f32; 2]| LightVertex { position, color };
+            self.shadowed_vertices.extend([vertex(a), vertex(b), vertex(c)]);
+        }
+        let reach = points
+            .iter()
+            .map(|point| ((point[0] - origin[0]).powi(2) + (point[1] - origin[1]).powi(2)).sqrt())
+            .fold(0.0, f32::max);
+        let end = self.shadowed_vertices.len() as u32;
+        self.shadowed.push(ShadowedLight { layers, origin, reach, shape: ShadowedShape::Polygon { start, end } });
+    }
+
+    /// The edges that throw shadows, and the layers the shadows fall on. Kept
+    /// until set again.
+    pub fn set_occluders(&mut self, layers: u32, edges: &[[[f32; 2]; 2]]) {
+        self.occluder_layers = layers;
+        self.occluders.clear();
+        self.occluders.extend_from_slice(edges);
+    }
+}
+
+/// The two triangles of the shadow `edge` throws away from `origin`, out to
+/// `reach` and beyond, or none if the edge is out of reach.
+fn shadow_of(edge: [[f32; 2]; 2], origin: [f32; 2], reach: f32) -> Option<[[f32; 2]; 6]> {
+    let [a, b] = edge;
+    // The nearest point of the edge to the light.
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let length_squared = (dx * dx + dy * dy).max(1e-12);
+    let t = (((origin[0] - a[0]) * dx + (origin[1] - a[1]) * dy) / length_squared).clamp(0.0, 1.0);
+    let nearest = [a[0] + dx * t - origin[0], a[1] + dy * t - origin[1]];
+    if nearest[0] * nearest[0] + nearest[1] * nearest[1] > reach * reach {
+        return None;
+    }
+    let far = |point: [f32; 2]| {
+        let (x, y) = (point[0] - origin[0], point[1] - origin[1]);
+        let length = (x * x + y * y).sqrt().max(1e-6);
+        // Far enough that the shadow covers all the light reaches.
+        let scale = (reach * 2.0 + 1.0) / length;
+        [origin[0] + x * (1.0 + scale), origin[1] + y * (1.0 + scale)]
+    };
+    let (a_far, b_far) = (far(a), far(b));
+    Some([a, b, b_far, a, b_far, a_far])
 }
 
 pub struct Renderer2d {
@@ -236,6 +338,14 @@ pub struct Renderer2d {
     pipeline: wgpu::RenderPipeline,
     point_light_pipeline: wgpu::RenderPipeline,
     polygon_light_pipeline: wgpu::RenderPipeline,
+    shadowed_point_pipeline: wgpu::RenderPipeline,
+    shadowed_polygon_pipeline: wgpu::RenderPipeline,
+    shadow_mask_pipeline: wgpu::RenderPipeline,
+    mask_layout: wgpu::BindGroupLayout,
+    /// One light's shadows, at the light buffer's size, and the bind group that reads it.
+    shadow_mask: (wgpu::TextureView, wgpu::BindGroup),
+    shadow_vertices: wgpu::Buffer,
+    shadow_vertices_capacity: u64,
     light_layout: wgpu::BindGroupLayout,
     light_maps: LightMaps,
     light_points: wgpu::Buffer,
@@ -408,10 +518,16 @@ impl Renderer2d {
             },
             alpha: wgpu::BlendComponent::REPLACE,
         };
-        let light_pipeline = |label, vertex_entry, fragment_entry, buffer: wgpu::VertexBufferLayout<'static>| {
+        let light_pipeline = |layout: &wgpu::PipelineLayout,
+                              label,
+                              vertex_entry,
+                              fragment_entry,
+                              buffer: wgpu::VertexBufferLayout<'static>,
+                              format,
+                              blend| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
-                layout: Some(&light_pipeline_layout),
+                layout: Some(layout),
                 vertex: wgpu::VertexState {
                     module: &light_shader,
                     entry_point: Some(vertex_entry),
@@ -422,11 +538,7 @@ impl Renderer2d {
                     module: &light_shader,
                     entry_point: Some(fragment_entry),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: LIGHT_FORMAT,
-                        blend: Some(additive),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
+                    targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })],
                 }),
                 primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
                 depth_stencil: None,
@@ -435,8 +547,58 @@ impl Renderer2d {
                 cache: None,
             })
         };
-        let point_light_pipeline = light_pipeline("point lights", "vs_point", "fs_point", POINT_LIGHT_LAYOUT);
-        let polygon_light_pipeline = light_pipeline("polygon lights", "vs_polygon", "fs_polygon", LIGHT_VERTEX_LAYOUT);
+        let point_light_pipeline =
+            light_pipeline(&light_pipeline_layout, "point lights", "vs_point", "fs_point", POINT_LIGHT_LAYOUT, LIGHT_FORMAT, Some(additive));
+        let polygon_light_pipeline =
+            light_pipeline(&light_pipeline_layout, "polygon lights", "vs_polygon", "fs_polygon", LIGHT_VERTEX_LAYOUT, LIGHT_FORMAT, Some(additive));
+        let mask_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("shadow mask layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let shadowed_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("shadowed light layout"),
+            bind_group_layouts: &[Some(&camera_layout), Some(&mask_layout)],
+            immediate_size: 0,
+        });
+        let shadowed_point_pipeline = light_pipeline(
+            &shadowed_layout,
+            "shadowed point lights",
+            "vs_point",
+            "fs_point_shadowed",
+            POINT_LIGHT_LAYOUT,
+            LIGHT_FORMAT,
+            Some(additive),
+        );
+        let shadowed_polygon_pipeline = light_pipeline(
+            &shadowed_layout,
+            "shadowed polygon lights",
+            "vs_polygon",
+            "fs_polygon_shadowed",
+            LIGHT_VERTEX_LAYOUT,
+            LIGHT_FORMAT,
+            Some(additive),
+        );
+        let shadow_mask_pipeline =
+            light_pipeline(&light_pipeline_layout, "shadow mask", "vs_polygon", "fs_shadow_mask", LIGHT_VERTEX_LAYOUT, MASK_FORMAT, None);
+        let shadow_mask = create_shadow_mask(device, &mask_layout, &linear_sampler, (1, 1));
+        let shadow_vertices = create_light_buffer(device, "shadows", 1024 * LIGHT_VERTEX_SIZE);
         let light_maps = create_light_maps(device, queue, &light_layout, &linear_sampler, (1, 1), true);
         let light_points = create_light_buffer(device, "point lights", 64 * POINT_LIGHT_SIZE);
         let light_vertices = create_light_buffer(device, "polygon lights", 256 * LIGHT_VERTEX_SIZE);
@@ -449,6 +611,13 @@ impl Renderer2d {
             pipeline,
             point_light_pipeline,
             polygon_light_pipeline,
+            shadowed_point_pipeline,
+            shadowed_polygon_pipeline,
+            shadow_mask_pipeline,
+            mask_layout,
+            shadow_mask,
+            shadow_vertices,
+            shadow_vertices_capacity: 1024,
             light_layout,
             light_maps,
             light_points,
@@ -671,7 +840,9 @@ impl Renderer2d {
 
     /// Fills the light buffer for a frame drawn into a `width` by `height` target
     /// with `view_projection`: each layer starts dark and gets every light meant
-    /// for it. Call before the [`Renderer2d::draw`] of the sprites it lights.
+    /// for it; a shadowed light is drawn through its shadow mask on the layers
+    /// the occluders shadow. Call before the [`Renderer2d::draw`] of the sprites
+    /// it lights.
     pub fn draw_lights(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
@@ -684,13 +855,28 @@ impl Renderer2d {
         if self.light_maps.size != size {
             self.light_maps =
                 create_light_maps(&self.device, &self.queue, &self.light_layout, &self.linear_sampler, size, false);
+            self.shadow_mask = create_shadow_mask(&self.device, &self.mask_layout, &self.linear_sampler, size);
         }
         let camera_slot = self.next_camera(view_projection, [width as f32, height as f32]);
 
-        // Each layer's lights, one layer after another, with where each layer starts.
-        let LightList { points, triangles, scratch_points, scratch_vertices } = lights;
+        let LightList {
+            points,
+            triangles,
+            shadowed,
+            shadowed_vertices,
+            occluders,
+            occluder_layers,
+            scratch_points,
+            scratch_vertices,
+            scratch_shadows,
+            scratch_drawn,
+        } = lights;
         scratch_points.clear();
         scratch_vertices.clear();
+        scratch_shadows.clear();
+        scratch_drawn.clear();
+
+        // Unshadowed lights, layer by layer, with where each layer's start.
         let mut ranges = [(0u32, 0u32, 0u32, 0u32); LIGHT_LAYERS as usize];
         for (layer, range) in ranges.iter_mut().enumerate() {
             let bit = 1 << layer;
@@ -702,46 +888,44 @@ impl Renderer2d {
             }
             *range = (first_point, scratch_points.len() as u32, first_vertex, scratch_vertices.len() as u32);
         }
-        if scratch_points.len() as u64 > self.light_points_capacity {
-            self.light_points_capacity = (scratch_points.len() as u64).next_power_of_two();
-            self.light_points =
-                create_light_buffer(&self.device, "point lights", self.light_points_capacity * POINT_LIGHT_SIZE);
-        }
-        if scratch_vertices.len() as u64 > self.light_vertices_capacity {
-            self.light_vertices_capacity = (scratch_vertices.len() as u64).next_power_of_two();
-            self.light_vertices =
-                create_light_buffer(&self.device, "polygon lights", self.light_vertices_capacity * LIGHT_VERTEX_SIZE);
-        }
-        if !scratch_points.is_empty() {
-            self.queue.write_buffer(&self.light_points, 0, bytemuck::cast_slice(scratch_points));
-        }
-        if !scratch_vertices.is_empty() {
-            self.queue.write_buffer(&self.light_vertices, 0, bytemuck::cast_slice(scratch_vertices));
+        // Shadowed lights after them, each with the shadows its occluders throw.
+        let mut lit_layers = 0u32;
+        for light in shadowed.iter() {
+            lit_layers |= light.layers;
+            let first_shadow = scratch_shadows.len() as u32;
+            if light.layers & *occluder_layers != 0 {
+                for edge in occluders.iter() {
+                    if let Some(shadow) = shadow_of(*edge, light.origin, light.reach) {
+                        scratch_shadows.extend(shadow.map(|position| LightVertex { position, color: [1.0; 4] }));
+                    }
+                }
+            }
+            let shadows = (first_shadow, scratch_shadows.len() as u32);
+            let drawn = match light.shape {
+                ShadowedShape::Point(point) => {
+                    scratch_points.push(point);
+                    ShadowedDraw { layers: light.layers, shadows, point: Some(scratch_points.len() as u32 - 1), vertices: (0, 0) }
+                }
+                ShadowedShape::Polygon { start, end } => {
+                    let first = scratch_vertices.len() as u32;
+                    scratch_vertices.extend_from_slice(&shadowed_vertices[start as usize..end as usize]);
+                    ShadowedDraw { layers: light.layers, shadows, point: None, vertices: (first, scratch_vertices.len() as u32) }
+                }
+            };
+            scratch_drawn.push(drawn);
         }
 
+        self.upload_lights(scratch_points, scratch_vertices, scratch_shadows);
+
         for (layer, &(point_start, point_end, vertex_start, vertex_end)) in ranges.iter().enumerate() {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("lights"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.light_maps.layer_views[layer],
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        // A layer no light reaches is drawn unlit, as Unity's 2D
-                        // renderer does; one with lights starts dark.
-                        load: wgpu::LoadOp::Clear(if point_end > point_start || vertex_end > vertex_start {
-                            wgpu::Color::BLACK
-                        } else {
-                            wgpu::Color::WHITE
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+            let any_light = point_end > point_start || vertex_end > vertex_start || lit_layers & (1 << layer) != 0;
+            let mut pass = light_pass(
+                encoder,
+                &self.light_maps.layer_views[layer],
+                // A layer no light reaches is drawn unlit, as Unity's 2D renderer
+                // does; one with lights starts dark.
+                wgpu::LoadOp::Clear(if any_light { wgpu::Color::BLACK } else { wgpu::Color::WHITE }),
+            );
             pass.set_bind_group(0, &self.cameras[camera_slot].bind_group, &[]);
             if vertex_end > vertex_start {
                 pass.set_pipeline(&self.polygon_light_pipeline);
@@ -753,6 +937,74 @@ impl Renderer2d {
                 pass.set_vertex_buffer(0, self.light_points.slice(..));
                 pass.draw(0..6, point_start..point_end);
             }
+        }
+
+        for drawn in scratch_drawn.iter() {
+            {
+                let mut mask = light_pass(encoder, &self.shadow_mask.0, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
+                if drawn.shadows.1 > drawn.shadows.0 {
+                    mask.set_bind_group(0, &self.cameras[camera_slot].bind_group, &[]);
+                    mask.set_pipeline(&self.shadow_mask_pipeline);
+                    mask.set_vertex_buffer(0, self.shadow_vertices.slice(..));
+                    mask.draw(drawn.shadows.0..drawn.shadows.1, 0..1);
+                }
+            }
+            for layer in 0..LIGHT_LAYERS {
+                let bit = 1 << layer;
+                if drawn.layers & bit == 0 {
+                    continue;
+                }
+                let shadowed_here = *occluder_layers & bit != 0;
+                let mut pass = light_pass(encoder, &self.light_maps.layer_views[layer as usize], wgpu::LoadOp::Load);
+                pass.set_bind_group(0, &self.cameras[camera_slot].bind_group, &[]);
+                if shadowed_here {
+                    pass.set_bind_group(1, &self.shadow_mask.1, &[]);
+                }
+                match drawn.point {
+                    Some(instance) => {
+                        pass.set_pipeline(if shadowed_here { &self.shadowed_point_pipeline } else { &self.point_light_pipeline });
+                        pass.set_vertex_buffer(0, self.light_points.slice(..));
+                        pass.draw(0..6, instance..instance + 1);
+                    }
+                    None => {
+                        pass.set_pipeline(if shadowed_here {
+                            &self.shadowed_polygon_pipeline
+                        } else {
+                            &self.polygon_light_pipeline
+                        });
+                        pass.set_vertex_buffer(0, self.light_vertices.slice(..));
+                        pass.draw(drawn.vertices.0..drawn.vertices.1, 0..1);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Puts this frame's light data in its buffers, growing them as needed.
+    fn upload_lights(&mut self, points: &[PointLight], vertices: &[LightVertex], shadows: &[LightVertex]) {
+        if points.len() as u64 > self.light_points_capacity {
+            self.light_points_capacity = (points.len() as u64).next_power_of_two();
+            self.light_points =
+                create_light_buffer(&self.device, "point lights", self.light_points_capacity * POINT_LIGHT_SIZE);
+        }
+        if vertices.len() as u64 > self.light_vertices_capacity {
+            self.light_vertices_capacity = (vertices.len() as u64).next_power_of_two();
+            self.light_vertices =
+                create_light_buffer(&self.device, "polygon lights", self.light_vertices_capacity * LIGHT_VERTEX_SIZE);
+        }
+        if shadows.len() as u64 > self.shadow_vertices_capacity {
+            self.shadow_vertices_capacity = (shadows.len() as u64).next_power_of_two();
+            self.shadow_vertices =
+                create_light_buffer(&self.device, "shadows", self.shadow_vertices_capacity * LIGHT_VERTEX_SIZE);
+        }
+        if !points.is_empty() {
+            self.queue.write_buffer(&self.light_points, 0, bytemuck::cast_slice(points));
+        }
+        if !vertices.is_empty() {
+            self.queue.write_buffer(&self.light_vertices, 0, bytemuck::cast_slice(vertices));
+        }
+        if !shadows.is_empty() {
+            self.queue.write_buffer(&self.shadow_vertices, 0, bytemuck::cast_slice(shadows));
         }
     }
 
@@ -908,6 +1160,27 @@ const LIGHT_VERTEX_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBuffe
     attributes: &LIGHT_VERTEX_ATTRIBUTES,
 };
 
+/// A render pass into one layer of the light buffer, or the shadow mask.
+fn light_pass<'a>(
+    encoder: &'a mut wgpu::CommandEncoder,
+    view: &'a wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>,
+) -> wgpu::RenderPass<'a> {
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("lights"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    })
+}
+
 fn create_light_buffer(device: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
@@ -981,6 +1254,35 @@ fn create_light_maps(
         ],
     });
     LightMaps { layer_views, bind_group, size }
+}
+
+/// A shadow mask of `size` and the bind group a shadowed light reads it through.
+fn create_shadow_mask(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    size: (u32, u32),
+) -> (wgpu::TextureView, wgpu::BindGroup) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("shadow mask"),
+        size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: MASK_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("shadow mask"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+        ],
+    });
+    (view, bind_group)
 }
 
 /// Cuts a simple polygon into triangles by clipping ears. Either winding; a
@@ -1193,6 +1495,15 @@ mod tests {
 
     fn sprite() -> Sprite {
         Sprite::new(Vec3::ZERO, [1.0, 1.0], [0.0, 0.0, 1.0, 1.0])
+    }
+
+    #[test]
+    fn an_edge_throws_its_shadow_away_from_the_light() {
+        // A wall edge above a light at the origin: its shadow goes further up.
+        let shadow = shadow_of([[-1.0, 1.0], [1.0, 1.0]], [0.0, 0.0], 3.0).expect("in reach");
+        assert!(shadow.iter().all(|point| point[1] >= 1.0 - 1e-6));
+        assert!(shadow.iter().any(|point| point[1] > 3.0), "past the light's reach");
+        assert!(shadow_of([[-1.0, 5.0], [1.0, 5.0]], [0.0, 0.0], 3.0).is_none(), "out of reach");
     }
 
     #[test]

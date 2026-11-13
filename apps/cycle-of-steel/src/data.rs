@@ -123,6 +123,9 @@ pub struct LightFile {
     /// A freeform light's outline, in room space.
     #[serde(default)]
     pub path: Vec<[f32; 2]>,
+    /// Set if walls shadow it: how strongly (`m_ShadowIntensity`).
+    #[serde(default)]
+    pub shadow: Option<f32>,
     pub layers: Vec<String>,
 }
 

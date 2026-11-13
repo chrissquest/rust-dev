@@ -92,6 +92,46 @@ impl Room {
         self.nearest_open(wanted)
     }
 
+    /// The outline of the walls: every border between a wall cell and a cell that
+    /// is not, merged into straight runs, as (start, end) in world units. Unity's
+    /// shadow casters are traced from the rooms' wall colliders the same way
+    /// (`ShadowCaster2DCreator`); the room's own border throws none.
+    pub fn wall_edges(&self) -> Vec<[[f32; 2]; 2]> {
+        let wall = |x: i32, y: i32| {
+            let inside = (0..self.columns as i32).contains(&x) && (0..self.rows as i32).contains(&y);
+            !inside || self.cell_at(x, y) == Cell::Wall
+        };
+        let mut edges = Vec::new();
+        let cell = self.cell;
+        // Borders between rows, then between columns: a run lasts while the same
+        // side stays the wall.
+        for y in 0..=self.rows as i32 {
+            let mut run: Option<(i32, bool)> = None;
+            for x in 0..=self.columns as i32 {
+                let side = if x < self.columns as i32 && wall(x, y - 1) != wall(x, y) { Some(wall(x, y)) } else { None };
+                if run.map(|(_, upper)| Some(upper)) != Some(side) {
+                    if let Some((start, _)) = run.take() {
+                        edges.push([[start as f32 * cell, y as f32 * cell], [x as f32 * cell, y as f32 * cell]]);
+                    }
+                    run = side.map(|upper| (x, upper));
+                }
+            }
+        }
+        for x in 0..=self.columns as i32 {
+            let mut run: Option<(i32, bool)> = None;
+            for y in 0..=self.rows as i32 {
+                let side = if y < self.rows as i32 && wall(x - 1, y) != wall(x, y) { Some(wall(x, y)) } else { None };
+                if run.map(|(_, right)| Some(right)) != Some(side) {
+                    if let Some((start, _)) = run.take() {
+                        edges.push([[x as f32 * cell, start as f32 * cell], [x as f32 * cell, y as f32 * cell]]);
+                    }
+                    run = side.map(|right| (y, right));
+                }
+            }
+        }
+        edges
+    }
+
     /// Changes one cell, as a door closing or opening does. Outside the room, nothing.
     pub fn set_cell(&mut self, x: i32, y: i32, cell: Cell) {
         if (0..self.columns as i32).contains(&x) && (0..self.rows as i32).contains(&y) {
@@ -265,6 +305,18 @@ impl Room {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_wall_outline_is_one_straight_run_per_side() {
+        let room = Room::test_room();
+        let edges = room.wall_edges();
+        // The inside of the outer ring, four 2 by 2 blocks and two 4 by 1 blocks:
+        // seven rectangles, four sides each.
+        assert_eq!(edges.len(), 28);
+        let length: f32 = edges.iter().map(|[a, b]| (a[0] - b[0]).abs() + (a[1] - b[1]).abs()).sum();
+        // 2 * (15 + 8) inside the ring, 4 * 4 for the squares, 2 * 5 for the bars.
+        assert!((length - 72.0).abs() < 1e-4, "{length}");
+    }
 
     #[test]
     fn test_room_is_walled_and_spawn_is_free() {

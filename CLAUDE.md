@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio (piece 1 of 4), 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio (pieces 1 and 2 of 4), 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -89,8 +89,15 @@ layer mask), multiplied into lit sprites. A layer no light reaches stays white
 (`view::light_layer`) and gathers the room's `lights` near the camera each
 frame (`View::gather_lights`).
 
-**Next: step 6 piece 2, wall shadows.** The converter does not yet write a
-light's shadow settings (`m_ShadowIntensity`, shadows on or off).
+Piece 2 is done: lights with `shadow` (the converter already wrote Unity's
+`m_ShadowIntensity` when shadows are on) go through `LightList::shadowed_point`
+and `shadowed_polygon`; `Renderer2d::draw_lights` draws each one's shadow mask
+from the occluder edges (`LightList::set_occluders`, the room's
+`Room::wall_edges`) and then the light through it, on the occluders' layers
+(Background only, as Unity's casters).
+
+**Next: step 6 piece 3, lights on things**: the `Light2D` children of the
+chest, drop, enemy, bullet and explosion prefabs.
 
 ### How to work here
 

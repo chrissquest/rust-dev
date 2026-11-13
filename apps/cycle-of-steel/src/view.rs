@@ -392,16 +392,17 @@ impl View {
                     let centre = Vec2::from(light.position);
                     let reach = Vec2::splat(light.outer_radius);
                     if near(centre - reach, centre + reach) {
-                        self.lights.point(
-                            layers,
-                            PointLight {
-                                position: light.position,
-                                inner_radius: light.inner_radius,
-                                outer_radius: light.outer_radius,
-                                color,
-                                falloff: light.falloff,
-                            },
-                        );
+                        let point = PointLight {
+                            position: light.position,
+                            inner_radius: light.inner_radius,
+                            outer_radius: light.outer_radius,
+                            color,
+                            falloff: light.falloff,
+                        };
+                        match light.shadow {
+                            Some(strength) => self.lights.shadowed_point(layers, point, strength),
+                            None => self.lights.point(layers, point),
+                        }
                     }
                 }
                 LightKind::Freeform => {
@@ -409,7 +410,12 @@ impl View {
                         (min.min(Vec2::from(*point)), max.max(Vec2::from(*point)))
                     });
                     if near(min, max) {
-                        self.lights.polygon(layers, &light.path, color);
+                        match light.shadow {
+                            Some(strength) => {
+                                self.lights.shadowed_polygon(layers, &light.path, color, light.position, strength)
+                            }
+                            None => self.lights.polygon(layers, &light.path, color),
+                        }
                     }
                 }
             }
@@ -459,6 +465,8 @@ impl View {
         }
         self.room_size = room.size();
         self.camera_placed = false;
+        // Unity's shadow casters shadow only the `Background` sorting layer.
+        self.lights.set_occluders(1 << LIGHT_BACKGROUND, &room.wall_edges());
 
         // A room built in code has nothing to draw.
         let Some(file) = &room.file else {

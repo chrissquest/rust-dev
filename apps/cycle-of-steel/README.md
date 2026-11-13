@@ -196,11 +196,19 @@ where you spawn and interact. Interact again on the spot inside to leave.
   bits, so light adds up to at most full brightness (Unity on a PC may let it go
   higher); a point light's falloff curve is matched by eye; freeform lights have
   hard edges for now; the hub uses its prefab's lights, not the Dungeon scene's
-  overrides of them. Not yet: shadows, and the lights carried by chests, drops,
-  enemies and effects.
+  overrides of them. Not yet: the lights carried by chests, drops, enemies and
+  effects.
+- **Shadows.** Lights with Unity's shadows on (295 of them, mostly at 0.75)
+  are shadowed by the walls: every border between a wall cell and floor,
+  merged into straight runs (`Room::wall_edges`), throws its shadow away from
+  the light, and inside it the light is `1 - strength` as bright. As Unity's
+  shadow casters do, they shadow only the `Background` sorting layer, which is
+  the floor. Unity traces its casters from the same wall colliders, so the
+  shapes match; Unity's are hard-edged, and here the half-resolution light
+  buffer softens them slightly. Doors closing do not change the shadows.
 
 Not in yet:
-shadows (rooms look flatter and brighter than in
+audio (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)

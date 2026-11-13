@@ -46,13 +46,17 @@ fn vs_point(@builtin(vertex_index) vertex_index: u32, light: PointInstance) -> P
 
 @fragment
 fn fs_point(in: PointOut) -> @location(0) vec4<f32> {
+    return vec4<f32>(fs_point_color(in), 1.0);
+}
+
+fn fs_point_color(in: PointOut) -> vec3<f32> {
     let distance = length(in.offset);
     let span = max(in.radii.y - in.radii.x, 0.0001);
     let t = clamp((in.radii.y - distance) / span, 0.0, 1.0);
     // Unity's falloff strength: 0 lights the whole circle evenly up to its edge,
     // higher values fade it out sooner.
     let attenuation = pow(t, 1.0 + 3.0 * in.falloff);
-    return vec4<f32>(in.color.rgb * attenuation, 1.0);
+    return in.color.rgb * attenuation;
 }
 
 // A polygon light: its triangles, one flat colour.
@@ -78,4 +82,33 @@ fn vs_polygon(vertex: PolygonVertex) -> PolygonOut {
 @fragment
 fn fs_polygon(in: PolygonOut) -> @location(0) vec4<f32> {
     return vec4<f32>(in.color.rgb, 1.0);
+}
+
+// Shadows. A light walls shadow is drawn after its shadow mask: 1 where the
+// walls hide it. Its colour's alpha says how strongly they do.
+
+@group(1) @binding(0) var shadow_mask: texture_2d<f32>;
+@group(1) @binding(1) var shadow_sampler: sampler;
+
+fn lit_fraction(position: vec4<f32>, strength: f32) -> f32 {
+    let uv = position.xy / vec2<f32>(textureDimensions(shadow_mask));
+    let hidden = textureSampleLevel(shadow_mask, shadow_sampler, uv, 0.0).r;
+    return 1.0 - strength * hidden;
+}
+
+@fragment
+fn fs_point_shadowed(in: PointOut) -> @location(0) vec4<f32> {
+    let lit = fs_point_color(in) * lit_fraction(in.clip_position, in.color.a);
+    return vec4<f32>(lit, 1.0);
+}
+
+@fragment
+fn fs_polygon_shadowed(in: PolygonOut) -> @location(0) vec4<f32> {
+    return vec4<f32>(in.color.rgb * lit_fraction(in.clip_position, in.color.a), 1.0);
+}
+
+// The mask: the shapes walls throw away from a light.
+@fragment
+fn fs_shadow_mask(in: PolygonOut) -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }
