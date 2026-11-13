@@ -121,6 +121,15 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         }
         enemy.insert("loot".into(), Json::Array(loot));
         enemy.insert("dead_sprites".into(), json!(dead_sprites(project, killable.get("deathObject"), &mut out)?));
+        // `RandomBodyScript.deathSound`: the body plays it as it appears.
+        if let Some(documents) = project.prefab(killable.get("deathObject").get("guid").str()) {
+            let body = Prefab::new(&documents);
+            if let Some((_, _, script)) = root_script(project, &body, &["RandomBodyScript"])
+                && let Some(sound) = crate::sounds::sound_at(project, &documents, script.get("deathSound"))
+            {
+                enemy.insert("death_sound".into(), sound);
+            }
+        }
 
         let mut animations = Map::new();
         // The controller the Animator starts with, if any: Warriors have none and

@@ -82,11 +82,12 @@ pub fn convert(project: &Project) -> Result<ConvertedGuns> {
                 "frequency": number(shake.get("z").f32()),
             }),
         );
-        if let Some(clip) = prefab
+        // The gun's `fireSound`: the AudioSource on it.
+        if let Some(sound) = prefab
             .component(root, "AudioSource")
-            .and_then(|audio| project.stem_of(audio.body.get("m_audioClip").get("guid").str()))
+            .and_then(|audio| crate::sounds::sound_of(project, &audio.body))
         {
-            gun.insert("sound".into(), json!(clip));
+            gun.insert("sound".into(), sound);
         }
 
         if script == "LaserGun" {
@@ -330,6 +331,10 @@ fn effect(project: &Project, guid: &str, tables: &mut Tables) -> Result<Option<S
     let lights = crate::room::prefab_lights(project, &prefab, root, &documents);
     if !lights.is_empty() {
         entry.insert("lights".into(), Json::Array(lights));
+    }
+    // `ExplosionScript.explosion`, played as it appears.
+    if let Some(sound) = crate::sounds::sound_at(project, &documents, body.get("explosion")) {
+        entry.insert("sound".into(), sound);
     }
     tables.effects.insert(name.clone(), Json::Object(entry));
     Ok(Some(name))

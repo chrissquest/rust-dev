@@ -83,6 +83,28 @@ impl Input {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
     Shake(ShakeFile),
+    Sound(Sound),
+}
+
+/// A sound the world asks for. What each sounds like is in the definitions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sound {
+    /// A gun fired (`SingleBulletGun`, `SprayGun`: `fireSound.Play()`).
+    Fire(GunId),
+    /// A laser started and stopped firing (`LaserGun.startFiring`, `stopFiring`).
+    LaserStart(GunId),
+    LaserStop,
+    /// An effect with a sound appeared, such as an explosion.
+    Effect(defs::EffectId),
+    /// An enemy died and left its body (`RandomBodyScript`).
+    Death(defs::EnemyId),
+    /// `PlayerData`: hurt, healed, a data cell picked up.
+    Hurt,
+    Heal,
+    Pickup,
+    /// `PlayerAnimations`: moving started and stopped.
+    WalkStart,
+    WalkStop,
 }
 
 pub struct World {
@@ -105,6 +127,9 @@ pub struct World {
     pub difficulty: f32,
     /// Goes up whenever the room is rebuilt (a new floor), for the view to redraw it.
     pub room_version: u64,
+    /// The laser whose sound is playing, and whether the walking sound is.
+    laser_sounding: Option<GunId>,
+    walking: bool,
     /// The block the player was in last step, to notice them entering a room.
     last_block: (i32, i32),
     /// Steps taken since the world was created.
@@ -138,6 +163,8 @@ impl World {
             run: None,
             difficulty: 1.0,
             room_version: 0,
+            laser_sounding: None,
+            walking: false,
             last_block: enemy::block_of(player_position),
             tick: 0,
             rng: Rng::new(seed),
@@ -322,6 +349,27 @@ impl World {
             pickup.gun.cool(defs.gun(pickup.gun.def), now);
         }
 
+        // `PlayerAnimations.AnimateOnMove`: the walking sound plays while moving.
+        let walking = input.movement != Vec2::ZERO;
+        if walking != self.walking {
+            self.walking = walking;
+            self.events.push(Event::Sound(if walking { Sound::WalkStart } else { Sound::WalkStop }));
+        }
+        // A laser sounds from when its trigger is pulled to when it is let go.
+        let laser = match (self.player.aim, &self.inventory[self.selected_slot]) {
+            (Some(_), Some(gun)) if defs.gun(gun.def).kind == GunKind::Laser => Some(gun.def),
+            _ => None,
+        };
+        if laser != self.laser_sounding {
+            if self.laser_sounding.is_some() {
+                self.events.push(Event::Sound(Sound::LaserStop));
+            }
+            if let Some(gun) = laser {
+                self.events.push(Event::Sound(Sound::LaserStart(gun)));
+            }
+            self.laser_sounding = laser;
+        }
+
         // The beam lasts only as long as the laser keeps firing.
         self.combat.beam = None;
         if let (Some(aim), Some(gun)) = (self.player.aim, self.inventory[self.selected_slot].as_mut()) {
@@ -341,6 +389,7 @@ impl World {
                     );
                 }
             } else if gun.try_fire(def, now) {
+                self.events.push(Event::Sound(Sound::Fire(gun.def)));
                 self.combat.fire(
                     &defs,
                     def,
@@ -357,7 +406,13 @@ impl World {
         let combat = &mut self.combat;
         enemy::step_enemies(&mut combat.targets, &combat.barriers, &mut combat.shots, self.difficulty, &defs, &self.room, &mut self.player, now, &mut self.rng);
         enemy::step_shots(&mut combat.shots, &mut combat.effects, &defs, &self.room, &mut self.player, now);
+        let hurt_before = self.player.last_hurt;
         self.combat.step(&defs, &self.room, &mut self.player, now, &mut self.rng);
+        self.events.extend(self.combat.sounds.drain(..).map(Event::Sound));
+        if self.player.last_hurt != hurt_before {
+            // `PlayerData.DamagePlayer` plays it when a blow lands.
+            self.events.push(Event::Sound(Sound::Hurt));
+        }
         if self.player.health <= 0.0 {
             // `PlayerData.Die` and `Respawn`: back in the hub, healed, with a new
             // floor. Unity's 5 second death screen and its reload of the last
@@ -369,12 +424,18 @@ impl World {
             self.new_floor();
         }
 
-        let (player, data_cells) = (&mut self.player, &mut self.data_cells);
+        let (player, data_cells, events) = (&mut self.player, &mut self.data_cells, &mut self.events);
         loot::step_drops(&mut self.combat.drops, &defs, player.position, player::HALF_SIZE, |kind, value| match kind {
             // `PlayerData.incrementDataCells`.
-            DropKind::Data => *data_cells += value,
+            DropKind::Data => {
+                *data_cells += value;
+                events.push(Event::Sound(Sound::Pickup));
+            }
             // `PlayerData.HealPlayer`: a pack is used up even at full health.
-            DropKind::Heal => player.health = (player.health + value as f32).min(player.max_health),
+            DropKind::Heal => {
+                player.health = (player.health + value as f32).min(player.max_health);
+                events.push(Event::Sound(Sound::Heal));
+            }
         });
 
         // Nothing has to read events; do not let them pile up if nothing does.
@@ -748,8 +809,10 @@ mod tests {
             aim: Some(Vec2::X),
             ..Input::default()
         });
-        assert_eq!(world.drain_events().count(), 1);
-        assert_eq!(world.drain_events().count(), 0);
+        // The shot's sound comes too; one shake.
+        let shakes = |world: &mut World| world.drain_events().filter(|event| matches!(event, Event::Shake(_))).count();
+        assert_eq!(shakes(&mut world), 1);
+        assert_eq!(shakes(&mut world), 0);
     }
     fn aiming(aim: Vec2) -> Input {
         Input {

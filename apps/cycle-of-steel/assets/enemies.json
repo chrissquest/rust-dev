@@ -10,6 +10,11 @@
       "color": [0.9717, 0.7563, 0.7563, 1.0],
       "counts_as_enemy": true,
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
+      "death_sound": {
+        "clip": "enemy_down",
+        "loop": false,
+        "volume": 0.1
+      },
       "drag": 15.0,
       "freezable": true,
       "lights": [
@@ -145,6 +150,11 @@
       "color": [0.9151, 0.7721, 0.764, 1.0],
       "counts_as_enemy": true,
       "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
+      "death_sound": {
+        "clip": "enemy_down",
+        "loop": false,
+        "volume": 0.1
+      },
       "drag": 15.0,
       "freezable": true,
       "lights": [
@@ -217,6 +227,11 @@
       "color": [0.4802, 0.8507, 0.934, 1.0],
       "counts_as_enemy": true,
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
+      "death_sound": {
+        "clip": "enemy_down",
+        "loop": false,
+        "volume": 0.1
+      },
       "drag": 15.0,
       "freezable": true,
       "laser": {
@@ -298,6 +313,11 @@
       "color": [0.9151, 0.9151, 0.9151, 1.0],
       "counts_as_enemy": true,
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
+      "death_sound": {
+        "clip": "enemy_down",
+        "loop": false,
+        "volume": 0.1
+      },
       "drag": 15.0,
       "freezable": false,
       "lights": [
@@ -396,6 +416,11 @@
       "color": [0.9151, 0.7721, 0.764, 1.0],
       "counts_as_enemy": true,
       "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
+      "death_sound": {
+        "clip": "enemy_down",
+        "loop": false,
+        "volume": 0.1
+      },
       "drag": 20.0,
       "freezable": true,
       "lights": [

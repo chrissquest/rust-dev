@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio (pieces 1 to 3 of 4), 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio (done), 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -76,33 +76,21 @@ the hub on a new floor. The minimap (`Floor::map`, Tab / Select / MAP button)
 is `MapMenu`. Not yet: the exit dialogue and open-door arrows (UI pass), the
 death screen and saves (step 7).
 
-Step 6 (lighting and audio) is split into four pieces, agreed with the owner:
-(1) the light buffer and the rooms' lights, (2) wall shadows, (3) lights on
-things (chests, drops, enemies, bullets, explosions), (4) audio. The plan's
-depth cues (bloom, vignette...) wait until after parity: port first.
+Step 6 (lighting and audio) is done. `crystal-engine` has 2D lights as Unity's
+2D renderer: `Sprite::lit(layer)`, a half-resolution light buffer with a layer per
+Unity sorting layer, filled by `Renderer2d::draw_lights` from a `LightList` (point
+and polygon lights by layer mask; shadowed lights through a shadow mask thrown by
+`set_occluders` edges, the room's `Room::wall_edges`, on Background only as
+Unity's casters); a layer no light reaches stays white (Unity draws it unlit).
+The view gathers the room's lights and those things carry (`lights` on bullets,
+effects, chests, drops, enemies) each frame (`View::gather_lights`). Sound: the
+sim asks with `Event::Sound`; `audio.rs` plays clips from `assets/audio` with
+`rodio` (sounds `{clip, volume, loop}` in guns.json, enemies.json, sounds.json).
+Not yet: guns' own lights, freeform lights' soft edges, depth cues (after
+parity), a volume setting (step 7).
 
-Piece 1 is done. `crystal-engine` has 2D lights: `Sprite::lit(layer)`, a
-half-resolution light buffer with `LIGHT_LAYERS` layers filled by
-`Renderer2d::draw_lights` from a `LightList` (point lights, polygon lights by
-layer mask), multiplied into lit sprites. A layer no light reaches stays white
-(Unity draws it unlit). The game maps Unity's sorting layers to light layers
-(`view::light_layer`) and gathers the room's `lights` near the camera each
-frame (`View::gather_lights`).
-
-Piece 2 is done: lights with `shadow` (the converter already wrote Unity's
-`m_ShadowIntensity` when shadows are on) go through `LightList::shadowed_point`
-and `shadowed_polygon`; `Renderer2d::draw_lights` draws each one's shadow mask
-from the occluder edges (`LightList::set_occluders`, the room's
-`Room::wall_edges`) and then the light through it, on the occluders' layers
-(Background only, as Unity's casters).
-
-Piece 3 is done: bullets, effects, chests, drops and enemies carry their
-prefabs' `Light2D`s (`lights` in guns.json, loot.json, enemies.json, written by
-`room::prefab_lights`), added each frame by `View::gather_lights` at the
-thing's place and rotation. The guns' own lights (glow, muzzle flash) are not
-ported yet.
-
-**Next: step 6 piece 4, audio.**
+**Next: step 7, the full loop** (hub, upgrades, save, menus). Read the Port plan
+tab first.
 
 ### How to work here
 
@@ -139,7 +127,7 @@ ported yet.
   `chunks_exact` in older code; those warnings predate step 3's last piece.
 - **Re-running the converter:** `cargo run -p cos-convert -- ../CycleOfSteel apps/cycle-of-steel/assets`.
   It overwrites `rooms/`, `guns.json`, `loot.json`, `enemies.json`, `dungeon.json`, `font.json`,
-  `sprites.json` and `sprites/`.
+  `sounds.json`, `sprites.json`, `sprites/` and `audio/`.
   On the owner's Windows machine the Unity project is at `../../Unity/CycleOfSteel`
   (relative to this repo), and a run there changes a few room rotations in the last
   digit; revert those rather than commit them.

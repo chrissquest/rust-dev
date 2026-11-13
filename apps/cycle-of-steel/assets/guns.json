@@ -388,6 +388,11 @@
         }
       ],
       "scale": [2.0, 2.0],
+      "sound": {
+        "clip": "explosion",
+        "loop": false,
+        "volume": 0.2
+      },
       "sprite": "explosion",
       "time_to_live": 0.3
     },
@@ -415,6 +420,11 @@
           "position": [0.0, 0.0]
         }
       ],
+      "sound": {
+        "clip": "explosion",
+        "loop": false,
+        "volume": 0.2
+      },
       "sprite": "explosion",
       "time_to_live": 0.3
     }
@@ -438,7 +448,11 @@
         "frequency": 1.0,
         "time": 0.0
       },
-      "sound": "Flamethrower_Shoot",
+      "sound": {
+        "clip": "Flamethrower_Shoot",
+        "loop": false,
+        "volume": 0.1
+      },
       "spray_angle": 30.0,
       "sprite": "flamethrower_1"
     },
@@ -459,7 +473,11 @@
         "frequency": 0.0,
         "time": 0.0
       },
-      "sound": "Low_Tier_Gun_Lightning",
+      "sound": {
+        "clip": "Low_Tier_Gun_Lightning",
+        "loop": false,
+        "volume": 0.622
+      },
       "sprite": "gun_3"
     },
     "Test_LowTier": {
@@ -479,7 +497,11 @@
         "frequency": 1.0,
         "time": 0.03
       },
-      "sound": "Low_Tier_Gun_Lightning",
+      "sound": {
+        "clip": "Low_Tier_Gun_Lightning",
+        "loop": false,
+        "volume": 1.0
+      },
       "sprite": "gun_3"
     },
     "bazooka_1": {
@@ -517,7 +539,11 @@
         "frequency": 1.0,
         "time": 0.1
       },
-      "sound": "laser_loop",
+      "sound": {
+        "clip": "laser_loop",
+        "loop": true,
+        "volume": 1.0
+      },
       "sprite": "gun_5"
     },
     "laser_2": {
@@ -537,7 +563,11 @@
         "frequency": 1.0,
         "time": 0.05
       },
-      "sound": "laser_loop",
+      "sound": {
+        "clip": "laser_loop",
+        "loop": true,
+        "volume": 1.0
+      },
       "sprite": "gun_5"
     },
     "lmg_red": {
@@ -558,7 +588,11 @@
         "frequency": 1.0,
         "time": 0.15
       },
-      "sound": "Gunshot",
+      "sound": {
+        "clip": "Gunshot",
+        "loop": false,
+        "volume": 1.0
+      },
       "spray_angle": 30.0,
       "sprite": "lmg_red"
     },
@@ -580,7 +614,11 @@
         "frequency": 1.0,
         "time": 0.07
       },
-      "sound": "Gunshot",
+      "sound": {
+        "clip": "Gunshot",
+        "loop": false,
+        "volume": 1.0
+      },
       "spray_angle": 7.0,
       "sprite": "lmg_purple"
     },
@@ -600,7 +638,11 @@
         "frequency": 1.0,
         "time": 0.05
       },
-      "sound": "Gunshot",
+      "sound": {
+        "clip": "Gunshot",
+        "loop": false,
+        "volume": 1.0
+      },
       "sprite": "gun_1"
     },
     "pistol_2": {
@@ -619,7 +661,11 @@
         "frequency": 1.0,
         "time": 0.2
       },
-      "sound": "BluePistolShoot",
+      "sound": {
+        "clip": "BluePistolShoot",
+        "loop": false,
+        "volume": 0.508
+      },
       "sprite": "gun_2"
     },
     "rifle_1": {
@@ -638,7 +684,11 @@
         "frequency": 1.0,
         "time": 0.1
       },
-      "sound": "laserRifleShoot",
+      "sound": {
+        "clip": "laserRifleShoot",
+        "loop": false,
+        "volume": 0.1
+      },
       "sprite": "gun_6"
     },
     "rifle_2": {
@@ -657,7 +707,11 @@
         "frequency": 1.0,
         "time": 0.1
       },
-      "sound": "laser_shoot_2",
+      "sound": {
+        "clip": "laser_shoot_2",
+        "loop": false,
+        "volume": 0.1
+      },
       "sprite": "rifle_blue"
     },
     "rifle_3": {
@@ -676,7 +730,11 @@
         "frequency": 1.0,
         "time": 0.1
       },
-      "sound": "laser_shoot_2",
+      "sound": {
+        "clip": "laser_shoot_2",
+        "loop": false,
+        "volume": 0.1
+      },
       "sprite": "hand_of_bishop"
     },
     "shotgun_1": {
@@ -697,7 +755,11 @@
         "frequency": 1.0,
         "time": 0.1
       },
-      "sound": "Gunshot",
+      "sound": {
+        "clip": "Gunshot",
+        "loop": false,
+        "volume": 1.0
+      },
       "spray_angle": 20.0,
       "sprite": "shotgun_orange"
     },
@@ -719,7 +781,11 @@
         "frequency": 1.0,
         "time": 0.07
       },
-      "sound": "Gunshot",
+      "sound": {
+        "clip": "Gunshot",
+        "loop": false,
+        "volume": 1.0
+      },
       "spray_angle": 15.0,
       "sprite": "smg_cyan"
     },
@@ -741,7 +807,11 @@
         "frequency": 1.0,
         "time": 0.07
       },
-      "sound": "Gunshot",
+      "sound": {
+        "clip": "Gunshot",
+        "loop": false,
+        "volume": 1.0
+      },
       "spray_angle": 20.0,
       "sprite": "smg_red"
     }

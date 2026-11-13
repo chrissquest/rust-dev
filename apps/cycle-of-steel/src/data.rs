@@ -250,6 +250,9 @@ pub enum GunKind {
 pub struct GunFile {
     /// The number save files know the gun by.
     pub id: i32,
+    /// What firing sounds like.
+    #[serde(default)]
+    pub sound: Option<SoundFile>,
     pub kind: GunKind,
     #[serde(default)]
     pub sprite: Option<String>,
@@ -349,6 +352,9 @@ pub struct ExplosionFile {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct EffectFile {
+    /// Played as it appears (`ExplosionScript.explosion`).
+    #[serde(default)]
+    pub sound: Option<SoundFile>,
     /// The lights it carries, placed from its position (its prefab's `Light2D`s).
     #[serde(default)]
     pub lights: Vec<LightFile>,
@@ -361,6 +367,43 @@ pub struct EffectFile {
     pub time_to_live: f32,
     #[serde(default)]
     pub explosion: Option<ExplosionFile>,
+}
+
+/// A sound: Unity's `AudioSource` with its clip (a file under `audio/`, by stem),
+/// volume and whether it loops.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct SoundFile {
+    pub clip: String,
+    #[serde(default = "full")]
+    pub volume: f32,
+    #[serde(default, rename = "loop")]
+    pub looping: bool,
+}
+
+fn full() -> f32 {
+    1.0
+}
+
+/// `sounds.json`: the player's sounds and the music.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SoundsFile {
+    pub player: PlayerSoundsFile,
+    pub music: Option<SoundFile>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct PlayerSoundsFile {
+    pub hurt: Option<SoundFile>,
+    pub heal: Option<SoundFile>,
+    pub pickup: Option<SoundFile>,
+    pub walk: Option<SoundFile>,
+}
+
+impl SoundsFile {
+    pub fn load(assets: &AssetSource) -> Result<Self> {
+        let bytes = assets.read("sounds.json")?;
+        serde_json::from_slice(&bytes).context("could not parse sounds.json")
+    }
 }
 
 /// `dungeon.json`: the dungeon generator's settings (`DungeonGenerator`).
@@ -515,6 +558,9 @@ impl EnemiesFile {
 /// An enemy: Unity's `Killable` and its AI script on a prefab under `Prefabs/Enemies`.
 #[derive(Clone, Debug, Deserialize)]
 pub struct EnemyFile {
+    /// Its body's noise as it dies (`RandomBodyScript.deathSound`).
+    #[serde(default)]
+    pub death_sound: Option<SoundFile>,
     /// The lights it carries, placed from its position (its prefab's `Light2D`s).
     #[serde(default)]
     pub lights: Vec<LightFile>,

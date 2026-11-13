@@ -6,8 +6,8 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 to 5 of the port are in (foundation, real rooms, combat, enemies, the
-dungeon), and step 6 (lighting and audio) is under way:
+Steps 1 to 6 of the port are in (foundation, real rooms, combat, enemies, the
+dungeon, lighting and audio):
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -213,8 +213,17 @@ where you spawn and interact. Interact again on the spot inside to leave.
   shapes match; Unity's are hard-edged, and here the half-resolution light
   buffer softens them slightly. Doors closing do not change the shadows.
 
+- **Sound.** What Unity's scripts play, at their `AudioSource`s' volumes:
+  each gun's shot (the laser's sound from trigger to release, paused when let
+  go), explosions, an enemy's body as it dies, the player hurt, healed and
+  picking up a data cell, the footsteps while moving, and the Dungeon scene's
+  music, looping. The simulation asks for them (`Event::Sound`); `audio.rs`
+  plays them with `rodio` (cpal: WASAPI on Windows, AAudio on Android). A
+  machine with no sound device plays nothing. There is no volume setting yet
+  (menus, step 7).
+
 Not in yet:
-audio (rooms look flatter and brighter than in
+menus, saves and upgrades (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
@@ -313,6 +322,7 @@ src/
   hud.rs         where the on-screen slots, heat bar and buttons sit
   view.rs        world state -> sprites; the camera
   assets.rs      loads assets from a folder, or from inside the APK on Android
+  audio.rs       plays the sounds the world asks for, and the music
   data.rs        the room and sprite catalogue file formats
   sim/           the game itself: no window, GPU or clock
     mod.rs       World, Input, the 60 Hz step, the inventory
@@ -335,6 +345,8 @@ assets/
   dungeon.json   the dungeon generator's room lists and settings
   sprites.json   every sprite by name: texture, rectangle, pivot
   font.json      the pixel font: each character's glyph sprite and advance
+  sounds.json    the player's sounds and the music
+  audio/         sound clips copied from the Unity project
   sprites/       PNGs copied from the Unity project
 android/
   test-signing.keystore   signs test APKs; not a secret, see "Android"

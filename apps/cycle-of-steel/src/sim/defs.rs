@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::data::{
     AnimationFile, BulletFile, DropKind, EffectFile, EnemiesFile, ExplosionFile, GunFile, GunKind, GunsFile,
-    BossFile, DroneFile, LaserFile, LightFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
+    BossFile, DroneFile, LaserFile, LightFile, LootEntryFile, SoundFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -156,6 +156,7 @@ pub struct BossDef {
 
 #[derive(Clone, Debug)]
 pub struct EnemyDef {
+    pub death_sound: Option<SoundFile>,
     /// The lights it carries, placed from its position.
     pub lights: Vec<LightFile>,
     pub name: String,
@@ -186,6 +187,7 @@ pub struct EnemyDef {
 
 #[derive(Clone, Debug)]
 pub struct GunDef {
+    pub sound: Option<SoundFile>,
     /// The key in `guns.json`, which is also what room files call it.
     pub name: String,
     pub kind: GunKind,
@@ -232,6 +234,7 @@ pub struct BulletDef {
 
 #[derive(Clone, Debug)]
 pub struct EffectDef {
+    pub sound: Option<SoundFile>,
     /// The lights it carries, placed from its position.
     pub lights: Vec<LightFile>,
     pub sprite: Option<String>,
@@ -327,8 +330,8 @@ impl Defs {
             .collect();
         defs.effect_by_name = effect_ids.iter().map(|(name, id)| (name.to_string(), *id)).collect();
         for name in &effect_names {
-            let EffectFile { lights, sprite, color, scale, time_to_live, explosion } = file.effects[*name].clone();
-            defs.effects.push(EffectDef { lights, sprite, color, scale, time_to_live, explosion });
+            let EffectFile { sound, lights, sprite, color, scale, time_to_live, explosion } = file.effects[*name].clone();
+            defs.effects.push(EffectDef { sound, lights, sprite, color, scale, time_to_live, explosion });
         }
 
         let mut bullet_names: Vec<&String> = file.bullets.keys().collect();
@@ -379,6 +382,7 @@ impl Defs {
             };
             defs.gun_by_name.insert(name.clone(), GunId(defs.guns.len() as u16));
             defs.guns.push(GunDef {
+                sound: gun.sound.clone(),
                 name: name.clone(),
                 kind: gun.kind,
                 sprite: gun.sprite.clone(),
@@ -552,6 +556,7 @@ impl Defs {
             };
             self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
             self.enemies.push(EnemyDef {
+                death_sound: enemy.death_sound.clone(),
                 lights: enemy.lights.clone(),
                 flying: enemy.flying,
                 counts_as_enemy: enemy.counts_as_enemy,

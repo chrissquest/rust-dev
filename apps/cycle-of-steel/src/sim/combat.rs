@@ -170,6 +170,8 @@ pub struct Combat {
     pub grates: Vec<Grate>,
     /// The boxes at doorways that keep enemies in their room, as (centre, half size).
     pub barriers: Vec<(Vec2, Vec2)>,
+    /// Sounds asked for this step, for the world to pass on.
+    pub sounds: Vec<super::Sound>,
     /// Interact here to leave the dungeon (`ExitDungeon`), as (centre, half size).
     pub exits: Vec<(Vec2, Vec2)>,
     /// Walk in here to enter the dungeon (`ExitHub`), as (centre, half size).
@@ -228,6 +230,7 @@ impl Combat {
             blasts: Vec::with_capacity(BLAST_CAPACITY),
             grates: Vec::new(),
             barriers: Vec::new(),
+            sounds: Vec::with_capacity(32),
             exits: Vec::new(),
             entrances: Vec::new(),
         }
@@ -411,6 +414,9 @@ impl Combat {
                     if let Some(explosion) = effect_def.explosion {
                         start_blast(&mut self.blasts, bullet.position, explosion, effect_def.time_to_live);
                     }
+                    if effect_def.sound.is_some() {
+                        self.sounds.push(super::Sound::Effect(effect));
+                    }
                 }
                 self.bullets.swap_remove(index);
             } else if bullet.time_left <= 0.0 {
@@ -492,11 +498,17 @@ impl Combat {
                     if let Some(explosion) = effect_def.explosion {
                         start_blast(&mut self.blasts, target.origin, explosion, effect_def.time_to_live);
                     }
+                    if effect_def.sound.is_some() {
+                        self.sounds.push(super::Sound::Effect(effect));
+                    }
                 }
                 if !def.dead_sprites.is_empty() {
                     // `RandomBodyScript`: `Random.Range(0, count)`.
                     let pick = ((rng.unit() * def.dead_sprites.len() as f32) as usize).min(def.dead_sprites.len() - 1);
                     self.remains.push(Remains { kind: RemainsKind::Body(enemy.def, pick as u8), position: target.origin });
+                    if def.death_sound.is_some() {
+                        self.sounds.push(super::Sound::Death(enemy.def));
+                    }
                 }
             }
         }

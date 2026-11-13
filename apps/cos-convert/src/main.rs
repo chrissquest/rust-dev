@@ -12,6 +12,7 @@ mod json;
 mod loot;
 mod project;
 mod room;
+mod sounds;
 mod yaml;
 
 use std::collections::BTreeMap;
@@ -152,6 +153,13 @@ fn main() -> Result<()> {
         add_sprite(&mut catalogue, sprite)?;
     }
 
+    let sounds = sounds::convert(&project)?;
+    let sounds_path = output.join("sounds.json");
+    std::fs::write(&sounds_path, json::to_string(&sounds))
+        .with_context(|| format!("could not write {}", sounds_path.display()))?;
+    let clips = sounds::copy_clips(&project, &output, &[&guns.json, &enemies.json, &sounds])?;
+    println!("{clips} sound clips");
+
     let (dungeon, dungeon_sprites) = dungeon::convert(&project)?;
     for sprite in dungeon_sprites {
         add_sprite(&mut catalogue, sprite)?;
@@ -270,7 +278,7 @@ fn write_sprites(project: &Project, output: &Path, catalogue: &BTreeMap<String, 
 /// Copies a file and leaves the copy writable. `fs::copy` carries permissions
 /// over, and some of the Unity project's files are read-only, which would make
 /// the next run unable to overwrite its own output.
-fn copy_writable(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn copy_writable(from: &Path, to: &Path) -> std::io::Result<()> {
     if let Ok(metadata) = std::fs::metadata(to) {
         let mut permissions = metadata.permissions();
         #[allow(clippy::permissions_set_readonly_false)]

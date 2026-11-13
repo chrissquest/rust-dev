@@ -1,0 +1,29 @@
+{
+  "music": {
+    "clip": "Possible_LabTheme",
+    "loop": true,
+    "volume": 1.0
+  },
+  "player": {
+    "heal": {
+      "clip": "player_heal",
+      "loop": false,
+      "volume": 0.3
+    },
+    "hurt": {
+      "clip": "player_hurt",
+      "loop": false,
+      "volume": 0.3
+    },
+    "pickup": {
+      "clip": "player_heal",
+      "loop": false,
+      "volume": 0.3
+    },
+    "walk": {
+      "clip": "walking_loop_2",
+      "loop": true,
+      "volume": 0.1
+    }
+  }
+}

@@ -25,6 +25,7 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::assets::AssetSource;
+use crate::audio::Audio;
 use crate::data::{DungeonFile, EnemiesFile, GunsFile, LootFile, RoomFile};
 use crate::sim::dungeon;
 use crate::input::{Action, Bindings, Gamepads, InputState, StickVisual, TouchControls};
@@ -62,7 +63,9 @@ pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     let mut world = load_world(&launch.assets, &launch.room, clock_seed())?;
     give_guns(&mut world, &launch.give)?;
 
+    let audio = Audio::new(&launch.assets);
     let mut app = App {
+        audio,
         assets: launch.assets,
         backends: launch.backends,
         frames_left: launch.frames,
@@ -96,6 +99,8 @@ struct Graphics {
 }
 
 struct App {
+    /// `None` on a machine with no sound device.
+    audio: Option<Audio>,
     assets: AssetSource,
     backends: wgpu::Backends,
     frames_left: Option<u32>,
@@ -195,9 +200,15 @@ impl App {
         let Some(graphics) = self.graphics.as_mut() else {
             return;
         };
+        let defs = self.world.defs.clone();
         for event in self.world.drain_events() {
             match event {
                 Event::Shake(shake) => graphics.view.start_shake(shake),
+                Event::Sound(sound) => {
+                    if let Some(audio) = &mut self.audio {
+                        audio.play(sound, &defs);
+                    }
+                }
             }
         }
         if self.input.take_map_request() {
@@ -1019,6 +1030,26 @@ mod tests {
         assert_eq!(blast.lights.len(), 1);
         assert_eq!(blast.lights[0].path.len(), 4);
         assert!(!missile.lights.is_empty(), "the missile glows too");
+    }
+
+    #[test]
+    fn the_world_asks_for_the_sounds_unity_plays() {
+        use crate::sim::{Event, Sound};
+        let mut world = hub();
+        let pistol = world.defs.gun_named("pistol_1").unwrap();
+        world.give(pistol);
+        world.drain_events().count();
+        world.step(&Input { movement: Vec2::X, aim: Some(Vec2::X), ..Input::default() });
+        let heard: Vec<Event> = world.drain_events().collect();
+        assert!(heard.contains(&Event::Sound(Sound::Fire(pistol))), "{heard:?}");
+        assert!(heard.contains(&Event::Sound(Sound::WalkStart)));
+        world.step(&Input::default());
+        assert!(world.drain_events().any(|event| event == Event::Sound(Sound::WalkStop)));
+        // The real files: the pistol's shot, and sounds.json's music and footsteps.
+        assert!(world.defs.gun(pistol).sound.is_some());
+        let sounds = crate::data::SoundsFile::load(&AssetSource::folder(None).unwrap()).unwrap();
+        assert!(sounds.music.as_ref().is_some_and(|music| music.looping));
+        assert!(sounds.player.walk.as_ref().is_some_and(|walk| walk.looping));
     }
 
     #[test]

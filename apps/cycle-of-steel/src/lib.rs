@@ -15,6 +15,7 @@
 
 pub mod app;
 pub mod assets;
+pub mod audio;
 pub mod data;
 pub mod hud;
 pub mod input;

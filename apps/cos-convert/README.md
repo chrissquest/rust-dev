@@ -98,6 +98,13 @@ it uses for grown, spawn, exit and boss rooms, `by_doors` (for each set of doors
 `map` names the minimap's pictures from the `MapMenu` on `Player View.prefab`.
 Each enemy also has `counts_as_enemy` (`Killable.countAsEnemy`).
 
+Sounds are written as `{clip, volume, loop}` from Unity's `AudioSource`s: a
+gun's `sound`, an effect's `sound` (`ExplosionScript.explosion`), an enemy's
+`death_sound` (its body's `RandomBodyScript.deathSound`). `sounds.json` holds
+the player's (`PlayerData` hurt, heal, pickup; `PlayerAnimations` walk) and the
+music the Dungeon scene plays on awake. Every clip they name is copied to
+`audio/` under its own file name.
+
 `font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
 atlas (`ThaleahFat.fontsettings` and its PNG). `glyphs` maps a character to its
 `sprite`, one of the `font_<code point>` entries the converter adds to
@@ -133,6 +140,7 @@ src/
   room.rs      one room prefab -> one room file
   guns.rs      gun, bullet and effect prefabs -> guns.json
   loot.rs      chest, loot pool and drop prefabs -> loot.json
+  sounds.rs    AudioSources, sounds.json, and copying the clips
   enemies.rs   enemy prefabs and their animations -> enemies.json
   dungeon.rs   the dungeon scene's generator -> dungeon.json
   json.rs      JSON output that keeps a row of tiles on one line
