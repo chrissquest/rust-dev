@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (pieces 1 to 4 done; the boss left), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -49,43 +49,22 @@ fly to the player and add to `World::data_cells` or `Player::health` (1000, from
 Waiting for lighting and audio: the chests' and drops' glow, pickup sounds. Waiting
 for the UI pass: chests' health bars.
 
-Step 4, enemies, is split into five pieces, agreed with the owner: (1) enemy
-basics and the Warrior, (2) ranged enemies (Crab, the turret, LASERCrab) and their
-shots hurting the player (done as 2a, Crab and turret; 2b is LASERCrab's
-sweeping beam), (3) dashers (Drone and the dashing AI), (4) explosions
-hurting the player and enemies walking into them, plus EffectGrate, (5) the boss
-(Priest) and its bar.
-
-Piece 1 is done: `sim/enemy.rs` runs Unity's `Warrior` AI for the Warrior and the
-EnemyTank (`assets/enemies.json`, with animations converted from Unity clips).
-An enemy is a `Target` with `enemy: Some(Enemy)`; knockback, freezing slowdown and
-tint, loot and bodies (`RemainsKind::Body`) work. `Player::hurt` has Unity's 0.5 s
-invulnerability; at 0 health the player restarts the room (placeholder). The hub's
-gun room has a practice EnemyTank, so homing shots fired from the spawn chase it.
-Not yet: enemies and player pushing each other, door barriers, hurt flash.
-
-Piece 2a is done: `Ai::Ranged` (Crab) and `Ai::Turret` in `sim/enemy.rs`, bites
-on touch (`TouchDef`, Unity's `BasicAIAttack`), and enemy bullets
-(`Combat::shots`, `enemy::step_shots`), defined in `guns.json` beside the players'.
-
-Piece 2b is done: `Ai::Laser` (LASERCrab) with its sight, warning and firing
-lines (`Enemy::beam`, drawn by `View::draw_enemy_beams`).
-
-Piece 3 is done: `Ai::Drone` (rises, drifts, flies over ledges via
-`collide::move_flyer`), `ExplosionTrigger` (`EnemyDef::detonate`) and explosive
-deaths. Explosions now hurt and push the player (`combat::explode`), which was
-part of piece 4. `DashAI.cs` is used by no prefab and is not ported.
+Step 4 (enemies) is done. All seven enemy prefabs run their Unity AI in
+`sim/enemy.rs` (`Ai::Warrior` for the Warrior and EnemyTank, `Ranged` Crab,
+`Turret`, `Laser` LASERCrab, `Drone`, `Boss` Priest), with bites (`TouchDef`),
+enemy shots (`Combat::shots`, homing ones too), explosive deaths, lasting blasts
+(`Combat::blasts`) that hurt the player too, water and lava grates
+(`Combat::grates`, `Elemental`), knockback, freezing, loot and bodies. The player
+can be hurt (`Player::hurt`, 0.5 s invulnerable) and restarts the room at 0
+health (placeholder until step 7). The HUD shows health, data cells and a boss
+bar. Not yet: enemies and the player pushing each other, door barriers, the
+player's hurt flash, LASERCrab sparks; health bars over enemies (UI pass).
 
 Drag follows Unity 2D (Box2D): velocity divided by `1 + drag * dt` per physics
 step (`combat::drag_kept`, the player's `RESPONSE`), switched in step 4 at the
 owner's request; the player now tops out at 2.22 units/s, not 1.82.
 
-Piece 4 is done: explosions are `Combat::blasts` that hurt whatever enters them
-while they last; `EffectGrate`s are `Combat::grates` (read from room overrides)
-that wet or heat enemies through `Elemental::wet`/`burn_in_lava`, which change
-the drag `Elemental::drag` gives `move_enemy`.
-
-**Next: step 4 piece 5, the boss** (Priest: `BossAI.cs`, its bullets, `BossBar`). Convert each new kind of data in
+**Next: step 5, the dungeon.** Read the Port plan tab first.
 `cos-convert` when the step needs it, not before.
 
 ### How to work here

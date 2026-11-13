@@ -213,6 +213,81 @@
         }
       }
     },
+    "Priest": {
+      "animations": {
+        "idle": {
+          "fps": 12.0,
+          "frames": ["bossSprite_Idle_Animation_test_reExport 1_0", "bossSprite_Idle_Animation_test_reExport 1_1", "bossSprite_Idle_Animation_test_reExport 1_2", "bossSprite_Idle_Animation_test_reExport 1_3", "bossSprite_Idle_Animation_test_reExport 1_4", "bossSprite_Idle_Animation_test_reExport 1_5", "bossSprite_Idle_Animation_test_reExport 1_6", "bossSprite_Idle_Animation_test_reExport 1_7", "bossSprite_Idle_Animation_test_reExport 1_8", "bossSprite_Idle_Animation_test_reExport 1_9", "bossSprite_Idle_Animation_test_reExport 1_10", "bossSprite_Idle_Animation_test_reExport 1_11", "bossSprite_Idle_Animation_test_reExport 1_12"]
+        }
+      },
+      "boss": {
+        "bullet": "Priest_Bullet_Eyes",
+        "bullet_damage": 100.0,
+        "far_bullet": "Priest_Bullet_Eyes_Far",
+        "homing_bullet": "Priest_Bullet_Chest",
+        "homing_interval": 3.0,
+        "laser": {
+          "damage": 20.0,
+          "damage_delay": 0.1,
+          "end": "laser_3",
+          "middle": "laser_2",
+          "start": "laser_1"
+        },
+        "move_speed": 100.0,
+        "spiral_eight_interval": 0.05,
+        "spiral_interval": 0.02,
+        "staff_offset": [1.386, 1.055]
+      },
+      "boss_bar": "Archbishop",
+      "color": [0.9151, 0.9151, 0.9151, 1.0],
+      "dead_sprites": ["crab_dead_1", "crab_dead_2"],
+      "drag": 15.0,
+      "freezable": false,
+      "loot": [
+        {
+          "drop": "Health Drop",
+          "weight": 100.0
+        },
+        {
+          "drop": "Health Drop",
+          "weight": 100.0
+        },
+        {
+          "drop": "Health Drop",
+          "weight": 100.0
+        },
+        {
+          "drop": "Data Drop 2",
+          "weight": 100.0
+        },
+        {
+          "drop": "Data Drop 2",
+          "weight": 100.0
+        },
+        {
+          "drop": "Data Drop 2",
+          "weight": 100.0
+        },
+        {
+          "drop": "rifle_3",
+          "weight": 100.0
+        }
+      ],
+      "mass": 50.0,
+      "max_health": 50000.0,
+      "offset": [-0.1261, 0.1631],
+      "size": [2.887, 2.81],
+      "sprite": "bossSprite_Idle_Animation_test_reExport 1_0",
+      "sprite_offset": [0.241, -0.018],
+      "touch": {
+        "damage": 100.0,
+        "damage_cooldown": 1.5,
+        "reach": {
+          "offset": [0.0458, -0.1221],
+          "size": [2.7378, 1.4152]
+        }
+      }
+    },
     "Warrior": {
       "animations": {
         "attack_down": {

@@ -336,6 +336,18 @@ impl Parser<'_> {
             let item_indent = indent + (content.len() - item.len());
 
             match split_key(item) {
+                // `- - value`: a sequence in a sequence (a polygon's paths), its
+                // first item on the outer dash's line.
+                _ if is_dash(item) => {
+                    self.position += 1;
+                    let mut inner = vec![self.inline(item[1..].trim_start())?];
+                    if self.peek_indent() == Some(item_indent)
+                        && let Value::Seq(more) = self.sequence(item_indent)?
+                    {
+                        inner.extend(more);
+                    }
+                    items.push(Value::Seq(inner));
+                }
                 // `- key: value`: a map whose first entry shares the dash's line.
                 Some((key, rest)) if !item.starts_with('{') && !item.starts_with('[') => {
                     self.position += 1;
@@ -478,6 +490,20 @@ impl Flow<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_sequence_of_sequences_reads_as_nested() {
+        let value = parse_map("m_Paths:
+- - {x: 1, y: 2}
+  - {x: 3, y: 4}
+- - {x: 5, y: 6}
+").unwrap();
+        let paths = value.get("m_Paths").seq();
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0].seq().len(), 2);
+        assert_eq!(paths[0].seq()[1].get("y").f32(), 4.0);
+        assert_eq!(paths[1].seq()[0].get("x").f32(), 5.0);
+    }
+
     use super::*;
 
     const PREFAB: &str = "\

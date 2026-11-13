@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::data::{
     AnimationFile, BulletFile, DropKind, EffectFile, EnemiesFile, ExplosionFile, GunFile, GunKind, GunsFile,
-    DroneFile, LaserFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
+    BossFile, DroneFile, LaserFile, LootEntryFile, LootFile, MuzzleFile, OffsetBoxFile, ShakeFile,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -143,6 +143,15 @@ pub enum Ai {
     Turret(TurretDef),
     Laser(LaserFile),
     Drone(DroneFile),
+    Boss(BossDef),
+}
+
+#[derive(Clone, Debug)]
+pub struct BossDef {
+    pub file: BossFile,
+    pub bullet: BulletId,
+    pub far_bullet: BulletId,
+    pub homing_bullet: BulletId,
 }
 
 #[derive(Clone, Debug)]
@@ -163,6 +172,8 @@ pub struct EnemyDef {
     pub ai: Ai,
     pub touch: Option<TouchDef>,
     pub flying: bool,
+    pub boss_bar: Option<String>,
+    pub sprite_offset: [f32; 2],
     /// The effect it leaves when it dies, which hurts what is near.
     pub explosion: Option<EffectId>,
     pub detonate: Option<OffsetBox>,
@@ -467,6 +478,15 @@ impl Defs {
                 }
             }
             let ai = match (&enemy.warrior, &enemy.ranged, &enemy.turret, &enemy.laser, &enemy.drone) {
+                _ if enemy.boss.is_some() => {
+                    let boss = enemy.boss.clone().expect("checked");
+                    Ai::Boss(BossDef {
+                        bullet: bullet(&boss.bullet)?,
+                        far_bullet: bullet(&boss.far_bullet)?,
+                        homing_bullet: bullet(&boss.homing_bullet)?,
+                        file: boss,
+                    })
+                }
                 (Some(warrior), None, None, None, None) => {
                     let swing = |key: &str| -> Result<OffsetBox> {
                         Ok((*warrior.swings.get(key).with_context(|| format!("enemy `{name}` has no `{key}` swing"))?).into())
@@ -519,6 +539,8 @@ impl Defs {
             self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
             self.enemies.push(EnemyDef {
                 flying: enemy.flying,
+                boss_bar: enemy.boss_bar.clone(),
+                sprite_offset: enemy.sprite_offset,
                 explosion,
                 detonate: enemy.detonate.map(Into::into),
                 name: name.clone(),
@@ -668,6 +690,14 @@ pub(crate) mod tests {
                 "detonate": {"size": [0.34, 0.26]},
                 "loot": [], "dead_sprites": [],
                 "drone": {"follow_range": 5, "move_speed": 1, "wander_interval": 0}
+              },
+              "priest": {
+                "max_health": 50000, "sprite": "priest", "size": [2.9, 2.8], "mass": 50, "drag": 15, "freezable": false,
+                "loot": [], "dead_sprites": [], "boss_bar": "Archbishop",
+                "boss": {"move_speed": 100, "bullet": "round", "far_bullet": "round", "homing_bullet": "round",
+                         "bullet_damage": 100, "spiral_interval": 0.02, "spiral_eight_interval": 0.05,
+                         "homing_interval": 3, "staff_offset": [1.4, 1.05],
+                         "laser": {"damage": 20, "damage_delay": 0.1, "start": "l1", "middle": "l2", "end": "l3"}}
               },
               "laser_crab": {
                 "max_health": 200, "sprite": "crab", "size": [0.2, 0.5], "mass": 1, "drag": 15, "freezable": true,

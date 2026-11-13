@@ -190,6 +190,16 @@ impl Room {
     /// it enters a wall, if it does within `max_distance`. Ledges do not stop it.
     /// A ray that starts inside a wall stops at once.
     pub fn ray_hits_wall(&self, origin: Vec2, direction: Vec2, max_distance: f32) -> Option<f32> {
+        self.ray_hits(origin, direction, max_distance, |cell| cell == Cell::Wall)
+    }
+
+    /// [`Room::ray_hits_wall`] for a Unity raycast whose mask takes in the
+    /// `Ledges` layer too: ledges stop it as well as walls.
+    pub fn ray_hits_solid(&self, origin: Vec2, direction: Vec2, max_distance: f32) -> Option<f32> {
+        self.ray_hits(origin, direction, max_distance, |cell| cell != Cell::Free)
+    }
+
+    fn ray_hits(&self, origin: Vec2, direction: Vec2, max_distance: f32, stops: impl Fn(Cell) -> bool) -> Option<f32> {
         // Walk the grid one cell border at a time: `next` holds how far along the
         // ray the next border is on each axis, `per_cell` how far apart borders are.
         let scaled = origin / self.cell;
@@ -206,7 +216,7 @@ impl Room {
         );
         let mut distance = 0.0;
         while distance <= max_distance {
-            if self.cell_at(cell.0, cell.1) == Cell::Wall {
+            if stops(self.cell_at(cell.0, cell.1)) {
                 return Some(distance);
             }
             if next.x < next.y {

@@ -787,6 +787,21 @@ mod tests {
     }
 
     #[test]
+    fn the_real_priest_is_the_archbishop() {
+        use crate::sim::defs::Ai;
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        let world = load_world(&assets, "boss_room", 1).expect("the boss room loads");
+        let priest = world.combat.targets.iter().find_map(|target| target.enemy.as_ref()).expect("the Priest stands there");
+        let def = world.defs.enemy(priest.def);
+        // `Priest.prefab`: Killable maxHealth 50000, enemyName Archbishop, a boss bar;
+        // BossAI bulletDamage 100; `BossLaser.prefab`: 20 every 0.1 s.
+        assert_eq!((def.max_health, def.boss_bar.as_deref()), (50000.0, Some("Archbishop")));
+        let Ai::Boss(boss) = &def.ai else { panic!("the Priest runs BossAI") };
+        assert_eq!((boss.file.bullet_damage, boss.file.laser.damage, boss.file.laser.damage_delay), (100.0, 20.0, 0.1));
+        assert!(world.defs.bullet(boss.homing_bullet).homing > 0.0, "its ring homes in");
+    }
+
+    #[test]
     fn the_hubs_drops_fly_to_the_player_and_count() {
         use crate::data::DropKind;
         let mut world = hub();

@@ -6,8 +6,7 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 to 3 of the port are in (foundation, real rooms, combat), and step 4
-(enemies) is under way:
+Steps 1 to 4 of the port are in (foundation, real rooms, combat, enemies):
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -140,8 +139,20 @@ where you spawn and interact. Interact again on the spot inside to leave.
   player has no `ElementalEffectHandler`, so pools do nothing to them, and
   flying Drones pass over.
 
+- **The boss.** The Priest, "Archbishop" (50,000 health), stands in
+  `boss_room` and runs Unity's `BossAI`: it rests for 2 seconds, then picks one
+  of four attacks at random for 5 seconds. Three hold it to the middle of the
+  room: a spiral of bullets from its staff (sweeping by the sine of the clock),
+  a turning eight-way spiral of faster bullets, and four lasers sweeping round
+  that burn for 20 every tenth of a second and stop at walls, ledges and bodies.
+  The fourth follows the player and throws a ring of eight bullets that home in
+  on them every 3 seconds. Its bullets do 100; touching it bites for 100. While
+  the player is in its room a bar along the bottom shows its name and health.
+  Unity's attack angles run on `Time.time`, the game's clock; here they run on
+  the room's.
+
 Not in yet:
-the boss; lighting (rooms look flatter and brighter than in
+lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)

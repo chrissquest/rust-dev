@@ -45,6 +45,8 @@ pub struct HudLayout {
     pub data_icon: Vec2,
     pub data_text: Vec2,
     pub text_size: f32,
+    /// A boss's health, along the bottom middle, its name above it.
+    pub boss_bar: Rect,
     /// The round "pick up" button on the right, shown when something is in reach.
     pub interact_center: Vec2,
     pub interact_radius: f32,
@@ -84,6 +86,10 @@ impl HudLayout {
             data_icon,
             data_text: Vec2::new(margin + text_size * 1.3, health_bar.max.y + gap),
             text_size,
+            boss_bar: Rect {
+                min: Vec2::new(screen.x * 0.25, screen.y - margin - unit * 0.03),
+                max: Vec2::new(screen.x * 0.75, screen.y - margin),
+            },
             interact_center: Vec2::new(screen.x - unit * 0.16, unit * 0.32),
             interact_radius: unit * 0.075,
         }

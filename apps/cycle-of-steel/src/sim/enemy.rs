@@ -23,6 +23,13 @@
 //!   towards them. It flies over ledges. Touching the player makes it die on the
 //!   spot (`ExplosionTrigger`), and like every explosive enemy it then explodes.
 //!
+//! - `BossAI` (the Priest): rests for 2 seconds, then picks one of four attacks
+//!   at random for 5 seconds, and so on. Three hold it to the middle of its
+//!   room: a spiral of bullets from its staff, a turning eight-way spiral, and
+//!   four lasers sweeping round. The fourth follows the player and throws a ring
+//!   of eight bullets that home in on them every 3 seconds. Its clock runs from
+//!   when the room is built, wherever the player is, as Unity's `Invoke` did.
+//!
 //! Some also bite whoever touches them (`BasicAIAttack`). Their shots
 //! (`EnemyBullet`) fly straight, hurt the player and stop on them or on a wall,
 //! leaving a splash; they fly over ledges and through enemies and chests.
@@ -42,6 +49,7 @@ use super::defs::{
     Ai, Animation, BulletId, Defs, Direction, EnemyDef, EnemyId, OffsetBox, RangedDef, TouchDef, TurretDef, WarriorDef,
 };
 use crate::data::{DroneFile, LaserFile};
+use super::defs::BossDef;
 use super::player::{self, Player};
 use super::rng::Rng;
 use super::room::{CAMERA_BLOCK, Room};
@@ -105,6 +113,46 @@ struct LaserState {
     sight_end: Vec2,
 }
 
+/// The Priest's attacks (`BossAI.AttackState`; the others there are unused).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BossAttack {
+    #[default]
+    None,
+    Spiral,
+    SpiralEight,
+    Lasers,
+    Homing,
+}
+
+/// How long the Priest rests between attacks, and how long each lasts
+/// (`BossAI.StateLoopDelay` and `StateLoop`).
+const BOSS_REST: f64 = 2.0;
+const BOSS_ATTACK: f64 = 5.0;
+/// How far the Priest's lasers reach (`Laser.UpdateLaser`).
+pub const BOSS_LASER_RANGE: f32 = 20.0;
+
+/// One of the Priest's lasers this step, for the view.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BossBeam {
+    pub origin: Vec2,
+    pub direction: Vec2,
+    pub length: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BossState {
+    pub attack: BossAttack,
+    /// When the current attack or rest ends.
+    until: f64,
+    spiral_end: f64,
+    eight_end: f64,
+    homing_end: f64,
+    /// When each laser may hurt again (`Laser.laserDamageEnd`).
+    laser_damage_end: [f64; 4],
+    /// The four lasers, while they shine.
+    pub beams: [Option<BossBeam>; 4],
+}
+
 /// A bullet an enemy fired (`EnemyBullet`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Shot {
@@ -141,6 +189,8 @@ pub struct Enemy {
     pub risen: u8,
     /// A Drone's smoothed wander direction (`targetGrav`).
     drift: Vec2,
+    /// The Priest's state.
+    pub boss: BossState,
     /// A LASERCrab's line, while it shows.
     pub beam: Option<EnemyBeam>,
     /// The swing in progress: its direction and when it started.
@@ -177,6 +227,7 @@ impl Enemy {
             beam: None,
             risen: 0,
             drift: Vec2::ZERO,
+            boss: BossState::default(),
             swing: None,
             animation: None,
         }
@@ -198,6 +249,18 @@ pub fn spawn(defs: &Defs, enemy: EnemyId, origin: Vec2, id: u32) -> Target {
     // An Animator given a controller in the prefab plays it from the start.
     if def.animations[Animation::Idle.index()].is_some() {
         state.animation = Some((Animation::Idle, 0.0));
+    }
+    if let Ai::Boss(_) = &def.ai {
+        // `Start` rests first: the first attack comes 2 seconds in. Its other
+        // timers, compared with `Time.time`, never hold the first shot back.
+        state.boss = BossState {
+            until: BOSS_REST,
+            spiral_end: f64::NEG_INFINITY,
+            eight_end: f64::NEG_INFINITY,
+            homing_end: f64::NEG_INFINITY,
+            laser_damage_end: [f64::NEG_INFINITY; 4],
+            ..BossState::default()
+        };
     }
     if let Ai::Laser(laser) = &def.ai {
         // `Start`: the first attack waits `maxFireTime`, not `fireInterval`.
@@ -253,6 +316,7 @@ pub fn step_enemies(
                 heading * laser.move_speed * UNITY_STEP / def.mass
             }
             Ai::Drone(drone) => think_drone(&mut targets[index], drone, def, player.position, now, rng),
+            Ai::Boss(boss) => think_boss(targets, index, boss, def, defs, room, player, now, rng, shots),
         };
         if let Some(area) = def.detonate {
             let target = &mut targets[index];
@@ -282,6 +346,16 @@ pub fn step_shots(
     shots.retain_mut(|shot| {
         let def = defs.bullet(shot.def);
         shot.previous_position = shot.position;
+        if def.homing > 0.0 {
+            // `HomingEnemyBullet.Update`: a push of `250 * deltaTime` a frame at the
+            // player, 5 units/s^2 summed over a physics step, nose to the player.
+            let toward = (player.position - shot.position).normalize_or_zero();
+            shot.velocity += toward * def.homing * UNITY_STEP * DT;
+            if toward != Vec2::ZERO {
+                shot.rotation = (-toward).to_angle();
+            }
+        }
+        shot.velocity *= drag_kept(def.drag);
         shot.position += shot.velocity * DT;
         shot.time_left -= DT;
         let half = Vec2::from(def.half);
@@ -511,6 +585,109 @@ fn fire_laser(targets: &mut [Target], index: usize, ai: &LaserFile, room: &Room,
     if matches!(hit, RayHit::Player(_)) && enemy.laser.next_damage_tick <= 0.0 {
         player.hurt(ai.damage, now);
         enemy.laser.next_damage_tick = ai.damage_rate;
+    }
+}
+
+/// `BossAI`: the attack clock, then this step's attack. Returns its push.
+#[allow(clippy::too_many_arguments)]
+fn think_boss(
+    targets: &mut [Target],
+    index: usize,
+    ai: &BossDef,
+    def: &EnemyDef,
+    defs: &Defs,
+    room: &Room,
+    player: &mut Player,
+    now: f64,
+    rng: &mut Rng,
+    shots: &mut Vec<Shot>,
+) -> Vec2 {
+    let origin = targets[index].origin;
+    let file = &ai.file;
+    let state = &mut targets[index].enemy.as_mut().expect("an enemy").boss;
+    if now >= state.until {
+        if state.attack == BossAttack::None {
+            // `StateLoop`: `Random.Range(0, 4)`.
+            state.attack = match (rng.unit() * 4.0) as u32 {
+                0 => BossAttack::Homing,
+                1 => BossAttack::Spiral,
+                2 => BossAttack::SpiralEight,
+                _ => BossAttack::Lasers,
+            };
+            state.until = now + BOSS_ATTACK;
+        } else {
+            state.attack = BossAttack::None;
+            state.until = now + BOSS_REST;
+        }
+    }
+    state.beams = [None; 4];
+    if block_of(origin) != block_of(player.position) {
+        return Vec2::ZERO;
+    }
+    // A push of `moveSpeed` every frame, at 60 frames a second, on its mass.
+    let acceleration = file.move_speed * UNITY_FRAME_RATE * UNITY_STEP / def.mass;
+    // `RoomScript.GetPositionCenter`: the middle of its screen-sized block.
+    let (x, y) = block_of(origin);
+    let center = Vec2::new((x as f32 + 0.5) * CAMERA_BLOCK.x, (y as f32 + 0.5) * CAMERA_BLOCK.y);
+    let to_center = (center - origin).normalize_or_zero() * acceleration;
+    let seconds = now as f32;
+    // Unity fires its bullets towards `Vector2.left` turned by the angle.
+    let left_turned = |degrees: f32| -Vec2::from_angle(degrees.to_radians());
+
+    match state.attack {
+        BossAttack::None => Vec2::ZERO,
+        BossAttack::Spiral => {
+            if now > state.spiral_end {
+                let velocity = left_turned((seconds.sin()) * 360.0) * 2.0;
+                fire(shots, defs, ai.bullet, origin + Vec2::from(file.staff_offset), velocity, 0.0, file.bullet_damage);
+                state.spiral_end = now + file.spiral_interval as f64;
+            }
+            to_center
+        }
+        BossAttack::SpiralEight => {
+            if now > state.eight_end {
+                for ring in 0..8 {
+                    let velocity = left_turned(ring as f32 * 45.0 + seconds * 35.0) * 5.0;
+                    fire(shots, defs, ai.far_bullet, origin, velocity, 0.0, file.bullet_damage);
+                }
+                state.eight_end = now + file.spiral_eight_interval as f64;
+            }
+            to_center
+        }
+        BossAttack::Homing => {
+            if now > state.homing_end {
+                for ring in 0..8 {
+                    let velocity = left_turned(ring as f32 * 45.0) * 3.0;
+                    fire(shots, defs, ai.homing_bullet, origin, velocity, 0.0, file.bullet_damage);
+                }
+                state.homing_end = now + file.homing_interval as f64;
+            }
+            (player.position - origin).normalize_or_zero() * acceleration
+        }
+        BossAttack::Lasers => {
+            for laser in 0..4 {
+                let direction = left_turned(seconds * 25.0 + laser as f32 * 90.0);
+                // The ray takes in everything but the boss's own layer, ledges too.
+                let wall = room.ray_hits_solid(origin, direction, BOSS_LASER_RANGE);
+                let hit = cast(targets, index, room, player.position, direction, wall.unwrap_or(BOSS_LASER_RANGE));
+                let (length, hit_player) = match hit {
+                    RayHit::Player(distance) => (distance, true),
+                    RayHit::Blocked(distance) => (distance, false),
+                    RayHit::Nothing => (wall.unwrap_or(BOSS_LASER_RANGE), wall.is_some()),
+                };
+                let hit_something = hit_player || length < BOSS_LASER_RANGE;
+                let state = &mut targets[index].enemy.as_mut().expect("an enemy").boss;
+                state.beams[laser] = Some(BossBeam { origin, direction, length });
+                if hit_something && now > state.laser_damage_end[laser] {
+                    // `Laser.UpdateLaser` pushes the player along the beam.
+                    if hit_player && player.hurt(file.laser.damage, now) {
+                        player.velocity += direction;
+                    }
+                    state.laser_damage_end[laser] = now + file.laser.damage_delay as f64;
+                }
+            }
+            to_center
+        }
     }
 }
 
@@ -911,6 +1088,48 @@ mod tests {
         let defs = test_defs();
         assert!(defs.enemy(defs.enemy_named("drone").unwrap()).flying);
         assert!(!defs.enemy(defs.enemy_named("brute").unwrap()).flying);
+    }
+
+    #[test]
+    fn the_boss_rests_then_attacks_in_five_second_turns() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut player = Player::new(Vec2::new(3.0, 2.0));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("priest").unwrap(), Vec2::new(8.0, 4.5), 0)];
+        let mut rng = Rng::new(3);
+        let mut shots = Vec::with_capacity(SHOT_CAPACITY);
+        let mut attacks = Vec::new();
+        for tick in 0..60 * 30 {
+            let now = tick as f64 * DT as f64;
+            player.health = player::MAX_HEALTH;
+            step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, now, &mut rng);
+            let attack = targets[0].enemy.as_ref().unwrap().boss.attack;
+            if attacks.last().map(|(last, _)| *last) != Some(attack) {
+                attacks.push((attack, tick));
+            }
+        }
+        assert_eq!(attacks[0], (BossAttack::None, 0));
+        assert_eq!(attacks[1].1, 120, "the first attack comes after 2 s");
+        assert_eq!(attacks[2], (BossAttack::None, 420), "and lasts 5 s");
+        assert!(attacks.iter().any(|(attack, _)| *attack != BossAttack::None));
+    }
+
+    #[test]
+    fn the_boss_lasers_burn_the_player_in_their_path_every_tenth_of_a_second() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        // At time 0 the first laser points left (`Vector2.left` turned by 0).
+        let mut player = Player::new(Vec2::new(5.0, 4.5));
+        let mut targets = vec![spawn(&defs, defs.enemy_named("priest").unwrap(), Vec2::new(8.0, 4.5), 0)];
+        let state = &mut targets[0].enemy.as_mut().unwrap().boss;
+        state.attack = BossAttack::Lasers;
+        state.until = 100.0;
+        let mut rng = Rng::new(3);
+        let mut shots = Vec::new();
+        step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
+        assert_eq!(player.health, player::MAX_HEALTH - 20.0);
+        let beam = targets[0].enemy.as_ref().unwrap().boss.beams[0].unwrap();
+        assert!((beam.length - (3.0 - player::HALF_SIZE.x)).abs() < 1e-3, "it stops on the player: {}", beam.length);
     }
 
     #[test]

@@ -430,6 +430,14 @@ pub struct EnemyFile {
     /// it (`ExplosionTrigger`).
     #[serde(default)]
     pub detonate: Option<OffsetBoxFile>,
+    #[serde(default)]
+    pub boss: Option<BossFile>,
+    /// A boss's name, shown over its health bar (`Killable.enemyName`).
+    #[serde(default)]
+    pub boss_bar: Option<String>,
+    /// Where its picture is drawn from its position, when that is on a child.
+    #[serde(default)]
+    pub sprite_offset: [f32; 2],
     /// A bite on touch (`BasicAIAttack`), beside its AI.
     #[serde(default)]
     pub touch: Option<TouchFile>,
@@ -450,6 +458,34 @@ pub struct RangedFile {
     pub spotting_length: f32,
     /// A key of `guns.json`'s bullets.
     pub bullet: String,
+}
+
+/// Unity's `BossAI`, the Priest's.
+#[derive(Clone, Debug, Deserialize)]
+pub struct BossFile {
+    pub move_speed: f32,
+    /// Bullets, keys of `guns.json`'s: the staff's spiral, the eight-way spiral
+    /// and the homing ring.
+    pub bullet: String,
+    pub far_bullet: String,
+    pub homing_bullet: String,
+    pub bullet_damage: f32,
+    pub spiral_interval: f32,
+    pub spiral_eight_interval: f32,
+    pub homing_interval: f32,
+    /// Where the staff's spiral leaves from.
+    pub staff_offset: [f32; 2],
+    pub laser: BossLaserFile,
+}
+
+/// The boss's laser prefab (`Laser`).
+#[derive(Clone, Debug, Deserialize)]
+pub struct BossLaserFile {
+    pub damage: f32,
+    pub damage_delay: f32,
+    pub start: String,
+    pub middle: String,
+    pub end: String,
 }
 
 /// Unity's `DashAIDrone`.

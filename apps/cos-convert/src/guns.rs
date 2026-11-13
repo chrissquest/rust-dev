@@ -18,6 +18,8 @@ use crate::yaml::{Document, Value};
 /// Where the gun prefabs live, relative to the Unity `Assets` folder.
 const GUNS_FOLDER: &str = "Prefabs/Guns";
 const ENEMIES_FOLDER: &str = "Prefabs/Enemies";
+/// The force `HomingEnemyBullet.Update` pushes with (the script has no field).
+const HOMING_ENEMY_BULLET_FORCE: f32 = 250.0;
 
 pub struct ConvertedGuns {
     pub json: Json,
@@ -123,6 +125,13 @@ pub fn convert(project: &Project) -> Result<ConvertedGuns> {
         {
             tables.warnings.push(format!("{}: no usable enemy bullet", path.display()));
         }
+        if let Some((_, _, body)) = root_script(project, &prefab, &["BossAI"]) {
+            for field in ["bulletFab", "farBulletFab", "homingBulletFab"] {
+                if bullet(project, body.get(field).get("guid").str(), &mut tables)?.is_none() {
+                    tables.warnings.push(format!("{}: boss `{field}` is no usable bullet", path.display()));
+                }
+            }
+        }
         // So do the explosions enemies leave when they die.
         if let Some((_, _, body)) = root_script(project, &prefab, &["Killable"])
             && body.get("explosive").bool()
@@ -223,7 +232,9 @@ fn bullet(project: &Project, guid: &str, tables: &mut Tables) -> Result<Option<S
         return Ok(Some(name));
     }
     let prefab = Prefab::new(&documents);
-    let Some((root, script, body)) = root_script(project, &prefab, &["Bullet", "HomingBullet", "EnemyBullet"]) else {
+    let Some((root, script, body)) =
+        root_script(project, &prefab, &["Bullet", "HomingBullet", "EnemyBullet", "HomingEnemyBullet"])
+    else {
         return Ok(None);
     };
 
@@ -240,6 +251,11 @@ fn bullet(project: &Project, guid: &str, tables: &mut Tables) -> Result<Option<S
     entry.insert("piercing".into(), json!(body.get("EnemyPiercing").bool()));
     if script == "HomingBullet" {
         entry.insert("homing".into(), number(body.get("homingPower").f32()));
+    }
+    if script == "HomingEnemyBullet" {
+        // `HomingEnemyBullet.Update` hard-codes its force: 250 * deltaTime, every
+        // frame, towards the player.
+        entry.insert("homing".into(), number(HOMING_ENEMY_BULLET_FORCE));
     }
     // Only the homing bullets have drag; without it they would never turn, only
     // drift sideways at full speed.

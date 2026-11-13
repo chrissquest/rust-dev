@@ -159,6 +159,8 @@ pub struct View {
     chest_sprites: Vec<[Option<ResolvedSprite>; 3]>,
     drop_sprites: Vec<ResolvedSprite>,
     enemy_sprites: Vec<EnemySprites>,
+    /// Per enemy: a boss's laser start, middle and end, if it has lasers.
+    boss_laser_sprites: Vec<Option<[ResolvedSprite; 3]>>,
     /// A data cell's picture, beside the count in the HUD.
     data_icon: Option<ResolvedSprite>,
     /// Per gun: a laser's start cap, middle stretch and end cap.
@@ -233,6 +235,7 @@ impl View {
             chest_sprites: Vec::new(),
             drop_sprites: Vec::new(),
             enemy_sprites: Vec::new(),
+            boss_laser_sprites: Vec::new(),
             data_icon: None,
             laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
@@ -277,6 +280,14 @@ impl View {
             }
             let bodies = enemy.dead_sprites.iter().map(|name| view.sprite(renderer, name)).collect::<Result<_>>()?;
             view.enemy_sprites.push(EnemySprites { idle, animations, bodies });
+            let lasers = match &enemy.ai {
+                Ai::Boss(boss) => {
+                    let laser = &boss.file.laser;
+                    Some([view.sprite(renderer, &laser.start)?, view.sprite(renderer, &laser.middle)?, view.sprite(renderer, &laser.end)?])
+                }
+                _ => None,
+            };
+            view.boss_laser_sprites.push(lasers);
         }
         // The plainest data cell: the one worth least.
         view.data_icon = defs
@@ -653,7 +664,9 @@ impl View {
             // `ElementalEffectHandler` sets the renderer's colour while frozen.
             let frozen = target.elemental.as_ref().is_some_and(|elemental| elemental.is_frozen());
             let color = if frozen { FROZEN_TINT } else { def.color };
-            let position = enemy.previous_origin.lerp(target.origin, blend);
+            let scale = crate::sim::enemy::drawn_scale(enemy, def);
+            let offset = Vec2::from(def.sprite_offset) * (scale[0] / def.scale[0]);
+            let position = enemy.previous_origin.lerp(target.origin, blend) + offset;
             let placed = sprite
                 .placed(position.extend(Z_ENTITIES), crate::sim::enemy::drawn_scale(enemy, def), 0.0, [false, false])
                 .with_color(srgb_to_linear(color));
@@ -664,6 +677,22 @@ impl View {
     /// LASERCrab lines, as Unity's `LineRenderer` draws them: thin, fading in from
     /// clear at the crab to their colour at the far end, on the `Bullets` layer.
     fn draw_enemy_beams(&mut self, world: &World) {
+        // The Priest's lasers: the same three pieces as a player's laser.
+        for target in &world.combat.targets {
+            let Some(enemy) = &target.enemy else {
+                continue;
+            };
+            let Some(pieces) = self.boss_laser_sprites[enemy.def.0 as usize] else {
+                continue;
+            };
+            for beam in enemy.boss.beams.iter().flatten() {
+                let rotation = (-beam.direction).to_angle();
+                for (sprite, (position, stretch)) in pieces.iter().zip(beam_pieces(beam.origin, beam.direction, beam.length)) {
+                    let placed = sprite.placed(position.extend(Z_BULLETS), [stretch, 1.0], rotation, [false, false]);
+                    self.list.sprite(sprite.texture, placed);
+                }
+            }
+        }
         for target in &world.combat.targets {
             let (Some(enemy), Some(beam)) = (&target.enemy, target.enemy.as_ref().and_then(|enemy| enemy.beam)) else {
                 continue;
@@ -822,6 +851,23 @@ impl View {
                 });
                 self.overlay.sprite(self.white, rect(filled, color));
             }
+        }
+
+        // `BossBar`: the boss of the player's block, its name over its health.
+        let block = |point: Vec2| (point / CAMERA_BLOCK).floor();
+        if let Some((target, name)) = world.combat.targets.iter().find_map(|target| {
+            let name = world.defs.enemy(target.enemy.as_ref()?.def).boss_bar.as_ref()?;
+            (block(target.origin) == block(world.player.position)).then_some((target, name))
+        }) {
+            let fraction = (target.health / target.max_health).clamp(0.0, 1.0);
+            self.overlay.sprite(self.white, rect(hud.boss_bar, HUD_HEAT_BACK_COLOR));
+            let mut filled = hud.boss_bar;
+            filled.max.x = filled.min.x + hud.boss_bar.size().x * fraction;
+            self.overlay.sprite(self.white, rect(filled, HUD_HEALTH_COLOR));
+            let width: f32 = name.chars().filter_map(|character| self.font.get(&character)).map(|(_, advance)| advance * hud.text_size).sum();
+            let top = flip(Vec2::new(hud.boss_bar.center().x - width * 0.5, hud.boss_bar.min.y - hud.text_size * 1.1)).truncate();
+            let baseline = top - Vec2::new(0.0, FONT_ASCENT * hud.text_size);
+            push_text(&mut self.overlay, &self.font, name, baseline, 0.0, hud.text_size, HUD_TEXT_COLOR);
         }
 
         let health = (world.player.health / world.player.max_health).clamp(0.0, 1.0);

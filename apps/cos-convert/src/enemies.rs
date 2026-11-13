@@ -2,7 +2,7 @@
 //!
 //! An enemy is a prefab under `Prefabs/Enemies` with a `Killable` (health, loot,
 //! the body it leaves) and one AI script: `Warrior`, `RangedAI`,
-//! `RangedAITurret`, `RangedAI_Laser` or `DashAIDrone` so far, each written
+//! `RangedAITurret`, `RangedAI_Laser`, `DashAIDrone` or `BossAI`, each written
 //! under its own key. Other AIs are added
 //! here when their step needs them. A `BasicAIAttack` on a child (a bite on
 //! touch) is written as `touch`. The bullets ranged enemies fire are written to
@@ -58,7 +58,21 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
 
         let mut enemy = Map::new();
         enemy.insert("max_health".into(), number(killable.get("maxHealth").f32()));
-        if let Some(sprite) = renderer_sprite_info(project, &prefab, root)? {
+        // The picture is on the root, or (the Priest) on a child named `Sprite`,
+        // drawn offset from the root.
+        let look = if prefab.component(root, "SpriteRenderer").is_some() {
+            root
+        } else {
+            documents
+                .iter()
+                .find(|document| document.class == "GameObject" && document.body.get("m_Name").str() == "Sprite")
+                .unwrap_or(root)
+        };
+        if !std::ptr::eq(look, root) {
+            let (at, origin) = (prefab.world_of_object(look).position, prefab.world_of_object(root).position);
+            enemy.insert("sprite_offset".into(), pair(at[0] - origin[0], at[1] - origin[1]));
+        }
+        if let Some(sprite) = renderer_sprite_info(project, &prefab, look)? {
             enemy.insert("sprite".into(), json!(sprite.name));
             out.sprites.push(sprite);
         }
@@ -66,7 +80,7 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         if scale != [1.0, 1.0] {
             enemy.insert("scale".into(), pair(scale[0], scale[1]));
         }
-        if let Some(renderer) = prefab.component(root, "SpriteRenderer") {
+        if let Some(renderer) = prefab.component(look, "SpriteRenderer") {
             let color = color_of(renderer.body.get("m_Color"));
             if color != [1.0, 1.0, 1.0, 1.0] {
                 enemy.insert("color".into(), Json::Array(color.iter().map(|&part| number(part)).collect()));
@@ -89,6 +103,10 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         if root.body.get("m_Layer").i64() == FLYING_LAYER {
             enemy.insert("flying".into(), json!(true));
         }
+        // A boss shows its name and health in a bar while the player is in its room.
+        if killable.get("bossBar").bool() {
+            enemy.insert("boss_bar".into(), json!(killable.get("enemyName").str()));
+        }
         if killable.get("explosive").bool() {
             enemy.insert("explosion".into(), json!(project.stem_of(killable.get("explosionPrefab").get("guid").str())));
         }
@@ -105,7 +123,7 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
         let mut animations = Map::new();
         // The controller the Animator starts with, if any: Warriors have none and
         // show their plain sprite until they move.
-        if let Some(animator) = prefab.component(root, "Animator")
+        if let Some(animator) = prefab.component(look, "Animator")
             && let Some(idle) = animation(project, animator.body.get("m_Controller").get("guid").str(), &mut out)?
         {
             animations.insert("idle".into(), idle);
@@ -146,6 +164,31 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
                 );
                 ai.insert("bullet".into(), json!(project.stem_of(ai_body.get("bulletFab").get("guid").str())));
                 enemy.insert("ranged".into(), Json::Object(ai));
+            }
+            "BossAI" => {
+                let mut ai = numbers(
+                    ai_body,
+                    &[
+                        ("move_speed", "moveSpeed"),
+                        ("bullet_damage", "bulletDamage"),
+                        ("spiral_interval", "spiralBulletInterval"),
+                        ("spiral_eight_interval", "spiralBulletEightInterval"),
+                        ("homing_interval", "homingBulletInterval"),
+                    ],
+                );
+                for (key, field) in [("bullet", "bulletFab"), ("far_bullet", "farBulletFab"), ("homing_bullet", "homingBulletFab")] {
+                    ai.insert(key.into(), json!(project.stem_of(ai_body.get(field).get("guid").str())));
+                }
+                // Where the single spiral leaves from: the `staffOrigin` child.
+                let origin = prefab.world_of_object(root).position;
+                if let Some(staff) = prefab.get(ai_body.get("staffOrigin").get("fileID").i64()) {
+                    let at = prefab.world_of_object(staff).position;
+                    ai.insert("staff_offset".into(), pair(at[0] - origin[0], at[1] - origin[1]));
+                }
+                if let Some(laser) = boss_laser(project, ai_body.get("laserFab").get("guid").str(), &mut out)? {
+                    ai.insert("laser".into(), laser);
+                }
+                enemy.insert("boss".into(), Json::Object(ai));
             }
             "DashAIDrone" => {
                 let ai = numbers(
@@ -236,8 +279,34 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
 /// Unity's `FlyingEnemy` layer (`TagManager.asset`).
 const FLYING_LAYER: i64 = 6;
 
+/// The boss's laser prefab (`Laser`): its damage, how often, and the start,
+/// middle and end sprites of its beam.
+fn boss_laser(project: &Project, guid: &str, out: &mut Out) -> Result<Option<Json>> {
+    let Some(documents) = project.prefab(guid) else {
+        return Ok(None);
+    };
+    let prefab = Prefab::new(&documents);
+    let Some((_, _, body)) = root_script(project, &prefab, &["Laser"]) else {
+        return Ok(None);
+    };
+    let mut laser = numbers(body, &[("damage", "laserDamage"), ("damage_delay", "laserDamageDelay")]);
+    for (key, field) in [("start", "laserStart"), ("middle", "laserMiddle"), ("end", "laserEnd")] {
+        let Some(part) = project.prefab(body.get(field).get("guid").str()) else {
+            continue;
+        };
+        let part_prefab = Prefab::new(&part);
+        if let Some(root) = part_prefab.root_transform().and_then(|transform| part_prefab.object_of(transform))
+            && let Some(sprite) = renderer_sprite_info(project, &part_prefab, root)?
+        {
+            laser.insert(key.into(), json!(sprite.name));
+            out.sprites.push(sprite);
+        }
+    }
+    Ok(Some(Json::Object(laser)))
+}
+
 /// The AI scripts converted so far.
-const AI_SCRIPTS: [&str; 5] = ["Warrior", "RangedAI", "RangedAITurret", "RangedAI_Laser", "DashAIDrone"];
+const AI_SCRIPTS: [&str; 6] = ["Warrior", "RangedAI", "RangedAITurret", "RangedAI_Laser", "DashAIDrone", "BossAI"];
 
 /// Numeric fields of a script as (key, Unity field) pairs.
 fn numbers(body: &Value, fields: &[(&str, &str)]) -> Map<String, Json> {
@@ -288,11 +357,37 @@ fn warrior(name: &str, documents: &[Document], prefab: &Prefab, body: &Value, ou
 
 /// An object's `BoxCollider2D` as (`size`, `offset`) in world units, scaled as
 /// the prefab scales it. Every collider so far sits on an object at its root's
-/// position, so only the scale is applied.
+/// position, so only the scale is applied. A `PolygonCollider2D` (the Priest's)
+/// is given as the box around its points.
 fn box_of(prefab: &Prefab, object: &Document) -> Option<(Json, Json)> {
+    let [x, y] = prefab.world_of_object(object).scale;
+    if prefab.component(object, "BoxCollider2D").is_none()
+        && let Some(polygon) = prefab.component(object, "PolygonCollider2D")
+    {
+        let (mut low, mut high) = ([f32::MAX; 2], [f32::MIN; 2]);
+        for path in polygon.body.get("m_Points").get("m_Paths").seq() {
+            for point in path.seq() {
+                let point = [point.get("x").f32(), point.get("y").f32()];
+                for axis in 0..2 {
+                    low[axis] = low[axis].min(point[axis]);
+                    high[axis] = high[axis].max(point[axis]);
+                }
+            }
+        }
+        if low[0] > high[0] {
+            return None;
+        }
+        let offset = polygon.body.get("m_Offset");
+        return Some((
+            pair((high[0] - low[0]) * x, (high[1] - low[1]) * y),
+            pair(
+                ((high[0] + low[0]) * 0.5 + offset.get("x").f32()) * x,
+                ((high[1] + low[1]) * 0.5 + offset.get("y").f32()) * y,
+            ),
+        ));
+    }
     let collider = prefab.component(object, "BoxCollider2D")?;
     let (size, offset) = (collider.body.get("m_Size"), collider.body.get("m_Offset"));
-    let [x, y] = prefab.world_of_object(object).scale;
     Some((
         pair(size.get("x").f32() * x, size.get("y").f32() * y),
         pair(offset.get("x").f32() * x, offset.get("y").f32() * y),

@@ -68,14 +68,16 @@ the `Spawner` prefabs those lines name: `multiple` (every line rolls) or not
 
 `enemies.json` holds, by prefab name, every enemy under `Prefabs/Enemies` whose AI
 is ported (`Warrior`, which the EnemyTank also runs, `RangedAI`,
-`RangedAITurret`, `RangedAI_Laser` and `DashAIDrone`): its `Killable`
+`RangedAITurret`, `RangedAI_Laser`, `DashAIDrone` and `BossAI`): its `Killable`
 numbers and `loot`, the bodies its `deathObject` can show (`dead_sprites`), its
 sprite, `scale`, `color`, solid box, rigidbody `mass` and `drag`, whether it can
 be frozen, the AI's numbers under `warrior` (with its `reach` and four `swings`
 boxes), `ranged`, `turret` (with its `muzzles`: offset and angle), `laser` (with the
 beam's `width` from its `LineRenderer`) or `drone`, `flying` for the
 `FlyingEnemy` layer, `explosion` (the effect an explosive `Killable` leaves, in
-`guns.json`), `detonate` (an `ExplosionTrigger` box), a bite on
+`guns.json`), `detonate` (an `ExplosionTrigger` box), `boss` (the Priest's numbers, its three
+bullets, staff offset and laser: damage, delay and three beam sprites) with
+`boss_bar` (its name), a bite on
 touch under `touch` (`BasicAIAttack`), and its `animations` (`idle` is the
 controller its Animator starts with). Ranged enemies name their bullet, a key of
 `guns.json`'s `bullets`, where enemy bullets are written beside the players'. Boxes are in world units with the prefab's scale
@@ -127,7 +129,15 @@ src/
 An explosion's `radius` is its circle's at the prefab's scale; a scaled one also
 has `knockback_radius`, the unscaled radius Unity divides its push by.
 
-Not converted yet: the boss's AI (Priest), the player's animations (the game
+An enemy whose picture is on a child named `Sprite` (the Priest) gets that
+child's sprite, colour and animation, with `sprite_offset`. A `PolygonCollider2D`
+is written as the box around its points.
+
+The YAML reader understands a list inside a list (`- - item`), which polygons and
+some rule tiles use. Before it did, seven tiles' sprites went unresolved and were
+not drawn in seven rooms (the hub, the spawn and exit rooms, ns1, ns2, s1, s2).
+
+Not converted yet: the player's animations (the game
 slices its sheets itself), and audio.
 
 Copied textures are left writable: some files in the Unity project are read-only,

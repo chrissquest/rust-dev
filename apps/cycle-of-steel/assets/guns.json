@@ -71,6 +71,33 @@
       "sprite": "Bullet_3",
       "time_to_live": 2.0
     },
+    "Priest_Bullet_Chest": {
+      "color": [0.9811, 0.199, 0.199, 1.0],
+      "effect": "Bullet Splash Small",
+      "homing": 250.0,
+      "piercing": false,
+      "size": [0.0625, 0.0625],
+      "sprite": "Priest_Bullet_3",
+      "time_to_live": 3.0
+    },
+    "Priest_Bullet_Eyes": {
+      "color": [0.9811, 0.199, 0.199, 1.0],
+      "effect": "Bullet Splash Small",
+      "enemy_damage": 0.0,
+      "piercing": false,
+      "size": [0.0625, 0.0625],
+      "sprite": "Priest_Bullet_2",
+      "time_to_live": 2.0
+    },
+    "Priest_Bullet_Eyes_Far": {
+      "color": [0.9811, 0.199, 0.199, 1.0],
+      "effect": "Bullet Splash Small",
+      "enemy_damage": 0.0,
+      "piercing": false,
+      "size": [0.0625, 0.0625],
+      "sprite": "Priest_Bullet_2",
+      "time_to_live": 5.0
+    },
     "flames": {
       "color": [0.8208, 0.6398, 0.3678, 1.0],
       "piercing": false,
