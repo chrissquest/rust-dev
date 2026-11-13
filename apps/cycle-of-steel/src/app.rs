@@ -25,7 +25,7 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::assets::AssetSource;
-use crate::data::{GunsFile, RoomFile};
+use crate::data::{GunsFile, LootFile, RoomFile};
 use crate::input::{Action, Bindings, Gamepads, InputState, StickVisual, TouchControls};
 use crate::sim::defs::Defs;
 use crate::sim::room::Room;
@@ -338,7 +338,7 @@ impl ApplicationHandler for App {
 
 /// Loads the game's definitions and a room, and builds the world in it.
 fn load_world(assets: &AssetSource, room: &str, seed: u32) -> Result<World> {
-    let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?);
+    let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?.with_loot(&LootFile::load(assets)?)?);
     let room = Room::from_file(RoomFile::load(assets, room)?);
     Ok(World::new(room, defs, seed))
 }
@@ -616,6 +616,59 @@ mod tests {
         let pistol = world.defs.gun(world.defs.gun_named("pistol_1").unwrap());
         assert!(shown.amount == pistol.damage || (shown.crit && shown.amount == pistol.damage * 2.0));
         assert!(world.combat.damage_numbers.is_empty(), "and left after its 1.4 s");
+    }
+
+    #[test]
+    fn every_real_chest_breaks_into_loot_and_remains() {
+        use crate::sim::defs::Loot;
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        for room in ["n1", "ns1", "e1"] {
+            let mut world = load_world(&assets, room, 1).expect("the room loads");
+            let chests: Vec<_> = world.combat.targets.iter().filter_map(|target| target.chest.map(|chest| (chest, target.origin))).collect();
+            assert!(!chests.is_empty(), "{room} has chests");
+            assert_eq!(world.combat.solids().count(), chests.len());
+            for target in &mut world.combat.targets {
+                target.health = 0.0;
+            }
+            world.step(&Input::default());
+            assert_eq!(world.combat.remains.len(), chests.len(), "{room}");
+            for (chest, origin) in chests {
+                let def = world.defs.chest(chest);
+                let gives_gun = def.loot.iter().any(|entry| match entry.loot {
+                    Loot::Pool(pool) => world.defs.pool(pool).entries.iter().any(|line| matches!(line.loot, Loot::Gun(_))),
+                    _ => false,
+                });
+                let at_chest = |position: Vec2| position == origin;
+                if gives_gun {
+                    assert!(world.combat.pickups.iter().any(|pickup| at_chest(pickup.position)), "{room}: a weapon chest leaves a gun");
+                } else {
+                    assert!(world.combat.drops.iter().any(|drop| at_chest(drop.position)), "{room}: a data chest leaves drops");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_hubs_drops_fly_to_the_player_and_count() {
+        use crate::data::DropKind;
+        let mut world = hub();
+        assert_eq!(world.combat.drops.len(), 6, "three health packs and three data cells");
+        let cell = world
+            .combat
+            .drops
+            .iter()
+            .position(|drop| world.defs.drop_def(drop.def).kind == DropKind::Data)
+            .unwrap();
+        world.combat.drops[cell].position = world.player.position + Vec2::new(1.0, 0.0);
+        world.player.health = 950.0;
+        let pack = world.combat.drops.iter().position(|drop| world.defs.drop_def(drop.def).kind == DropKind::Heal).unwrap();
+        world.combat.drops[pack].position = world.player.position + Vec2::new(-1.0, 0.0);
+        for _ in 0..120 {
+            world.step(&Input::default());
+        }
+        assert_eq!(world.data_cells, 3, "`Data Drop 2` is worth 3");
+        assert_eq!(world.player.health, 1000.0, "healed by 100 but not past the top");
+        assert_eq!(world.combat.drops.len(), 4);
     }
 
     #[test]

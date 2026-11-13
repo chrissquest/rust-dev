@@ -7,6 +7,7 @@
 mod font;
 mod guns;
 mod json;
+mod loot;
 mod project;
 mod room;
 mod yaml;
@@ -120,6 +121,19 @@ fn main() -> Result<()> {
     }
     warning_count += guns.warnings.len();
     for sprite in guns.sprites {
+        add_sprite(&mut catalogue, sprite)?;
+    }
+
+    let loot = loot::convert(&project)?;
+    let loot_path = output.join("loot.json");
+    std::fs::write(&loot_path, json::to_string(&loot.json))
+        .with_context(|| format!("could not write {}", loot_path.display()))?;
+    println!("{} chests, {} loot pools, {} drops", loot.chests, loot.pools, loot.drops);
+    for warning in &loot.warnings {
+        println!("    warning: {warning}");
+    }
+    warning_count += loot.warnings.len();
+    for sprite in loot.sprites {
         add_sprite(&mut catalogue, sprite)?;
     }
 

@@ -6,7 +6,7 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 and 2 of the port are in, and step 3 (combat) is under way:
+Steps 1 to 3 of the port are in (foundation, real rooms, combat):
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -67,8 +67,23 @@ where you spawn and interact. Interact again on the spot inside to leave.
   a running Unity build, and Unity's 2D lights, which the port lacks, also change
   what a bullet looks like there.
 
+- **Chests and drops.** The dungeon rooms' four kinds of chest stand where Unity
+  placed them, block the player, and take bullets, beams and blasts: 500 health,
+  the damaged picture below 70%, and when they break, their remains on the floor
+  and their loot. Loot is rolled as Unity's `Killable.Die` and `Spawner` roll it:
+  a weapon chest leaves exactly one gun from its pool (earlier lines are likelier
+  than their weights, as in Unity), a data chest a handful of data cells and
+  health packs. Drops (also lying in the hub's gun room) fly to the player once
+  within 1.5 to 2 units, through walls as in Unity, and are collected on touch:
+  data cells add to the count under the health bar, a health pack gives back 100
+  of the player's 1000. Unity pushes drops with a force every rendered frame, so
+  its pull depends on the frame rate; it is taken at 60 frames a second. Not yet:
+  the chests' and drops' glow (lighting, step 6), the chests' health bars (UI
+  pass), and the pickup sounds (step 6). Nothing hurts the player yet, so the
+  health bar only shows health packs at work once enemies arrive.
+
 Not in yet:
-enemies, chests and drops; lighting (rooms look flatter and brighter than in
+enemies; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
@@ -98,6 +113,7 @@ cargo run -p cycle-of-steel -- --screenshot room.png --ticks 120 --move 1,0
 cargo run -p cycle-of-steel -- --screenshot ns1.png --room ns1 --whole-room
 cargo run -p cycle-of-steel -- --screenshot fire.png --give shotgun_1 --aim 1,0 --ticks 8
 cargo run -p cycle-of-steel -- --screenshot beam.png --give laser_2 --aim -1,0.6 --ticks 8
+cargo run -p cycle-of-steel -- --screenshot chests.png --room n1 --whole-room
 ```
 
 `--room` picks any file under `assets/rooms`; `--whole-room` frames all of it, for
@@ -166,7 +182,8 @@ src/
     mod.rs       World, Input, the 60 Hz step, the inventory
     defs.rs      guns, bullets and effects as loaded data
     guns.rs      one gun's fire timer and heat
-    combat.rs    bullets, hit effects, targets, guns on the floor
+    combat.rs    bullets, hit effects, targets and chests, guns on the floor
+    loot.rs      rolling a broken chest's loot; drops flying to the player
     elemental.rs being frozen (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
@@ -175,6 +192,7 @@ src/
 assets/
   rooms/         one JSON file per room (format: see apps/cos-convert/README.md)
   guns.json      every gun, bullet and hit effect, with their numbers
+  loot.json      chests, the loot pools they roll on, and drops
   sprites.json   every sprite by name: texture, rectangle, pivot
   font.json      the pixel font: each character's glyph sprite and advance
   sprites/       PNGs copied from the Unity project

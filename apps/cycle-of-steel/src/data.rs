@@ -296,6 +296,77 @@ pub struct EffectFile {
     pub explosion: Option<ExplosionFile>,
 }
 
+/// `loot.json`: chests, the loot pools they roll on, and the drops they leave.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct LootFile {
+    pub chests: HashMap<String, ChestFile>,
+    pub pools: HashMap<String, PoolFile>,
+    pub drops: HashMap<String, DropFile>,
+}
+
+impl LootFile {
+    pub fn load(assets: &AssetSource) -> Result<Self> {
+        let bytes = assets.read("loot.json")?;
+        serde_json::from_slice(&bytes).context("could not parse loot.json")
+    }
+}
+
+/// One line of a loot table: what `drop` names (a pool, a drop or a gun) appears
+/// when a roll of 0 to 100 comes out at most `weight`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct LootEntryFile {
+    pub drop: String,
+    pub weight: f32,
+}
+
+/// A chest: Unity's `Killable` on a prefab under `Prefabs/Room Objects`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct ChestFile {
+    pub max_health: f32,
+    pub sprite: String,
+    /// Shown below 70% health.
+    pub damaged_sprite: Option<String>,
+    /// What is left on the floor once it breaks.
+    pub dead_sprite: Option<String>,
+    /// Its solid box, relative to its position.
+    pub size: [f32; 2],
+    #[serde(default)]
+    pub offset: [f32; 2],
+    pub loot: Vec<LootEntryFile>,
+}
+
+/// A loot pool: Unity's `Spawner`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct PoolFile {
+    /// Every entry rolls on its own; otherwise exactly one entry is spawned.
+    pub multiple: bool,
+    pub entries: Vec<LootEntryFile>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DropKind {
+    /// `DataDrop`: adds to the player's data cells.
+    Data,
+    /// `HealDrop`: gives the player health back.
+    Heal,
+}
+
+/// A pickup that flies to the player once they are near.
+#[derive(Clone, Debug, Deserialize)]
+pub struct DropFile {
+    pub kind: DropKind,
+    pub value: u32,
+    pub sprite: String,
+    pub pickup_range: f32,
+    pub pickup_speed: f32,
+    pub drag: f32,
+    /// Its trigger circle, relative to its position.
+    pub radius: f32,
+    #[serde(default)]
+    pub offset: [f32; 2],
+}
+
 fn quarter() -> [f32; 2] {
     [0.25, 0.25]
 }

@@ -22,6 +22,7 @@ any warnings, and overwrites what is there.
 ```text
 rooms/<room>.json     one per prefab under Assets/Prefabs/Generatable Rooms
 guns.json             every gun, the bullets they fire and the effects those leave
+loot.json             chests, loot pools and drops
 sprites.json          every sprite the above use: texture, rectangle, pivot, scale
 sprites/<name>.png    the textures themselves, copied unchanged
 ```
@@ -53,6 +54,16 @@ lifetime and whether it pierces, and names the effect it leaves (homing bullets
 also carry `homing`, the steering force, and `drag`, their rigidbody's linear
 drag; a freezing bullet carries `freeze`, its strength); `effects` holds the splash or explosion, an explosion with its `damage`
 and `radius`. Only bullets and effects that some gun reaches are written.
+
+`loot.json` has three tables keyed by Unity prefab name. `chests` holds each
+chest under `Prefabs/Room Objects` (a `Killable`): health, its whole, damaged and
+broken sprites (the last from its `deathObject` prefab), its solid box (`size`,
+`offset`) and its `loot`, lines of `drop` and `weight` out of 100. `pools` holds
+the `Spawner` prefabs those lines name: `multiple` (every line rolls) or not
+(exactly one spawns) and their `entries`. `drops` holds every `DataDrop` or
+`HealDrop` prefab under `Prefabs/Drops`: `kind` (`data` or `heal`), `value`,
+`pickup_range`, `pickup_speed`, the rigidbody's `drag`, and its trigger circle
+(`radius`, `offset`). A loot line names a pool, a drop, or a gun in `guns.json`.
 
 `font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
 atlas (`ThaleahFat.fontsettings` and its PNG). `glyphs` maps a character to its
@@ -88,7 +99,12 @@ src/
   project.rs   GUID -> asset path, sprite rectangles from .meta files, tile colliders
   room.rs      one room prefab -> one room file
   guns.rs      gun, bullet and effect prefabs -> guns.json
+  loot.rs      chest, loot pool and drop prefabs -> loot.json
   json.rs      JSON output that keeps a row of tiles on one line
 ```
 
 Not converted yet: animations, enemy stats, and audio.
+
+Run on Windows, the converter writes a few room rotations one digit differently in
+the last place (`155.2294` for `155.2295`): float formatting differs from Linux.
+Those files need not be committed when nothing else in them changed.

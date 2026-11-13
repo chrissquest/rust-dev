@@ -67,6 +67,9 @@ const ARM_RUNNING_RIGHT: Arm = Arm {
 const STRIDE_BOB: [f32; 6] = [0.0, 0.02, 0.01, 0.0, -0.02, -0.01];
 
 /// Bullets leave from this far along the aim from the pivot.
+/// `PlayerData.maxHealth` on `Prefabs/Player.prefab`.
+pub const MAX_HEALTH: f32 = 1000.0;
+
 pub const MUZZLE_DISTANCE: f32 = 0.35;
 
 /// The run animations play at 12 frames per second and have 12 frames.
@@ -101,6 +104,9 @@ pub struct Player {
     pub moved_right: bool,
     /// Chance of a shot doing double damage, 0..=1. Raised by upgrades later.
     pub crit_chance: f32,
+    /// Nothing hurts the player yet; health packs fill this back up to the top.
+    pub health: f32,
+    pub max_health: f32,
 }
 
 impl Player {
@@ -115,6 +121,8 @@ impl Player {
             aim: None,
             moved_right: false,
             crit_chance: 0.0,
+            health: MAX_HEALTH,
+            max_health: MAX_HEALTH,
         }
     }
 
@@ -143,7 +151,8 @@ impl Player {
         self.pivot() + aim * MUZZLE_DISTANCE
     }
 
-    pub fn step(&mut self, input: &Input, room: &Room) {
+    /// `solids` are boxes (centre, half size) that block the player besides walls.
+    pub fn step(&mut self, input: &Input, room: &Room, solids: impl Iterator<Item = (Vec2, Vec2)> + Clone) {
         self.previous_position = self.position;
 
         self.aim = input.aim.and_then(Vec2::try_normalize);
@@ -155,7 +164,7 @@ impl Player {
         let target_velocity = movement * TOP_SPEED;
         self.velocity = target_velocity + (self.velocity - target_velocity) * (-RESPONSE * DT).exp();
 
-        let moved = move_box(room, self.position, HALF_SIZE, self.velocity * DT);
+        let moved = move_box(room, solids, self.position, HALF_SIZE, self.velocity * DT);
         self.position = moved.position;
         if moved.hit_x {
             self.velocity.x = 0.0;
@@ -212,7 +221,7 @@ mod tests {
 
     fn step_for(player: &mut Player, room: &Room, movement: Vec2, seconds: f32) {
         for _ in 0..(seconds * TICK_RATE as f32).round() as u32 {
-            player.step(&Input { movement, ..Input::default() }, room);
+            player.step(&Input { movement, ..Input::default() }, room, std::iter::empty());
         }
     }
 

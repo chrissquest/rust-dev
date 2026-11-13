@@ -1,4 +1,5 @@
-//! What the game's things are: guns, bullets and hit effects, as loaded data.
+//! What the game's things are: guns, bullets and hit effects, chests, loot pools
+//! and drops, as loaded data.
 //!
 //! The asset files name things by string. Here they are resolved once into dense
 //! tables, so the simulation refers to a gun or a bullet by a small index and
@@ -8,7 +9,9 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 
-use crate::data::{BulletFile, EffectFile, ExplosionFile, GunFile, GunKind, GunsFile, ShakeFile};
+use crate::data::{
+    BulletFile, DropKind, EffectFile, ExplosionFile, GunFile, GunKind, GunsFile, LootEntryFile, LootFile, ShakeFile,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GunId(pub u16);
@@ -16,6 +19,12 @@ pub struct GunId(pub u16);
 pub struct BulletId(pub u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EffectId(pub u16);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ChestId(pub u16);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PoolId(pub u16);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DropId(pub u16);
 
 #[derive(Clone, Debug)]
 pub struct GunDef {
@@ -71,12 +80,64 @@ pub struct EffectDef {
     pub explosion: Option<ExplosionFile>,
 }
 
+/// What a line of a loot table spawns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Loot {
+    /// A gun lying on the floor.
+    Gun(GunId),
+    Drop(DropId),
+    /// A roll on a pool. Only chests name pools; pools never do.
+    Pool(PoolId),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LootEntry {
+    pub loot: Loot,
+    /// Out of 100.
+    pub weight: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct ChestDef {
+    pub max_health: f32,
+    pub sprite: String,
+    pub damaged_sprite: Option<String>,
+    pub dead_sprite: Option<String>,
+    /// Half its solid box, and where that box sits from the chest's position.
+    pub half: [f32; 2],
+    pub offset: [f32; 2],
+    pub loot: Vec<LootEntry>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PoolDef {
+    pub multiple: bool,
+    pub entries: Vec<LootEntry>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DropDef {
+    pub kind: DropKind,
+    pub value: u32,
+    pub sprite: String,
+    pub pickup_range: f32,
+    pub pickup_speed: f32,
+    pub drag: f32,
+    pub radius: f32,
+    pub offset: [f32; 2],
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Defs {
     pub guns: Vec<GunDef>,
     pub bullets: Vec<BulletDef>,
     pub effects: Vec<EffectDef>,
+    pub chests: Vec<ChestDef>,
+    pub pools: Vec<PoolDef>,
+    pub drops: Vec<DropDef>,
     gun_by_name: HashMap<String, GunId>,
+    chest_by_name: HashMap<String, ChestId>,
+    drop_by_name: HashMap<String, DropId>,
 }
 
 impl Defs {
@@ -166,6 +227,103 @@ impl Defs {
         Ok(defs)
     }
 
+    /// Adds the chests, pools and drops of a `loot.json`. Loot names guns, so this
+    /// comes after [`Defs::from_file`]. Tables are filled in name order.
+    pub fn with_loot(mut self, file: &LootFile) -> Result<Self> {
+        let mut drop_names: Vec<&String> = file.drops.keys().collect();
+        drop_names.sort();
+        for name in drop_names {
+            let drop = &file.drops[name];
+            self.drop_by_name.insert(name.clone(), DropId(self.drops.len() as u16));
+            self.drops.push(DropDef {
+                kind: drop.kind,
+                value: drop.value,
+                sprite: drop.sprite.clone(),
+                pickup_range: drop.pickup_range,
+                pickup_speed: drop.pickup_speed,
+                drag: drop.drag,
+                radius: drop.radius,
+                offset: drop.offset,
+            });
+        }
+
+        let mut pool_names: Vec<&String> = file.pools.keys().collect();
+        pool_names.sort();
+        let pool_ids: HashMap<&str, PoolId> = pool_names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| (name.as_str(), PoolId(index as u16)))
+            .collect();
+        for name in &pool_names {
+            let pool = &file.pools[*name];
+            let entries = pool
+                .entries
+                .iter()
+                .map(|entry| self.loot_entry(entry, None))
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| format!("in loot pool `{name}`"))?;
+            self.pools.push(PoolDef { multiple: pool.multiple, entries });
+        }
+
+        let mut chest_names: Vec<&String> = file.chests.keys().collect();
+        chest_names.sort();
+        for name in chest_names {
+            let chest = &file.chests[name];
+            let loot = chest
+                .loot
+                .iter()
+                .map(|entry| self.loot_entry(entry, Some(&pool_ids)))
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| format!("in chest `{name}`"))?;
+            self.chest_by_name.insert(name.clone(), ChestId(self.chests.len() as u16));
+            self.chests.push(ChestDef {
+                max_health: chest.max_health,
+                sprite: chest.sprite.clone(),
+                damaged_sprite: chest.damaged_sprite.clone(),
+                dead_sprite: chest.dead_sprite.clone(),
+                half: [chest.size[0] * 0.5, chest.size[1] * 0.5],
+                offset: chest.offset,
+                loot,
+            });
+        }
+        Ok(self)
+    }
+
+    /// Resolves a loot line's name: a gun, a drop, or (where `pools` is given) a pool.
+    fn loot_entry(&self, entry: &LootEntryFile, pools: Option<&HashMap<&str, PoolId>>) -> Result<LootEntry> {
+        let name = entry.drop.as_str();
+        let loot = if let Some(gun) = self.gun_named(name) {
+            Loot::Gun(gun)
+        } else if let Some(drop) = self.drop_by_name.get(name) {
+            Loot::Drop(*drop)
+        } else if let Some(pool) = pools.and_then(|pools| pools.get(name)) {
+            Loot::Pool(*pool)
+        } else {
+            anyhow::bail!("unknown loot `{name}`");
+        };
+        Ok(LootEntry { loot, weight: entry.weight })
+    }
+
+    pub fn chest(&self, id: ChestId) -> &ChestDef {
+        &self.chests[id.0 as usize]
+    }
+
+    pub fn pool(&self, id: PoolId) -> &PoolDef {
+        &self.pools[id.0 as usize]
+    }
+
+    pub fn drop_def(&self, id: DropId) -> &DropDef {
+        &self.drops[id.0 as usize]
+    }
+
+    pub fn chest_named(&self, name: &str) -> Option<ChestId> {
+        self.chest_by_name.get(name).copied()
+    }
+
+    pub fn drop_named(&self, name: &str) -> Option<DropId> {
+        self.drop_by_name.get(name).copied()
+    }
+
     pub fn gun(&self, id: GunId) -> &GunDef {
         &self.guns[id.0 as usize]
     }
@@ -187,8 +345,33 @@ impl Defs {
 pub(crate) mod tests {
     use super::*;
 
-    /// A pistol-like gun, a shotgun-like gun and a bullet, for tests across `sim`.
+    /// Test guns and a chest whose loot is a pistol or a rifle and a data cell.
     pub(crate) fn test_defs() -> Defs {
+        let loot: LootFile = serde_json::from_str(
+            r#"{
+              "chests": {
+                "chest": {"max_health": 500, "sprite": "c", "damaged_sprite": "cd", "dead_sprite": "cx",
+                          "size": [0.5, 0.28], "offset": [0, -0.11],
+                          "loot": [{"drop": "guns", "weight": 100}, {"drop": "goodies", "weight": 100}]}
+              },
+              "pools": {
+                "guns": {"multiple": false, "entries": [{"drop": "pistol", "weight": 20}, {"drop": "rifle", "weight": 20}]},
+                "goodies": {"multiple": true, "entries": [{"drop": "cell", "weight": 100}, {"drop": "medkit", "weight": 0}]}
+              },
+              "drops": {
+                "cell": {"kind": "data", "value": 3, "sprite": "d", "pickup_range": 2, "pickup_speed": 7,
+                         "drag": 3, "radius": 0.125, "offset": [0, -0.05]},
+                "medkit": {"kind": "heal", "value": 100, "sprite": "h", "pickup_range": 1.5, "pickup_speed": 7,
+                           "drag": 3, "radius": 0.125, "offset": [0, -0.05]}
+              }
+            }"#,
+        )
+        .unwrap();
+        test_gun_defs().with_loot(&loot).unwrap()
+    }
+
+    /// A pistol-like gun, a shotgun-like gun and their bullets.
+    fn test_gun_defs() -> Defs {
         let file: GunsFile = serde_json::from_str(
             r#"{
               "guns": {
@@ -238,6 +421,28 @@ pub(crate) mod tests {
         assert_eq!(round.half, [0.0625, 0.0625], "default size is an eighth of a unit");
         assert!(round.effect.is_some());
         assert!((defs.gun(GunId(6)).spray_angle - 20f32.to_radians()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn loot_names_resolve_to_guns_drops_and_pools() {
+        let defs = test_defs();
+        let chest = defs.chest(defs.chest_named("chest").unwrap());
+        assert_eq!(chest.half, [0.25, 0.14]);
+        let Loot::Pool(guns) = chest.loot[0].loot else { panic!("the chest names a pool") };
+        assert_eq!(defs.pool(guns).entries[1].loot, Loot::Gun(defs.gun_named("rifle").unwrap()));
+        let Loot::Pool(goodies) = chest.loot[1].loot else { panic!("the chest names a pool") };
+        assert_eq!(defs.pool(goodies).entries[0].loot, Loot::Drop(defs.drop_named("cell").unwrap()));
+    }
+
+    #[test]
+    fn a_pool_naming_a_pool_is_an_error() {
+        let loot: LootFile = serde_json::from_str(
+            r#"{"chests": {}, "drops": {},
+                "pools": {"a": {"multiple": true, "entries": [{"drop": "b", "weight": 1}]},
+                          "b": {"multiple": true, "entries": []}}}"#,
+        )
+        .unwrap();
+        assert!(test_gun_defs().with_loot(&loot).is_err());
     }
 
     #[test]

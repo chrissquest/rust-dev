@@ -1,15 +1,16 @@
 //! Everything that happens between pulling a trigger and something being hit:
-//! bullets in flight, the marks they leave, things that can be shot, and guns
-//! lying on the floor.
+//! bullets in flight, the marks they leave, things that can be shot, and what
+//! lies on the floor: guns, drops and broken chests.
 //!
 //! Bullets and effects live in plain vectors that are reserved once and reused, so
 //! nothing is allocated while playing however much is fired.
 
 use crystal_engine::glam::Vec2;
 
-use super::defs::{BulletId, Defs, EffectId, GunDef};
+use super::defs::{BulletId, ChestId, Defs, EffectId, GunDef};
 use super::elemental::Elemental;
 use super::guns::Gun;
+use super::loot::{DROP_CAPACITY, Drop, PICKUP_CAPACITY, Remains, Spawned, spill};
 use super::rng::Rng;
 use super::room::{Cell, Room};
 use super::{DT, Event};
@@ -36,7 +37,7 @@ pub const LASER_RANGE: f32 = 20.0;
 const CRIT_MULTIPLIER: f32 = 2.0;
 /// Unity's physics step (`TimeManager.asset`, Fixed Timestep). Forces and drag
 /// were tuned against it, so they are converted from it rather than from [`DT`].
-const UNITY_STEP: f32 = 0.02;
+pub(super) const UNITY_STEP: f32 = 0.02;
 
 #[derive(Clone, Debug)]
 pub struct Bullet {
@@ -89,19 +90,32 @@ pub struct Beam {
     pub length: f32,
 }
 
-/// Something bullets hit and hurt.
+/// Something bullets hit and hurt: the hub's dummy, or a chest.
 #[derive(Clone, Debug)]
 pub struct Target {
     /// Stays the same for the target's life, unlike its place in the list.
     pub id: u32,
+    /// The centre of its box.
     pub position: Vec2,
     pub half: Vec2,
+    /// Where its Unity object stands, which its box may be offset from. Damage
+    /// numbers, loot and remains appear here.
+    pub origin: Vec2,
+    /// Set for chests, which are solid and leave loot and remains.
+    pub chest: Option<ChestId>,
     pub health: f32,
     pub max_health: f32,
     /// When it was last hit, in world seconds, for the view to flash it.
     pub last_hit: f64,
     /// Set if it can be frozen: in Unity, if it has an `ElementalEffectHandler`.
     pub elemental: Option<Elemental>,
+}
+
+impl Target {
+    /// `Killable.DamageKillable` swaps in the damaged sprite below 70% health.
+    pub fn is_damaged(&self) -> bool {
+        self.health < self.max_health * 0.7
+    }
 }
 
 /// A gun lying on the floor.
@@ -137,6 +151,8 @@ pub struct Combat {
     pub targets: Vec<Target>,
     pub pickups: Vec<Pickup>,
     pub teleports: Vec<Teleport>,
+    pub drops: Vec<Drop>,
+    pub remains: Vec<Remains>,
     /// The player's laser beam, while it fires.
     pub beam: Option<Beam>,
     pub damage_numbers: Vec<DamageNumber>,
@@ -148,8 +164,10 @@ impl Combat {
             bullets: Vec::with_capacity(BULLET_CAPACITY),
             effects: Vec::with_capacity(EFFECT_CAPACITY),
             targets: Vec::new(),
-            pickups: Vec::new(),
+            pickups: Vec::with_capacity(PICKUP_CAPACITY),
             teleports: Vec::new(),
+            drops: Vec::with_capacity(DROP_CAPACITY),
+            remains: Vec::new(),
             beam: None,
             damage_numbers: Vec::with_capacity(DAMAGE_NUMBER_CAPACITY),
         }
@@ -335,7 +353,7 @@ impl Combat {
             }
         }
 
-        self.targets.retain(|target| target.health > 0.0);
+        self.break_dead_targets(defs, rng);
         for elemental in self.targets.iter_mut().filter_map(|target| target.elemental.as_mut()) {
             elemental.step();
         }
@@ -350,6 +368,34 @@ impl Combat {
             effect.time_left -= DT;
             effect.time_left > 0.0
         });
+    }
+
+    /// Removes every target out of health, as `Killable.Die`: a chest spills its
+    /// loot where it stood and leaves its remains. Order is kept, as homing
+    /// bullets break ties by it.
+    fn break_dead_targets(&mut self, defs: &Defs, rng: &mut Rng) {
+        let mut index = 0;
+        while index < self.targets.len() {
+            if self.targets[index].health > 0.0 {
+                index += 1;
+                continue;
+            }
+            let target = self.targets.remove(index);
+            if let Some(chest) = target.chest {
+                let mut out = Spawned { pickups: &mut self.pickups, drops: &mut self.drops };
+                spill(&defs.chest(chest).loot, defs, target.origin, rng, &mut out);
+                self.remains.push(Remains { chest, position: target.origin });
+            }
+        }
+    }
+
+    /// The boxes that stop walkers: chests, which in Unity have a solid collider
+    /// on a body frozen in place.
+    pub fn solids(&self) -> impl Iterator<Item = (Vec2, Vec2)> + Clone + '_ {
+        self.targets
+            .iter()
+            .filter(|target| target.chest.is_some())
+            .map(|target| (target.position, target.half))
     }
 
     /// What interacting would act on: the nearest thing whose box the player is
@@ -420,7 +466,7 @@ fn hurt(target: &mut Target, numbers: &mut Vec<DamageNumber>, amount: f32, crit:
         rng.range(-DAMAGE_NUMBER_SCATTER, DAMAGE_NUMBER_SCATTER),
     );
     numbers.push(DamageNumber {
-        position: target.position + scatter,
+        position: target.origin + scatter,
         amount,
         crit,
         time_left: DAMAGE_NUMBER_LIFE,
@@ -442,7 +488,7 @@ fn homing_acceleration(homing: f32) -> f32 {
 /// linear `drag`. Unity multiplies velocity by `1 - drag * UNITY_STEP` each
 /// physics step; this is the same decay spread over our shorter step. Homing
 /// bullets have drag 3 and so settle at about 3.1 units/s; the rest have none.
-fn drag_kept(drag: f32) -> f32 {
+pub(super) fn drag_kept(drag: f32) -> f32 {
     if drag == 0.0 {
         return 1.0;
     }
@@ -475,7 +521,7 @@ fn ray_hits_box(origin: Vec2, direction: Vec2, center: Vec2, half: Vec2) -> Opti
     (enter <= leave).then_some(enter)
 }
 
-fn circle_overlaps_box(center: Vec2, radius: f32, box_center: Vec2, half: Vec2) -> bool {
+pub(super) fn circle_overlaps_box(center: Vec2, radius: f32, box_center: Vec2, half: Vec2) -> bool {
     let nearest = center.clamp(box_center - half, box_center + half);
     nearest.distance_squared(center) < radius * radius
 }
@@ -489,6 +535,7 @@ fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {
 mod tests {
     use super::*;
     use crate::sim::defs::tests::test_defs;
+    use crate::sim::loot::Remains;
 
     fn fire(combat: &mut Combat, defs: &Defs, gun: &str, from: Vec2, aim: Vec2) -> Vec<Event> {
         let mut events = Vec::new();
@@ -504,9 +551,45 @@ mod tests {
             half: Vec2::new(0.1, 0.25),
             health,
             max_health: health,
+            origin: position,
+            chest: None,
             last_hit: f64::NEG_INFINITY,
             elemental: None,
         }
+    }
+
+    #[test]
+    fn a_broken_chest_spills_its_loot_and_leaves_remains_where_it_stood() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let chest = defs.chest_named("chest").unwrap();
+        let mut combat = Combat::new();
+        let origin = Vec2::new(8.0, 4.0);
+        combat.targets.push(Target {
+            origin,
+            chest: Some(chest),
+            position: origin + Vec2::new(0.0, -0.11),
+            ..target(0, origin, 500.0)
+        });
+        assert_eq!(combat.solids().count(), 1);
+        let mut rng = Rng::new(3);
+        combat.targets[0].health = 0.0;
+        combat.step(&defs, &room, Vec2::new(2.0, 2.0), 0.0, &mut rng);
+        assert!(combat.targets.is_empty());
+        assert_eq!(combat.solids().count(), 0, "a broken chest no longer blocks");
+        assert_eq!(combat.remains, vec![Remains { chest, position: origin }]);
+        assert_eq!(combat.pickups.len(), 1);
+        assert_eq!(combat.pickups[0].position, origin);
+        assert_eq!(combat.drops.len(), 1);
+    }
+
+    #[test]
+    fn a_chest_looks_damaged_below_seventy_percent() {
+        let mut chest = target(0, Vec2::ZERO, 500.0);
+        chest.health = 351.0;
+        assert!(!chest.is_damaged());
+        chest.health = 349.0;
+        assert!(chest.is_damaged());
     }
 
     #[test]

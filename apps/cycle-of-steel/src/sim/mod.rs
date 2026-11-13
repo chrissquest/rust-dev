@@ -10,6 +10,7 @@ pub mod combat;
 pub mod defs;
 pub mod elemental;
 pub mod guns;
+pub mod loot;
 pub mod player;
 pub mod rng;
 pub mod room;
@@ -20,6 +21,8 @@ use crystal_engine::glam::Vec2;
 
 use crate::data::{GunKind, ShakeFile};
 use combat::{Combat, Interaction, Pickup, Target, Teleport};
+use crate::data::DropKind;
+use loot::Drop;
 use elemental::Elemental;
 use defs::{Defs, GunId};
 use guns::Gun;
@@ -78,6 +81,8 @@ pub struct World {
     /// The guns being carried, and which one is in hand.
     pub inventory: [Option<Gun>; INVENTORY_SLOTS],
     pub selected_slot: usize,
+    /// The currency the player picks up (`PlayerData.dataCells`).
+    pub data_cells: u32,
     /// Steps taken since the world was created.
     pub tick: u64,
     rng: Rng,
@@ -86,17 +91,32 @@ pub struct World {
 }
 
 impl World {
-    /// A world in `room`, with the room's guns on the floor and its targets standing.
+    /// A world in `room`, with the room's guns and drops on the floor and its
+    /// targets and chests standing.
     pub fn new(room: Room, defs: Arc<Defs>, seed: u32) -> Self {
         let player = Player::new(room.spawn);
         let mut combat = Combat::new();
 
         if let Some(file) = &room.file {
             for object in &file.objects {
+                let position = Vec2::from(object.position);
                 if let Some(gun) = defs.gun_named(&object.prefab) {
-                    combat.pickups.push(Pickup {
-                        gun: Gun::new(gun),
-                        position: Vec2::from(object.position),
+                    combat.pickups.push(Pickup { gun: Gun::new(gun), position });
+                } else if let Some(drop) = defs.drop_named(&object.prefab) {
+                    combat.drops.push(Drop::new(drop, position));
+                } else if let Some(chest) = defs.chest_named(&object.prefab) {
+                    let def = defs.chest(chest);
+                    combat.targets.push(Target {
+                        id: combat.targets.len() as u32,
+                        position: position + Vec2::from(def.offset),
+                        half: Vec2::from(def.half),
+                        origin: position,
+                        chest: Some(chest),
+                        health: def.max_health,
+                        max_health: def.max_health,
+                        last_hit: f64::NEG_INFINITY,
+                        // Chests have no `ElementalEffectHandler`.
+                        elemental: None,
                     });
                 }
             }
@@ -120,6 +140,8 @@ impl World {
                     id: combat.targets.len() as u32,
                     position: Vec2::from(bounds.center),
                     half: Vec2::from(bounds.size) * 0.5,
+                    origin: Vec2::from(bounds.center),
+                    chest: None,
                     health,
                     max_health: health,
                     last_hit: f64::NEG_INFINITY,
@@ -136,6 +158,7 @@ impl World {
             combat,
             inventory: [None, None, None, None],
             selected_slot: 0,
+            data_cells: 0,
             tick: 0,
             rng: Rng::new(seed),
             events: Vec::new(),
@@ -182,7 +205,7 @@ impl World {
     pub fn step(&mut self, input: &Input) {
         let now = self.time();
 
-        self.player.step(input, &self.room);
+        self.player.step(input, &self.room, self.combat.solids());
 
         if let Some(slot) = input.select_slot {
             self.select_slot(slot);
@@ -250,6 +273,14 @@ impl World {
         }
 
         self.combat.step(&defs, &self.room, self.player.position, now, &mut self.rng);
+
+        let (player, data_cells) = (&mut self.player, &mut self.data_cells);
+        loot::step_drops(&mut self.combat.drops, &defs, player.position, player::HALF_SIZE, |drop| match drop.kind {
+            // `PlayerData.incrementDataCells`.
+            DropKind::Data => *data_cells += drop.value,
+            // `PlayerData.HealPlayer`: a pack is used up even at full health.
+            DropKind::Heal => player.health = (player.health + drop.value as f32).min(player.max_health),
+        });
 
         // Nothing has to read events; do not let them pile up if nothing does.
         if self.events.len() > 256 {
@@ -487,6 +518,8 @@ mod tests {
             half: Vec2::splat(0.25),
             health,
             max_health: health,
+            origin: world.player.pivot() + Vec2::new(distance, 0.0),
+            chest: None,
             last_hit: f64::NEG_INFINITY,
             elemental: None,
         });

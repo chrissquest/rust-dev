@@ -1,5 +1,23 @@
 {
   "sprites": {
+    "32x32Chest_fullyDestroyed": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "32x32Chest_fullyDestroyed"
+    },
+    "32x32Chest_half_broken": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "32x32Chest_half_broken"
+    },
+    "32x32Chest_new": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "32x32Chest_new"
+    },
     "Bullet_1": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
@@ -77,6 +95,24 @@
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 16, 16],
       "texture": "button_unshot"
+    },
+    "chest_purple_damaged": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "chest_purple_damaged"
+    },
+    "chest_purple_destroyed": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "chest_purple_destroyed"
+    },
+    "chest_purple_full": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "chest_purple_full"
     },
     "computerReplacement_3": {
       "pivot": [0.5, 0.5],
@@ -329,6 +365,18 @@
       "pixels_per_unit": 64.0,
       "rect": [32, 32, 32, 32],
       "texture": "details_dark_compound"
+    },
+    "data_drop": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "data_drop"
+    },
+    "data_drop_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "data_drop_2"
     },
     "door": {
       "pivot": [0.5, 0.5],
@@ -983,6 +1031,12 @@
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 24, 24],
       "texture": "hand_of_bishop"
+    },
+    "health_drop": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 16, 16],
+      "texture": "health_drop"
     },
     "horizontalDeadRobot": {
       "pivot": [0.5, 0.5],

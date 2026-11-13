@@ -124,7 +124,7 @@ pub fn convert(project: &Project) -> Result<ConvertedGuns> {
 
 /// The prefab's root object and the first of `scripts` attached to it, with that
 /// script's fields.
-fn root_script<'a>(
+pub(crate) fn root_script<'a>(
     project: &Project,
     prefab: &Prefab<'a>,
     scripts: &[&str],

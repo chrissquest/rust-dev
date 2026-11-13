@@ -18,7 +18,7 @@ use crystal_engine::scene::{Texture, TextureFilter};
 use crystal_engine::sprite::{Grid, Sheet, Sprite};
 
 use crate::assets::{AssetSource, PIXELS_PER_UNIT};
-use crate::data::{DecorationFile, FontFile, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
+use crate::data::{DecorationFile, DropKind, FontFile, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
 use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
 use crate::sim::combat::Interaction;
@@ -89,6 +89,8 @@ const HUD_HEAT_BACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.45];
 const HUD_HEAT_COOL_COLOR: [f32; 4] = [1.0, 0.85, 0.2, 0.9];
 const HUD_HEAT_HOT_COLOR: [f32; 4] = [1.0, 0.2, 0.1, 0.95];
 const HUD_BUTTON_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.28];
+const HUD_HEALTH_COLOR: [f32; 4] = [0.55, 0.02, 0.02, 0.9];
+const HUD_TEXT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 const CLEAR_COLOR: [f32; 4] = [0.012, 0.012, 0.016, 1.0];
 
@@ -151,6 +153,11 @@ pub struct View {
     effect_sprites: Vec<Option<ResolvedSprite>>,
     /// The pixel font: each character's glyph and how far the pen moves on, in ems.
     font: HashMap<char, (ResolvedSprite, f32)>,
+    /// Per chest: whole, damaged and broken.
+    chest_sprites: Vec<[Option<ResolvedSprite>; 3]>,
+    drop_sprites: Vec<ResolvedSprite>,
+    /// A data cell's picture, beside the count in the HUD.
+    data_icon: Option<ResolvedSprite>,
     /// Per gun: a laser's start cap, middle stretch and end cap.
     laser_sprites: Vec<[Option<ResolvedSprite>; 3]>,
     shadow: ResolvedSprite,
@@ -220,6 +227,9 @@ impl View {
             bullet_sprites: Vec::new(),
             effect_sprites: Vec::new(),
             font: HashMap::new(),
+            chest_sprites: Vec::new(),
+            drop_sprites: Vec::new(),
+            data_icon: None,
             laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
             shadow: ResolvedSprite::EMPTY,
@@ -240,6 +250,27 @@ impl View {
             view.optional_sprites(renderer, defs.bullets.iter().map(|bullet| bullet.sprite.as_deref()))?;
         view.effect_sprites =
             view.optional_sprites(renderer, defs.effects.iter().map(|effect| effect.sprite.as_deref()))?;
+        for chest in &defs.chests {
+            let mut sprites = [None, None, None];
+            for (sprite, name) in sprites.iter_mut().zip([Some(&chest.sprite), chest.damaged_sprite.as_ref(), chest.dead_sprite.as_ref()]) {
+                if let Some(name) = name {
+                    *sprite = Some(view.sprite(renderer, name)?);
+                }
+            }
+            view.chest_sprites.push(sprites);
+        }
+        for drop in &defs.drops {
+            let sprite = view.sprite(renderer, &drop.sprite)?;
+            view.drop_sprites.push(sprite);
+        }
+        // The plainest data cell: the one worth least.
+        view.data_icon = defs
+            .drops
+            .iter()
+            .zip(&view.drop_sprites)
+            .filter(|(drop, _)| drop.kind == DropKind::Data)
+            .min_by_key(|(drop, _)| drop.value)
+            .map(|(_, sprite)| *sprite);
         for gun in &defs.guns {
             let mut pieces = [None, None, None];
             for (piece, name) in pieces.iter_mut().zip(&gun.laser_sprites) {
@@ -461,7 +492,20 @@ impl View {
             self.list.batch(batch);
         }
 
-        // Guns on the floor lie under the characters.
+        // Broken chests are on Unity's `Background` sorting layer.
+        for remains in &world.combat.remains {
+            if let Some(sprite) = &self.chest_sprites[remains.chest.0 as usize][2] {
+                let placed = sprite.placed(remains.position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]);
+                self.list.sprite(sprite.texture, placed);
+            }
+        }
+
+        // Guns and drops on the floor lie under the characters.
+        for drop in &world.combat.drops {
+            let sprite = &self.drop_sprites[drop.def.0 as usize];
+            let position = drop.previous_position.lerp(drop.position, blend);
+            self.list.sprite(sprite.texture, sprite.placed(position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]));
+        }
         for pickup in &world.combat.pickups {
             if let Some(sprite) = &self.gun_sprites[pickup.gun.def.0 as usize] {
                 let placed = sprite.placed(pickup.position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]);
@@ -509,6 +553,19 @@ impl View {
             self.list.batch(batch);
         }
 
+        // Chests are on Unity's `HUD Items` sorting layer, over even the foreground.
+        for target in &world.combat.targets {
+            let Some(chest) = target.chest else {
+                continue;
+            };
+            let [whole, damaged, _] = &self.chest_sprites[chest.0 as usize];
+            let sprite = if target.is_damaged() { damaged.as_ref().or(whole.as_ref()) } else { whole.as_ref() };
+            if let Some(sprite) = sprite {
+                let placed = sprite.placed(target.origin.extend(Z_ABOVE), [1.0, 1.0], 0.0, [false, false]);
+                self.list.sprite(sprite.texture, placed);
+            }
+        }
+
         for number in &world.combat.damage_numbers {
             let style = if number.crit { DAMAGE_NUMBER_CRIT } else { DAMAGE_NUMBER };
             // The prefabs' colours are as picked on screen; tints here are linear.
@@ -540,15 +597,7 @@ impl View {
     /// Adds one line of text to the world, starting at `baseline`, its left end.
     /// `size` is world units per em. Characters the font lacks are skipped.
     fn draw_text(&mut self, text: &str, baseline: Vec2, z: f32, size: f32, color: [f32; 4]) {
-        let mut pen = baseline;
-        for character in text.chars() {
-            if let Some((sprite, advance)) = self.font.get(&character) {
-                // Flipped: the font's atlas holds its glyphs upside down.
-                let placed = sprite.placed(pen.extend(z), [size, size], 0.0, [false, true]).with_color(color);
-                self.list.sprite(sprite.texture, placed);
-                pen.x += advance * size;
-            }
-        }
+        push_text(&mut self.list, &self.font, text, baseline, z, size, color);
     }
 
     /// The player: shadow, the hand behind, the body, the gun and the hand in front.
@@ -682,6 +731,22 @@ impl View {
             }
         }
 
+        let health = (world.player.health / world.player.max_health).clamp(0.0, 1.0);
+        self.overlay.sprite(self.white, rect(hud.health_bar, HUD_HEAT_BACK_COLOR));
+        if health > 0.0 {
+            let mut filled = hud.health_bar;
+            filled.max.x = filled.min.x + hud.health_bar.size().x * health;
+            self.overlay.sprite(self.white, rect(filled, HUD_HEALTH_COLOR));
+        }
+        if let Some(sprite) = &self.data_icon {
+            self.overlay.sprite(sprite.texture, icon(sprite, hud.data_icon, hud.text_size));
+        }
+        let mut buffer = [0; 16];
+        let count = number_text(world.data_cells as f32, &mut buffer);
+        let top = flip(hud.data_text).truncate();
+        let baseline = top - Vec2::new(0.0, FONT_ASCENT * hud.text_size);
+        push_text(&mut self.overlay, &self.font, count, baseline, 0.0, hud.text_size, HUD_TEXT_COLOR);
+
         // The interact button shows what would be picked up; over a hidden spot
         // it is just the button.
         if let Some(interaction) = world.interaction() {
@@ -768,6 +833,28 @@ struct ResolvedSprite {
 /// stretched along the beam. From `LaserGun.updateFire`: the caps sit on the two
 /// ends at their own size, and the middle, a quarter of a unit long, is scaled by
 /// four times the length so that it spans the whole beam.
+/// Adds one line of text to `list`, starting at `baseline`, its left end, with y
+/// up. `size` is units per em. Characters the font lacks are skipped.
+fn push_text(
+    list: &mut DrawList,
+    font: &HashMap<char, (ResolvedSprite, f32)>,
+    text: &str,
+    baseline: Vec2,
+    z: f32,
+    size: f32,
+    color: [f32; 4],
+) {
+    let mut pen = baseline;
+    for character in text.chars() {
+        if let Some((sprite, advance)) = font.get(&character) {
+            // Flipped: the font's atlas holds its glyphs upside down.
+            let placed = sprite.placed(pen.extend(z), [size, size], 0.0, [false, true]).with_color(color);
+            list.sprite(sprite.texture, placed);
+            pen.x += advance * size;
+        }
+    }
+}
+
 fn beam_pieces(origin: Vec2, direction: Vec2, length: f32) -> [(Vec2, f32); 3] {
     [
         (origin, 1.0),
