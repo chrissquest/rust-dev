@@ -18,7 +18,7 @@ use crystal_engine::scene::{Texture, TextureFilter};
 use crystal_engine::sprite::{Grid, Sheet, Sprite};
 
 use crate::assets::{AssetSource, PIXELS_PER_UNIT};
-use crate::data::{DecorationFile, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
+use crate::data::{DecorationFile, FontFile, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
 use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
 use crate::sim::combat::Interaction;
@@ -44,6 +44,26 @@ const Z_BELOW: f32 = 0.0;
 const Z_ENTITIES: f32 = 0.1;
 const Z_BULLETS: f32 = 0.15;
 const Z_ABOVE: f32 = 0.2;
+const Z_DAMAGE_NUMBERS: f32 = 0.25;
+
+/// How damage numbers look, from `DamageNumber.prefab` and `DamageNumberCrit.prefab`:
+/// a text box 10.3078 by 3.6328 at scale 0.1, centred (0.47, -0.039) from the
+/// number's position, its text set left and top. `size` is world units per em:
+/// font size 3 (3.5 for a crit) at that scale of 0.1.
+struct NumberStyle {
+    size: f32,
+    color: [f32; 4],
+}
+const DAMAGE_NUMBER: NumberStyle = NumberStyle { size: 0.3, color: [0.8208, 0.2052, 0.2052, 1.0] };
+const DAMAGE_NUMBER_CRIT: NumberStyle = NumberStyle { size: 0.35, color: [1.0, 0.6726, 0.0, 1.0] };
+/// From a number's position to the top-left corner of its text box.
+const DAMAGE_NUMBER_BOX: Vec2 = Vec2::new(0.47 - 10.3078 * 0.1 * 0.5, -0.039 + 3.6328 * 0.1 * 0.5);
+/// The font's ascent in ems (`ThaleahFat_TTF SDF.asset`: ascent line 59.941406 at
+/// point size 90): how far below the top of its box the first baseline sits.
+const FONT_ASCENT: f32 = 59.941406 / 90.0;
+/// A damage number fades out over this last part of its life. Unity's simply
+/// vanishes; the fade is ours, short enough not to change how long it reads.
+const DAMAGE_NUMBER_FADE: f32 = 0.2;
 
 /// The gun arm's parts, relative to the pivot it turns about, as in the Unity
 /// player prefab: where each sits and how far it is turned, in degrees.
@@ -129,6 +149,8 @@ pub struct View {
     gun_sprites: Vec<Option<ResolvedSprite>>,
     bullet_sprites: Vec<Option<ResolvedSprite>>,
     effect_sprites: Vec<Option<ResolvedSprite>>,
+    /// The pixel font: each character's glyph and how far the pen moves on, in ems.
+    font: HashMap<char, (ResolvedSprite, f32)>,
     /// Per gun: a laser's start cap, middle stretch and end cap.
     laser_sprites: Vec<[Option<ResolvedSprite>; 3]>,
     shadow: ResolvedSprite,
@@ -197,6 +219,7 @@ impl View {
             gun_sprites: Vec::new(),
             bullet_sprites: Vec::new(),
             effect_sprites: Vec::new(),
+            font: HashMap::new(),
             laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
             shadow: ResolvedSprite::EMPTY,
@@ -225,6 +248,24 @@ impl View {
                 }
             }
             view.laser_sprites.push(pieces);
+        }
+        for (character, glyph) in &FontFile::load(&view.assets)?.glyphs {
+            // The font's atlas is black where it is not clear: Unity's font shader
+            // reads only its alpha. Made white here, text takes whatever colour it
+            // is drawn with.
+            if let Some(entry) = view.catalogue.sprites.get(&glyph.sprite)
+                && !view.textures.contains_key(&entry.texture)
+            {
+                let image = whitened(view.assets.sprite(&entry.texture)?);
+                let texture = LoadedTexture {
+                    id: renderer.add_texture(&image),
+                    width: image.width,
+                    height: image.height,
+                };
+                view.textures.insert(entry.texture.clone(), texture);
+            }
+            let sprite = view.sprite(renderer, &glyph.sprite)?;
+            view.font.insert(*character, (sprite, glyph.advance));
         }
         Ok(view)
     }
@@ -467,6 +508,17 @@ impl View {
             self.list.batch(batch);
         }
 
+        for number in &world.combat.damage_numbers {
+            let style = if number.crit { DAMAGE_NUMBER_CRIT } else { DAMAGE_NUMBER };
+            // The prefabs' colours are as picked on screen; tints here are linear.
+            let mut color = srgb_to_linear(style.color);
+            color[3] *= (number.time_left / DAMAGE_NUMBER_FADE).min(1.0);
+            let mut buffer = [0; 16];
+            let text = number_text(number.amount, &mut buffer);
+            let baseline = number.position + DAMAGE_NUMBER_BOX - Vec2::new(0.0, FONT_ASCENT * style.size);
+            self.draw_text(text, baseline, Z_DAMAGE_NUMBERS, style.size, color);
+        }
+
         let mut camera = self.camera;
         camera.center += shake;
         renderer.begin_frame();
@@ -482,6 +534,20 @@ impl View {
         );
 
         self.draw_hud(renderer, encoder, target, world, sticks);
+    }
+
+    /// Adds one line of text to the world, starting at `baseline`, its left end.
+    /// `size` is world units per em. Characters the font lacks are skipped.
+    fn draw_text(&mut self, text: &str, baseline: Vec2, z: f32, size: f32, color: [f32; 4]) {
+        let mut pen = baseline;
+        for character in text.chars() {
+            if let Some((sprite, advance)) = self.font.get(&character) {
+                // Flipped: the font's atlas holds its glyphs upside down.
+                let placed = sprite.placed(pen.extend(z), [size, size], 0.0, [false, true]).with_color(color);
+                self.list.sprite(sprite.texture, placed);
+                pen.x += advance * size;
+            }
+        }
     }
 
     /// The player: shadow, the hand behind, the body, the gun and the hand in front.
@@ -714,6 +780,17 @@ fn beam_pieces(origin: Vec2, direction: Vec2, length: f32) -> [(Vec2, f32); 3] {
 /// Unity's `PlayerAnimations`: while aiming, the arm's -x axis points along the
 /// aim and the arm is mirrored when aiming right; otherwise it hangs to the side
 /// last walked towards.
+/// A damage amount as Unity's `float.ToString()` shows it ("100", "37.5"),
+/// written into `buffer` so that drawing a number allocates nothing.
+fn number_text(amount: f32, buffer: &mut [u8; 16]) -> &str {
+    use std::io::Write;
+    let mut cursor = &mut buffer[..];
+    // An amount too long for the buffer is cut short rather than dropped.
+    let _ = write!(cursor, "{amount}");
+    let written = 16 - cursor.len();
+    std::str::from_utf8(&buffer[..written]).unwrap_or("")
+}
+
 fn arm_pose(player: &Player) -> (f32, bool) {
     match player.aim {
         Some(aim) => ((-aim).to_angle(), aim.x >= 0.0),
@@ -753,6 +830,22 @@ impl ResolvedSprite {
 
 /// A white disc with a soft edge on a transparent background, sampled smoothly so
 /// it stays round at any size.
+/// A colour as Unity's colour picker shows it, as the linear tint that draws it.
+fn srgb_to_linear(color: [f32; 4]) -> [f32; 4] {
+    let channel = |value: f32| {
+        if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) }
+    };
+    [channel(color[0]), channel(color[1]), channel(color[2]), color[3]]
+}
+
+/// The same picture with every pixel white, keeping only how opaque each is.
+fn whitened(mut texture: Texture) -> Texture {
+    for pixel in texture.rgba.chunks_exact_mut(4) {
+        pixel[..3].fill(255);
+    }
+    texture
+}
+
 fn disc_texture(size: u32) -> Texture {
     let radius = size as f32 * 0.5;
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
@@ -809,6 +902,22 @@ mod tests {
             assert!(gun_direction.distance(aim) < 1e-5, "aiming {aim}: gun at {gun_direction}");
             assert_eq!(mirrored, aim.x >= 0.0);
         }
+    }
+
+    #[test]
+    fn damage_amounts_read_as_unity_prints_them() {
+        let mut buffer = [0; 16];
+        assert_eq!(number_text(100.0, &mut buffer), "100");
+        let mut picture = disc_texture(2);
+        picture.rgba = vec![0, 0, 0, 255, 9, 9, 9, 0];
+        assert_eq!(whitened(picture).rgba, [255, 255, 255, 255, 255, 255, 255, 0]);
+        assert_eq!(number_text(37.5, &mut buffer), "37.5");
+        let linear = srgb_to_linear([1.0, 0.5, 0.0, 0.7]);
+        assert!((linear[1] - 0.2140).abs() < 1e-3 && linear[0] == 1.0 && linear[2] == 0.0 && linear[3] == 0.7);
+        assert_eq!(number_text(9_999_999.0, &mut buffer), "9999999");
+        // The text box's top-left corner, from the prefab: just left of and above
+        // the number's position.
+        assert!((DAMAGE_NUMBER_BOX - Vec2::new(-0.0454, 0.1426)).length() < 1e-3);
     }
 
     #[test]

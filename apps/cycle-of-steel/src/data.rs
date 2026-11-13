@@ -32,6 +32,31 @@ pub struct SpriteEntry {
     pub pixels_per_unit: f32,
 }
 
+/// `font.json`: the pixel font, one glyph sprite per character.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct FontFile {
+    /// From one line's baseline to the next, in ems.
+    pub line_height: f32,
+    pub glyphs: HashMap<char, GlyphFile>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct GlyphFile {
+    /// A key of `sprites.json`. Its pivot is the pen position on the baseline and
+    /// its size is in ems. The picture is upside down, as Unity's atlas stores it:
+    /// draw it flipped top to bottom.
+    pub sprite: String,
+    /// How far the pen moves on, in ems.
+    pub advance: f32,
+}
+
+impl FontFile {
+    pub fn load(assets: &AssetSource) -> Result<Self> {
+        let bytes = assets.read("font.json")?;
+        serde_json::from_slice(&bytes).context("could not parse font.json")
+    }
+}
+
 impl SpriteCatalogue {
     pub fn load(assets: &AssetSource) -> Result<Self> {
         let bytes = assets.read("sprites.json")?;

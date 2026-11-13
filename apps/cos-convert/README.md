@@ -54,6 +54,15 @@ also carry `homing`, the steering force, and `drag`, their rigidbody's linear
 drag; a freezing bullet carries `freeze`, its strength); `effects` holds the splash or explosion, an explosion with its `damage`
 and `radius`. Only bullets and effects that some gun reaches are written.
 
+`font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
+atlas (`ThaleahFat.fontsettings` and its PNG). `glyphs` maps a character to its
+`sprite`, one of the `font_<code point>` entries the converter adds to
+`sprites.json`, and its `advance`; both, and `line_height`, are in ems, so a glyph
+sprite is one unit per em. The atlas holds its glyphs upside down and is copied as
+it is: glyph sprites are drawn flipped top to bottom, and their pivot (the pen
+position on the baseline) is given for the stored picture. Eight glyphs the atlas
+stores rotated (`" % - = ^ _ ~ ¨`) are left out, with a warning.
+
 ## What it decides on the way
 
 - **Room size.** A dungeon room is exactly 32 by 18 tiles, because the dungeon

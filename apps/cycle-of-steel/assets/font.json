@@ -1,0 +1,397 @@
+{
+  "glyphs": {
+    " ": {
+      "advance": 0.3125,
+      "sprite": "font_32"
+    },
+    "!": {
+      "advance": 0.1875,
+      "sprite": "font_33"
+    },
+    "#": {
+      "advance": 0.4375,
+      "sprite": "font_35"
+    },
+    "$": {
+      "advance": 0.5,
+      "sprite": "font_36"
+    },
+    "&": {
+      "advance": 0.375,
+      "sprite": "font_38"
+    },
+    "'": {
+      "advance": 0.125,
+      "sprite": "font_39"
+    },
+    "(": {
+      "advance": 0.3125,
+      "sprite": "font_40"
+    },
+    ")": {
+      "advance": 0.3125,
+      "sprite": "font_41"
+    },
+    "*": {
+      "advance": 0.25,
+      "sprite": "font_42"
+    },
+    "+": {
+      "advance": 0.375,
+      "sprite": "font_43"
+    },
+    ",": {
+      "advance": 0.1875,
+      "sprite": "font_44"
+    },
+    ".": {
+      "advance": 0.1875,
+      "sprite": "font_46"
+    },
+    "/": {
+      "advance": 0.25,
+      "sprite": "font_47"
+    },
+    "0": {
+      "advance": 0.5,
+      "sprite": "font_48"
+    },
+    "1": {
+      "advance": 0.3125,
+      "sprite": "font_49"
+    },
+    "2": {
+      "advance": 0.5,
+      "sprite": "font_50"
+    },
+    "3": {
+      "advance": 0.5,
+      "sprite": "font_51"
+    },
+    "4": {
+      "advance": 0.5,
+      "sprite": "font_52"
+    },
+    "5": {
+      "advance": 0.5,
+      "sprite": "font_53"
+    },
+    "6": {
+      "advance": 0.5,
+      "sprite": "font_54"
+    },
+    "7": {
+      "advance": 0.5,
+      "sprite": "font_55"
+    },
+    "8": {
+      "advance": 0.5,
+      "sprite": "font_56"
+    },
+    "9": {
+      "advance": 0.5,
+      "sprite": "font_57"
+    },
+    ":": {
+      "advance": 0.25,
+      "sprite": "font_58"
+    },
+    ";": {
+      "advance": 0.1875,
+      "sprite": "font_59"
+    },
+    "<": {
+      "advance": 0.25,
+      "sprite": "font_60"
+    },
+    ">": {
+      "advance": 0.25,
+      "sprite": "font_62"
+    },
+    "?": {
+      "advance": 0.4375,
+      "sprite": "font_63"
+    },
+    "@": {
+      "advance": 0.5,
+      "sprite": "font_64"
+    },
+    "A": {
+      "advance": 0.5,
+      "sprite": "font_65"
+    },
+    "B": {
+      "advance": 0.5,
+      "sprite": "font_66"
+    },
+    "C": {
+      "advance": 0.5,
+      "sprite": "font_67"
+    },
+    "D": {
+      "advance": 0.5,
+      "sprite": "font_68"
+    },
+    "E": {
+      "advance": 0.5,
+      "sprite": "font_69"
+    },
+    "F": {
+      "advance": 0.5,
+      "sprite": "font_70"
+    },
+    "G": {
+      "advance": 0.5,
+      "sprite": "font_71"
+    },
+    "H": {
+      "advance": 0.5,
+      "sprite": "font_72"
+    },
+    "I": {
+      "advance": 0.1875,
+      "sprite": "font_73"
+    },
+    "J": {
+      "advance": 0.5,
+      "sprite": "font_74"
+    },
+    "K": {
+      "advance": 0.5,
+      "sprite": "font_75"
+    },
+    "L": {
+      "advance": 0.5,
+      "sprite": "font_76"
+    },
+    "M": {
+      "advance": 0.5,
+      "sprite": "font_77"
+    },
+    "N": {
+      "advance": 0.5,
+      "sprite": "font_78"
+    },
+    "O": {
+      "advance": 0.5,
+      "sprite": "font_79"
+    },
+    "P": {
+      "advance": 0.5,
+      "sprite": "font_80"
+    },
+    "Q": {
+      "advance": 0.5,
+      "sprite": "font_81"
+    },
+    "R": {
+      "advance": 0.5,
+      "sprite": "font_82"
+    },
+    "S": {
+      "advance": 0.5,
+      "sprite": "font_83"
+    },
+    "T": {
+      "advance": 0.4375,
+      "sprite": "font_84"
+    },
+    "U": {
+      "advance": 0.5,
+      "sprite": "font_85"
+    },
+    "V": {
+      "advance": 0.5,
+      "sprite": "font_86"
+    },
+    "W": {
+      "advance": 0.5,
+      "sprite": "font_87"
+    },
+    "X": {
+      "advance": 0.5,
+      "sprite": "font_88"
+    },
+    "Y": {
+      "advance": 0.5,
+      "sprite": "font_89"
+    },
+    "Z": {
+      "advance": 0.5,
+      "sprite": "font_90"
+    },
+    "[": {
+      "advance": 0.3125,
+      "sprite": "font_91"
+    },
+    "\\": {
+      "advance": 0.25,
+      "sprite": "font_92"
+    },
+    "]": {
+      "advance": 0.3125,
+      "sprite": "font_93"
+    },
+    "`": {
+      "advance": 0.125,
+      "sprite": "font_96"
+    },
+    "a": {
+      "advance": 0.5,
+      "sprite": "font_97"
+    },
+    "b": {
+      "advance": 0.5,
+      "sprite": "font_98"
+    },
+    "c": {
+      "advance": 0.5,
+      "sprite": "font_99"
+    },
+    "d": {
+      "advance": 0.5,
+      "sprite": "font_100"
+    },
+    "e": {
+      "advance": 0.5,
+      "sprite": "font_101"
+    },
+    "f": {
+      "advance": 0.5,
+      "sprite": "font_102"
+    },
+    "g": {
+      "advance": 0.5,
+      "sprite": "font_103"
+    },
+    "h": {
+      "advance": 0.5,
+      "sprite": "font_104"
+    },
+    "i": {
+      "advance": 0.1875,
+      "sprite": "font_105"
+    },
+    "j": {
+      "advance": 0.5,
+      "sprite": "font_106"
+    },
+    "k": {
+      "advance": 0.5,
+      "sprite": "font_107"
+    },
+    "l": {
+      "advance": 0.5,
+      "sprite": "font_108"
+    },
+    "m": {
+      "advance": 0.5,
+      "sprite": "font_109"
+    },
+    "n": {
+      "advance": 0.5,
+      "sprite": "font_110"
+    },
+    "o": {
+      "advance": 0.5,
+      "sprite": "font_111"
+    },
+    "p": {
+      "advance": 0.5,
+      "sprite": "font_112"
+    },
+    "q": {
+      "advance": 0.5,
+      "sprite": "font_113"
+    },
+    "r": {
+      "advance": 0.5,
+      "sprite": "font_114"
+    },
+    "s": {
+      "advance": 0.5,
+      "sprite": "font_115"
+    },
+    "t": {
+      "advance": 0.4375,
+      "sprite": "font_116"
+    },
+    "u": {
+      "advance": 0.5,
+      "sprite": "font_117"
+    },
+    "v": {
+      "advance": 0.5,
+      "sprite": "font_118"
+    },
+    "w": {
+      "advance": 0.5,
+      "sprite": "font_119"
+    },
+    "x": {
+      "advance": 0.5,
+      "sprite": "font_120"
+    },
+    "y": {
+      "advance": 0.4375,
+      "sprite": "font_121"
+    },
+    "z": {
+      "advance": 0.5,
+      "sprite": "font_122"
+    },
+    "{": {
+      "advance": 0.375,
+      "sprite": "font_123"
+    },
+    "|": {
+      "advance": 0.125,
+      "sprite": "font_124"
+    },
+    "}": {
+      "advance": 0.375,
+      "sprite": "font_125"
+    },
+    " ": {
+      "advance": 0.3125,
+      "sprite": "font_160"
+    },
+    "¡": {
+      "advance": 0.1875,
+      "sprite": "font_161"
+    },
+    "¢": {
+      "advance": 0.375,
+      "sprite": "font_162"
+    },
+    "£": {
+      "advance": 0.4375,
+      "sprite": "font_163"
+    },
+    "¤": {
+      "advance": 0.4375,
+      "sprite": "font_164"
+    },
+    "¥": {
+      "advance": 0.375,
+      "sprite": "font_165"
+    },
+    "¦": {
+      "advance": 0.125,
+      "sprite": "font_166"
+    },
+    "©": {
+      "advance": 0.375,
+      "sprite": "font_169"
+    },
+    "€": {
+      "advance": 0.375,
+      "sprite": "font_8364"
+    },
+    "　": {
+      "advance": 1.0,
+      "sprite": "font_12288"
+    }
+  },
+  "line_height": 1.0059
+}

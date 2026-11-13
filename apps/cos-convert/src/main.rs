@@ -4,6 +4,7 @@
 //! It is meant to be run once per kind of asset: after that, the files it wrote are
 //! the source of truth and are edited directly (or by the room editor, later).
 
+mod font;
 mod guns;
 mod json;
 mod project;
@@ -30,6 +31,7 @@ USAGE:
 WRITES:
     rooms/<room>.json     one file per prefab under Assets/Prefabs/Generatable Rooms
     guns.json             every gun, the bullets they fire and the effects those leave
+    font.json             the pixel font: each character's glyph sprite and advance
     sprites.json          every sprite the above use: texture, rectangle, pivot
     sprites/<name>.png    the textures themselves, copied
 ";
@@ -118,6 +120,19 @@ fn main() -> Result<()> {
     }
     warning_count += guns.warnings.len();
     for sprite in guns.sprites {
+        add_sprite(&mut catalogue, sprite)?;
+    }
+
+    let font = font::convert(&project)?;
+    let font_path = output.join("font.json");
+    std::fs::write(&font_path, json::to_string(&font.json))
+        .with_context(|| format!("could not write {}", font_path.display()))?;
+    println!("{} font glyphs", font.glyphs);
+    for warning in &font.warnings {
+        println!("    warning: {warning}");
+    }
+    warning_count += font.warnings.len();
+    for sprite in font.sprites {
         add_sprite(&mut catalogue, sprite)?;
     }
 

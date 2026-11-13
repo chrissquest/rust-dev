@@ -354,6 +354,594 @@
       "rect": [0, 0, 24, 24],
       "texture": "flamethrower_1"
     },
+    "font_100": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [21, 43, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_101": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [33, 55, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_102": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 19, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_103": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [13, 28, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_104": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [30, 46, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_105": {
+      "pivot": [0.25, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [42, 55, 4, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_106": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 10, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_107": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [9, 19, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_108": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [46, 55, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_109": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [30, 37, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_110": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [39, 46, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_111": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [22, 28, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_112": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 1, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_113": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [9, 10, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_114": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [18, 19, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_115": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [55, 55, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_116": {
+      "pivot": [0.125, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [39, 37, 8, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_117": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [48, 46, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_118": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [31, 28, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_119": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [9, 1, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_120": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [18, 10, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_121": {
+      "pivot": [0.125, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [27, 19, 8, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_122": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [47, 37, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_12288": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 16.0,
+      "rect": [34, 8, 2, 2],
+      "texture": "ThaleahFat"
+    },
+    "font_123": {
+      "pivot": [0.1429, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [57, 46, 7, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_124": {
+      "pivot": [0.3333, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [40, 28, 3, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_125": {
+      "pivot": [0.1429, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [35, 19, 7, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_160": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 16.0,
+      "rect": [27, 17, 2, 2],
+      "texture": "ThaleahFat"
+    },
+    "font_161": {
+      "pivot": [0.25, 0.4444],
+      "pixels_per_unit": 16.0,
+      "rect": [43, 28, 4, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_162": {
+      "pivot": [0.1429, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [56, 37, 7, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_163": {
+      "pivot": [0.125, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [22, 1, 8, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_164": {
+      "pivot": [0.125, 0.875],
+      "pixels_per_unit": 16.0,
+      "rect": [42, 20, 8, 8],
+      "texture": "ThaleahFat"
+    },
+    "font_165": {
+      "pivot": [0.1429, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [29, 10, 7, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_166": {
+      "pivot": [0.3333, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [47, 28, 3, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_169": {
+      "pivot": [0.0, 0.8333],
+      "pixels_per_unit": 16.0,
+      "rect": [42, 14, 6, 6],
+      "texture": "ThaleahFat"
+    },
+    "font_32": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 126, 2, 2],
+      "texture": "ThaleahFat"
+    },
+    "font_33": {
+      "pivot": [0.25, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 117, 4, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_35": {
+      "pivot": [0.125, 1.0],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 109, 8, 8],
+      "texture": "ThaleahFat"
+    },
+    "font_36": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 100, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_38": {
+      "pivot": [0.1429, 1.0],
+      "pixels_per_unit": 16.0,
+      "rect": [9, 121, 7, 7],
+      "texture": "ThaleahFat"
+    },
+    "font_39": {
+      "pivot": [0.3333, 2.0],
+      "pixels_per_unit": 16.0,
+      "rect": [8, 96, 3, 4],
+      "texture": "ThaleahFat"
+    },
+    "font_40": {
+      "pivot": [0.1667, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 82, 6, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_41": {
+      "pivot": [0.1667, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [11, 112, 6, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_42": {
+      "pivot": [0.2, 1.6],
+      "pixels_per_unit": 16.0,
+      "rect": [8, 91, 5, 5],
+      "texture": "ThaleahFat"
+    },
+    "font_43": {
+      "pivot": [0.1429, 1.0],
+      "pixels_per_unit": 16.0,
+      "rect": [6, 84, 7, 7],
+      "texture": "ThaleahFat"
+    },
+    "font_44": {
+      "pivot": [0.25, 0.4],
+      "pixels_per_unit": 16.0,
+      "rect": [13, 107, 4, 5],
+      "texture": "ThaleahFat"
+    },
+    "font_46": {
+      "pivot": [0.25, 0.75],
+      "pixels_per_unit": 16.0,
+      "rect": [6, 80, 4, 4],
+      "texture": "ThaleahFat"
+    },
+    "font_47": {
+      "pivot": [0.2, 0.875],
+      "pixels_per_unit": 16.0,
+      "rect": [13, 99, 5, 8],
+      "texture": "ThaleahFat"
+    },
+    "font_48": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 67, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_49": {
+      "pivot": [0.1667, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [10, 75, 6, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_50": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [9, 66, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_51": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [17, 119, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_52": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [18, 110, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_53": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [13, 90, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_54": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [22, 101, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_55": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [16, 81, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_56": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [25, 92, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_57": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [18, 72, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_58": {
+      "pivot": [0.0, 1.0],
+      "pixels_per_unit": 16.0,
+      "rect": [26, 121, 4, 7],
+      "texture": "ThaleahFat"
+    },
+    "font_59": {
+      "pivot": [0.25, 0.625],
+      "pixels_per_unit": 16.0,
+      "rect": [30, 120, 4, 8],
+      "texture": "ThaleahFat"
+    },
+    "font_60": {
+      "pivot": [0.2, 1.0],
+      "pixels_per_unit": 16.0,
+      "rect": [34, 121, 5, 7],
+      "texture": "ThaleahFat"
+    },
+    "font_62": {
+      "pivot": [0.2, 0.8571],
+      "pixels_per_unit": 16.0,
+      "rect": [39, 121, 5, 7],
+      "texture": "ThaleahFat"
+    },
+    "font_63": {
+      "pivot": [0.125, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [34, 112, 8, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_64": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [44, 119, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_65": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [31, 102, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_66": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [42, 110, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_67": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [53, 119, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_68": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [40, 101, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_69": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [51, 110, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_70": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [25, 83, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_71": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [34, 92, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_72": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [49, 101, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_73": {
+      "pivot": [0.25, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [60, 110, 4, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_74": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [34, 83, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_75": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [43, 92, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_76": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [27, 74, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_77": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [43, 83, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_78": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [52, 92, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_79": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [27, 65, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_80": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [36, 74, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_81": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [52, 83, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_82": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [36, 65, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_83": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [45, 74, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_8364": {
+      "pivot": [0.1429, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [50, 28, 7, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_84": {
+      "pivot": [0.125, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [45, 65, 8, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_85": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [54, 74, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_86": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [53, 65, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_87": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 55, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_88": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 46, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_89": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [9, 55, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_90": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [0, 37, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_91": {
+      "pivot": [0.1667, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [9, 46, 6, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_92": {
+      "pivot": [0.2, 0.875],
+      "pixels_per_unit": 16.0,
+      "rect": [18, 56, 5, 8],
+      "texture": "ThaleahFat"
+    },
+    "font_93": {
+      "pivot": [0.1667, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [15, 46, 6, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_96": {
+      "pivot": [0.3333, 2.0],
+      "pixels_per_unit": 16.0,
+      "rect": [21, 52, 3, 4],
+      "texture": "ThaleahFat"
+    },
+    "font_97": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [4, 28, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_98": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [24, 55, 9, 9],
+      "texture": "ThaleahFat"
+    },
+    "font_99": {
+      "pivot": [0.1111, 0.8889],
+      "pixels_per_unit": 16.0,
+      "rect": [12, 37, 9, 9],
+      "texture": "ThaleahFat"
+    },
     "fullyFormedOnRack": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,

@@ -249,7 +249,7 @@ impl World {
             }
         }
 
-        self.combat.step(&defs, &self.room, self.player.position, now);
+        self.combat.step(&defs, &self.room, self.player.position, now, &mut self.rng);
 
         // Nothing has to read events; do not let them pile up if nothing does.
         if self.events.len() > 256 {

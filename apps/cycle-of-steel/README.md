@@ -44,7 +44,16 @@ where you spawn and interact. Interact again on the spot inside to leave.
   Unity's burn code never deals its damage (the module's comment and a test show
   why).
 
-Not in yet: damage numbers;
+- **Damage numbers.** Whatever is hurt floats the amount up from itself for 1.4
+  seconds, placed up to 0.2 units off so that several can be told apart: red for
+  an ordinary hit, larger and orange for a crit or an explosion, with sizes,
+  colours and placement from Unity's two prefabs. They are written in the game's
+  pixel font, Thaleah Fat, which `View::draw_text` can now draw anywhere in the
+  world. Two differences from Unity: the glyphs come from the project's 16-pixel
+  bitmap atlas rather than its TextMeshPro distance field, so they stay hard-edged
+  at any size, and a number fades over its last 0.2 seconds instead of vanishing.
+
+Not in yet:
 enemies, chests and drops; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
@@ -153,6 +162,7 @@ assets/
   rooms/         one JSON file per room (format: see apps/cos-convert/README.md)
   guns.json      every gun, bullet and hit effect, with their numbers
   sprites.json   every sprite by name: texture, rectangle, pivot
+  font.json      the pixel font: each character's glyph sprite and advance
   sprites/       PNGs copied from the Unity project
 android/
   test-signing.keystore   signs test APKs; not a secret, see "Android"

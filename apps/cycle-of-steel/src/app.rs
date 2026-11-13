@@ -581,6 +581,44 @@ mod tests {
     }
 
     #[test]
+    fn the_real_font_can_write_any_damage_number() {
+        let assets = AssetSource::folder(None).unwrap();
+        let font = crate::data::FontFile::load(&assets).unwrap();
+        let catalogue = crate::data::SpriteCatalogue::load(&assets).unwrap();
+        for character in "0123456789.".chars() {
+            let glyph = font.glyphs.get(&character).unwrap_or_else(|| panic!("no glyph for {character}"));
+            let sprite = catalogue.sprites.get(&glyph.sprite).expect("the glyph's sprite is in sprites.json");
+            // Thaleah at 16 pixels: one em is one unit.
+            assert_eq!(sprite.pixels_per_unit, 16.0);
+            assert!(glyph.advance > 0.0 && glyph.advance <= 0.5, "{character}: {}", glyph.advance);
+        }
+        // `ThaleahFat.fontsettings`: "0" is 9 by 9 with its 1-pixel border, advance 8 of 16.
+        let zero = &font.glyphs[&'0'];
+        assert_eq!(zero.advance, 0.5);
+        let zero = &catalogue.sprites[&zero.sprite];
+        assert_eq!(zero.rect[2..], [9, 9]);
+        // Stored upside down: the baseline is 8 of the 9 rows up from the stored bottom.
+        assert!((zero.pivot[1] - 8.0 / 9.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn shooting_the_real_dummy_floats_a_number() {
+        let mut world = hub();
+        world.give(world.defs.gun_named("pistol_1").unwrap());
+        let toward = (world.combat.targets[0].position - world.player.position).normalize();
+        world.step(&sim::Input { aim: Some(toward), ..Default::default() });
+        let mut shown = None;
+        for _ in 0..120 {
+            world.step(&sim::Input::default());
+            shown = shown.or(world.combat.damage_numbers.first().copied());
+        }
+        let shown = shown.expect("a number appeared");
+        let pistol = world.defs.gun(world.defs.gun_named("pistol_1").unwrap());
+        assert!(shown.amount == pistol.damage || (shown.crit && shown.amount == pistol.damage * 2.0));
+        assert!(world.combat.damage_numbers.is_empty(), "and left after its 1.4 s");
+    }
+
+    #[test]
     fn the_hidden_spot_leads_into_the_gun_room_and_back_out() {
         let mut world = hub();
         assert_eq!(world.combat.teleports.len(), 2);

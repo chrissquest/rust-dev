@@ -18,6 +18,17 @@ use crate::data::{ExplosionFile, GunKind};
 /// Room for this many bullets and effects before the vectors would grow.
 const BULLET_CAPACITY: usize = 512;
 const EFFECT_CAPACITY: usize = 256;
+const DAMAGE_NUMBER_CAPACITY: usize = 128;
+
+/// How long a damage number stays (`DamageNumberScript.Start`).
+pub const DAMAGE_NUMBER_LIFE: f32 = 1.4;
+/// How far a damage number climbs each step. `DamageNumberScript.Update` adds
+/// 0.001 every rendered frame, so Unity's speed depends on the frame rate; one
+/// step here stands for one frame at 60 frames a second.
+const DAMAGE_NUMBER_RISE: f32 = 0.001;
+/// A damage number appears up to this far from its target's position on each
+/// axis, so that several do not hide one another (`Killable.PopupDamageNumber`).
+const DAMAGE_NUMBER_SCATTER: f32 = 0.2;
 
 /// How far a laser reaches when nothing is in its way (`LaserGun.updateFire`).
 pub const LASER_RANGE: f32 = 20.0;
@@ -53,6 +64,17 @@ pub struct Effect {
     pub rotation: f32,
     /// Splashes take the colour of the bullet that made them.
     pub color: [f32; 4],
+    pub time_left: f32,
+}
+
+/// The number that floats up from something when it is hurt.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DamageNumber {
+    pub position: Vec2,
+    /// The damage dealt, crit doubling included.
+    pub amount: f32,
+    /// Crits are drawn larger and in another colour.
+    pub crit: bool,
     pub time_left: f32,
 }
 
@@ -117,6 +139,7 @@ pub struct Combat {
     pub teleports: Vec<Teleport>,
     /// The player's laser beam, while it fires.
     pub beam: Option<Beam>,
+    pub damage_numbers: Vec<DamageNumber>,
 }
 
 impl Combat {
@@ -128,6 +151,7 @@ impl Combat {
             pickups: Vec::new(),
             teleports: Vec::new(),
             beam: None,
+            damage_numbers: Vec::with_capacity(DAMAGE_NUMBER_CAPACITY),
         }
     }
 
@@ -224,10 +248,9 @@ impl Combat {
         }
         if let Some(index) = touched {
             // Unity rolls the crit on every hit of the beam, not once per trigger pull.
-            let damage = if rng.chance(crit_chance) { def.damage * CRIT_MULTIPLIER } else { def.damage };
-            let target = &mut self.targets[index];
-            target.health -= damage;
-            target.last_hit = now;
+            let crit = rng.chance(crit_chance);
+            let damage = if crit { def.damage * CRIT_MULTIPLIER } else { def.damage };
+            hurt(&mut self.targets[index], &mut self.damage_numbers, damage, crit, now, rng);
         }
     }
 
@@ -237,7 +260,7 @@ impl Combat {
     /// nearest the player, not the one nearest themselves (`HomingBullet.Update`
     /// compares `DistanceToPlayer`), so every homing bullet in flight agrees on
     /// one target. Ties go to the earlier target, as Unity's loop does.
-    pub fn step(&mut self, defs: &Defs, room: &Room, player: Vec2, now: f64) {
+    pub fn step(&mut self, defs: &Defs, room: &Room, player: Vec2, now: f64, rng: &mut Rng) {
         let chased = self
             .targets
             .iter()
@@ -273,8 +296,7 @@ impl Combat {
                         continue;
                     }
                     let damage = if bullet.crit { bullet.damage * CRIT_MULTIPLIER } else { bullet.damage };
-                    target.health -= damage;
-                    target.last_hit = now;
+                    hurt(target, &mut self.damage_numbers, damage, bullet.crit, now, rng);
                     // `Bullet_Freeze.OnTriggerEnter2D`, beside the bullet's own hit.
                     if let (true, Some(elemental)) = (def.freeze > 0.0, target.elemental.as_mut()) {
                         elemental.freeze(def.freeze);
@@ -302,7 +324,7 @@ impl Combat {
                         time_left: effect_def.time_to_live,
                     });
                     if let Some(explosion) = effect_def.explosion {
-                        explode(&mut self.targets, bullet.position, explosion, now);
+                        explode(&mut self.targets, &mut self.damage_numbers, bullet.position, explosion, now, rng);
                     }
                 }
                 self.bullets.swap_remove(index);
@@ -317,6 +339,12 @@ impl Combat {
         for elemental in self.targets.iter_mut().filter_map(|target| target.elemental.as_mut()) {
             elemental.step();
         }
+
+        self.damage_numbers.retain_mut(|number| {
+            number.position.y += DAMAGE_NUMBER_RISE;
+            number.time_left -= DT;
+            number.time_left > 0.0
+        });
 
         self.effects.retain_mut(|effect| {
             effect.time_left -= DT;
@@ -359,13 +387,44 @@ impl Combat {
 ///   divided by the radius). Knockback waits for enemies that can move.
 /// - Unity's explosion hurts the player too, the bazooka's owner included. The
 ///   player has no health yet.
-fn explode(targets: &mut [Target], center: Vec2, explosion: ExplosionFile, now: f64) {
+fn explode(
+    targets: &mut [Target],
+    numbers: &mut Vec<DamageNumber>,
+    center: Vec2,
+    explosion: ExplosionFile,
+    now: f64,
+    rng: &mut Rng,
+) {
     for target in targets {
         if circle_overlaps_box(center, explosion.radius, target.position, target.half) {
-            target.health -= explosion.damage;
-            target.last_hit = now;
+            // `ExplosionScript` reports its damage as a crit, so it shows as one.
+            hurt(target, numbers, explosion.damage, true, now, rng);
         }
     }
+}
+
+/// Takes `amount` from a target's health and floats the number up from it, as
+/// `Killable.DamageKillable` does. A hit for nothing (the bazooka's missile)
+/// shows no number.
+fn hurt(target: &mut Target, numbers: &mut Vec<DamageNumber>, amount: f32, crit: bool, now: f64, rng: &mut Rng) {
+    target.health -= amount;
+    target.last_hit = now;
+    if amount <= 0.0 {
+        return;
+    }
+    if numbers.len() == numbers.capacity() {
+        numbers.remove(0);
+    }
+    let scatter = Vec2::new(
+        rng.range(-DAMAGE_NUMBER_SCATTER, DAMAGE_NUMBER_SCATTER),
+        rng.range(-DAMAGE_NUMBER_SCATTER, DAMAGE_NUMBER_SCATTER),
+    );
+    numbers.push(DamageNumber {
+        position: target.position + scatter,
+        amount,
+        crit,
+        time_left: DAMAGE_NUMBER_LIFE,
+    });
 }
 
 /// The acceleration, in units/s^2, of a homing bullet steered with force `homing`.
@@ -486,9 +545,57 @@ mod tests {
     const PLAYER: Vec2 = Vec2::new(8.0, 4.5);
 
     fn run(combat: &mut Combat, defs: &Defs, room: &Room, steps: u32) {
+        let mut rng = Rng::new(9);
         for step in 0..steps {
-            combat.step(defs, room, PLAYER, step as f64 * DT as f64);
+            combat.step(defs, room, PLAYER, step as f64 * DT as f64, &mut rng);
         }
+    }
+
+    #[test]
+    fn being_hurt_floats_a_number_that_rises_and_goes() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        let at = Vec2::new(10.0, 4.5);
+        combat.targets.push(target(1, at, 1000.0));
+        fire(&mut combat, &defs, "pistol", PLAYER, Vec2::X);
+        run(&mut combat, &defs, &room, 30);
+        assert_eq!(combat.damage_numbers.len(), 1);
+        let number = combat.damage_numbers[0];
+        assert_eq!((number.amount, number.crit), (100.0, false));
+        let offset = number.position - at;
+        assert!(offset.x.abs() <= 0.2 && offset.y.abs() <= 0.2 + 0.03, "scattered within 0.2: {offset}");
+
+        // It climbs 0.001 a step and is gone 1.4 s after the hit.
+        run(&mut combat, &defs, &room, 30);
+        assert!((combat.damage_numbers[0].position.y - number.position.y - 0.03).abs() < 1e-4);
+        run(&mut combat, &defs, &room, 50);
+        assert!(combat.damage_numbers.is_empty());
+    }
+
+    #[test]
+    fn an_explosion_shows_as_a_crit_and_a_hit_for_nothing_shows_no_number() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        combat.targets.push(target(1, Vec2::new(10.0, 4.5), 1000.0));
+        fire(&mut combat, &defs, "bazooka", PLAYER, Vec2::X);
+        run(&mut combat, &defs, &room, 30);
+        // The missile's own 0 is not shown; the blast's 200 is, as a crit.
+        assert_eq!(combat.damage_numbers.len(), 1);
+        assert_eq!((combat.damage_numbers[0].amount, combat.damage_numbers[0].crit), (200.0, true));
+    }
+
+    #[test]
+    fn a_crit_bullet_shows_its_doubled_damage() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        combat.targets.push(target(1, Vec2::new(9.0, 4.5), 1000.0));
+        let def = defs.gun(defs.gun_named("pistol").unwrap());
+        combat.fire(&defs, def, PLAYER, Vec2::X, Vec2::ZERO, 1.0, &mut Rng::new(3), &mut Vec::new());
+        run(&mut combat, &defs, &room, 20);
+        assert_eq!((combat.damage_numbers[0].amount, combat.damage_numbers[0].crit), (200.0, true));
     }
 
     #[test]

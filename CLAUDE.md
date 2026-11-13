@@ -37,8 +37,11 @@ never deals damage. Waiting for enemies (step 4): knockback from lasers and
 explosions, explosions hurting the player and whoever walks into them while they
 last, a frozen enemy's slowdown (`Elemental::added_drag`) and cyan tint. Waiting for audio (step 6): the laser's loop and the explosion's sound.
 
-**Next, the rest of step 3:** damage numbers (needs text drawing: bake the
-Thaleah pixel font, `Assets/Thaleah_PixelFont`, into an atlas), chests and drops
+Damage numbers are in too (`Combat::damage_numbers`, drawn by `View::draw_text`
+with the Thaleah font from `assets/font.json`; the font lacks `" % - = ^ _ ~ ¨`,
+which Unity's atlas stores rotated).
+
+**Next, the rest of step 3:** chests and drops
 (`Scripts/Drops`, `Prefabs/Room Objects`, `Prefabs/Drops`). Convert each new kind of
 data in `cos-convert` when the step needs it, not before.
 
