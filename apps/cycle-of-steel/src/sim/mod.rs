@@ -9,6 +9,7 @@ pub mod collide;
 pub mod combat;
 pub mod defs;
 pub mod elemental;
+pub mod enemy;
 pub mod guns;
 pub mod loot;
 pub mod player;
@@ -98,12 +99,40 @@ impl World {
         let mut combat = Combat::new();
 
         if let Some(file) = &room.file {
+            // The dummy comes first, so that it keeps the first place among targets.
+            for marker in file.markers.iter().filter(|marker| marker.has_script("Killable")) {
+                let Some(bounds) = marker.bounds else {
+                    continue;
+                };
+                let health = marker.number("Killable.maxHealth").unwrap_or(1.0);
+                combat.targets.push(Target {
+                    id: combat.targets.len() as u32,
+                    position: Vec2::from(bounds.center),
+                    half: Vec2::from(bounds.size) * 0.5,
+                    origin: Vec2::from(bounds.center),
+                    chest: None,
+                    enemy: None,
+                    health,
+                    max_health: health,
+                    last_hit: f64::NEG_INFINITY,
+                    // The hub's dummy has none, so nothing freezes it, as in Unity.
+                    elemental: marker.has_script("ElementalEffectHandler").then(Elemental::default),
+                });
+            }
             for object in &file.objects {
                 let position = Vec2::from(object.position);
                 if let Some(gun) = defs.gun_named(&object.prefab) {
                     combat.pickups.push(Pickup { gun: Gun::new(gun), position });
                 } else if let Some(drop) = defs.drop_named(&object.prefab) {
-                    combat.drops.push(Drop::new(drop, position));
+                    // Rooms set some drops' worth: the hub's are worth far more.
+                    let field = match defs.drop_def(drop).kind {
+                        DropKind::Data => "DataDrop.value",
+                        DropKind::Heal => "HealDrop.value",
+                    };
+                    let value = object.overrides.get(field).and_then(|value| value.parse().ok());
+                    combat.drops.push(Drop::new(drop, value.unwrap_or(defs.drop_def(drop).value), position));
+                } else if let Some(enemy) = defs.enemy_named(&object.prefab) {
+                    combat.targets.push(enemy::spawn(&defs, enemy, position, combat.targets.len() as u32));
                 } else if let Some(chest) = defs.chest_named(&object.prefab) {
                     let def = defs.chest(chest);
                     combat.targets.push(Target {
@@ -112,6 +141,7 @@ impl World {
                         half: Vec2::from(def.half),
                         origin: position,
                         chest: Some(chest),
+                        enemy: None,
                         health: def.max_health,
                         max_health: def.max_health,
                         last_hit: f64::NEG_INFINITY,
@@ -130,24 +160,6 @@ impl World {
                     };
                     combat.teleports.push(Teleport { position, half, offset });
                 }
-            }
-            for marker in file.markers.iter().filter(|marker| marker.has_script("Killable")) {
-                let Some(bounds) = marker.bounds else {
-                    continue;
-                };
-                let health = marker.number("Killable.maxHealth").unwrap_or(1.0);
-                combat.targets.push(Target {
-                    id: combat.targets.len() as u32,
-                    position: Vec2::from(bounds.center),
-                    half: Vec2::from(bounds.size) * 0.5,
-                    origin: Vec2::from(bounds.center),
-                    chest: None,
-                    health,
-                    max_health: health,
-                    last_hit: f64::NEG_INFINITY,
-                    // The hub's dummy has none, so nothing freezes it, as in Unity.
-                    elemental: marker.has_script("ElementalEffectHandler").then(Elemental::default),
-                });
             }
         }
 
@@ -272,14 +284,20 @@ impl World {
             }
         }
 
+        enemy::step_enemies(&mut self.combat.targets, &defs, &self.room, &mut self.player, now, &mut self.rng);
         self.combat.step(&defs, &self.room, self.player.position, now, &mut self.rng);
+        if self.player.health <= 0.0 {
+            // Placeholder until the full loop (step 7): Unity's `PlayerData.Die`
+            // ends the run; here the player simply starts the room again.
+            self.player = Player::new(self.room.spawn);
+        }
 
         let (player, data_cells) = (&mut self.player, &mut self.data_cells);
-        loot::step_drops(&mut self.combat.drops, &defs, player.position, player::HALF_SIZE, |drop| match drop.kind {
+        loot::step_drops(&mut self.combat.drops, &defs, player.position, player::HALF_SIZE, |kind, value| match kind {
             // `PlayerData.incrementDataCells`.
-            DropKind::Data => *data_cells += drop.value,
+            DropKind::Data => *data_cells += value,
             // `PlayerData.HealPlayer`: a pack is used up even at full health.
-            DropKind::Heal => player.health = (player.health + drop.value as f32).min(player.max_health),
+            DropKind::Heal => player.health = (player.health + value as f32).min(player.max_health),
         });
 
         // Nothing has to read events; do not let them pile up if nothing does.
@@ -520,6 +538,7 @@ mod tests {
             max_health: health,
             origin: world.player.pivot() + Vec2::new(distance, 0.0),
             chest: None,
+            enemy: None,
             last_hit: f64::NEG_INFINITY,
             elemental: None,
         });

@@ -6,6 +6,7 @@
 
 mod font;
 mod guns;
+mod enemies;
 mod json;
 mod loot;
 mod project;
@@ -137,6 +138,19 @@ fn main() -> Result<()> {
         add_sprite(&mut catalogue, sprite)?;
     }
 
+    let enemies = enemies::convert(&project)?;
+    let enemies_path = output.join("enemies.json");
+    std::fs::write(&enemies_path, json::to_string(&enemies.json))
+        .with_context(|| format!("could not write {}", enemies_path.display()))?;
+    println!("{} enemies", enemies.enemies);
+    for warning in &enemies.warnings {
+        println!("    warning: {warning}");
+    }
+    warning_count += enemies.warnings.len();
+    for sprite in enemies.sprites {
+        add_sprite(&mut catalogue, sprite)?;
+    }
+
     let font = font::convert(&project)?;
     let font_path = output.join("font.json");
     std::fs::write(&font_path, json::to_string(&font.json))
@@ -221,7 +235,7 @@ fn write_sprites(project: &Project, output: &Path, catalogue: &BTreeMap<String, 
             None => {
                 let from = project.assets_dir().join(&sprite.texture);
                 let to = sprites_dir.join(format!("{texture_name}.png"));
-                std::fs::copy(&from, &to)
+                copy_writable(&from, &to)
                     .with_context(|| format!("could not copy {} to {}", from.display(), to.display()))?;
                 copied.insert(texture_name.clone(), &sprite.texture);
             }
@@ -241,6 +255,23 @@ fn write_sprites(project: &Project, output: &Path, catalogue: &BTreeMap<String, 
     std::fs::write(&path, json::to_string(&json!({ "sprites": entries })))
         .with_context(|| format!("could not write {}", path.display()))?;
     Ok(copied.len())
+}
+
+/// Copies a file and leaves the copy writable. `fs::copy` carries permissions
+/// over, and some of the Unity project's files are read-only, which would make
+/// the next run unable to overwrite its own output.
+fn copy_writable(from: &Path, to: &Path) -> std::io::Result<()> {
+    if let Ok(metadata) = std::fs::metadata(to) {
+        let mut permissions = metadata.permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        std::fs::set_permissions(to, permissions)?;
+    }
+    std::fs::copy(from, to)?;
+    let mut permissions = std::fs::metadata(to)?.permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    std::fs::set_permissions(to, permissions)
 }
 
 #[cfg(test)]

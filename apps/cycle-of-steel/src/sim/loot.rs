@@ -9,7 +9,8 @@ use crystal_engine::glam::Vec2;
 
 use super::DT;
 use super::combat::{Pickup, UNITY_STEP, circle_overlaps_box, drag_kept};
-use super::defs::{ChestId, Defs, DropDef, DropId, Loot, LootEntry, PoolDef};
+use crate::data::DropKind;
+use super::defs::{ChestId, Defs, DropId, EnemyId, Loot, LootEntry, PoolDef};
 use super::guns::Gun;
 use super::rng::Rng;
 
@@ -27,6 +28,8 @@ const UNITY_FRAME_RATE: f32 = 60.0;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Drop {
     pub def: DropId,
+    /// What it is worth: its definition's `value`, unless the room overrides it.
+    pub value: u32,
     pub position: Vec2,
     /// Position one step ago, for the view to blend from.
     pub previous_position: Vec2,
@@ -34,16 +37,23 @@ pub struct Drop {
 }
 
 impl Drop {
-    pub fn new(def: DropId, position: Vec2) -> Self {
-        Self { def, position, previous_position: position, velocity: Vec2::ZERO }
+    pub fn new(def: DropId, value: u32, position: Vec2) -> Self {
+        Self { def, value, position, previous_position: position, velocity: Vec2::ZERO }
     }
 }
 
-/// A broken chest, left on the floor (`Killable.deathObject`).
+/// What a broken chest or a dead enemy leaves on the floor (`Killable.deathObject`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Remains {
-    pub chest: ChestId,
+    pub kind: RemainsKind,
     pub position: Vec2,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RemainsKind {
+    Chest(ChestId),
+    /// An enemy's body: which of its `dead_sprites` (`RandomBodyScript`).
+    Body(EnemyId, u8),
 }
 
 /// Where spawned loot goes.
@@ -69,7 +79,7 @@ fn spawn(loot: Loot, defs: &Defs, position: Vec2, rng: &mut Rng, out: &mut Spawn
             if out.drops.len() == out.drops.capacity() {
                 out.drops.remove(0);
             }
-            out.drops.push(Drop::new(drop, position));
+            out.drops.push(Drop::new(drop, defs.drop_def(drop).value, position));
         }
         Loot::Pool(pool) => roll_pool(defs.pool(pool), defs, position, rng, out),
     }
@@ -102,8 +112,8 @@ fn roll_pool(pool: &PoolDef, defs: &Defs, position: Vec2, rng: &mut Rng, out: &m
     }
 }
 
-/// Pulls drops within reach towards the player and hands each one the player
-/// touches to `collect`, removing it.
+/// Pulls drops within reach towards the player and hands the kind and value of
+/// each one the player touches to `collect`, removing it.
 ///
 /// Unity measures reach between the two objects' positions and collects on its
 /// trigger circle touching the player's collider. Drops have only that trigger,
@@ -113,7 +123,7 @@ pub fn step_drops(
     defs: &Defs,
     player: Vec2,
     player_half: Vec2,
-    mut collect: impl FnMut(&DropDef),
+    mut collect: impl FnMut(DropKind, u32),
 ) {
     drops.retain_mut(|drop| {
         let def = defs.drop_def(drop.def);
@@ -127,7 +137,7 @@ pub fn step_drops(
 
         let touching = circle_overlaps_box(drop.position + Vec2::from(def.offset), def.radius, player, player_half);
         if touching {
-            collect(def);
+            collect(def.kind, drop.value);
         }
         !touching
     });
@@ -189,10 +199,10 @@ mod tests {
         let defs = test_defs();
         let cell = defs.drop_named("cell").unwrap();
         let half = Vec2::new(0.1, 0.2);
-        let mut drops = vec![Drop::new(cell, Vec2::new(5.0, 0.0)), Drop::new(cell, Vec2::new(1.5, 0.0))];
+        let mut drops = vec![Drop::new(cell, 3, Vec2::new(5.0, 0.0)), Drop::new(cell, 3, Vec2::new(1.5, 0.0))];
         let mut collected = 0;
         for _ in 0..60 {
-            step_drops(&mut drops, &defs, Vec2::ZERO, half, |def| collected += def.value);
+            step_drops(&mut drops, &defs, Vec2::ZERO, half, |_, value| collected += value);
         }
         assert_eq!(drops.len(), 1, "the near one is collected within a second");
         assert_eq!(drops[0].position, Vec2::new(5.0, 0.0), "the far one has not moved");
@@ -204,11 +214,11 @@ mod tests {
         let defs = test_defs();
         let cell = defs.drop_named("cell").unwrap();
         // Far from the player but in reach for a long time: keep it at the edge.
-        let mut drop = vec![Drop::new(cell, Vec2::new(1.9, 0.0))];
+        let mut drop = vec![Drop::new(cell, 3, Vec2::new(1.9, 0.0))];
         let mut top = 0.0_f32;
         for _ in 0..600 {
             drop[0].position = Vec2::new(1.9, 0.0);
-            step_drops(&mut drop, &defs, Vec2::ZERO, Vec2::splat(0.01), |_| {});
+            step_drops(&mut drop, &defs, Vec2::ZERO, Vec2::splat(0.01), |_, _| {});
             top = top.max(drop[0].velocity.length());
         }
         assert!((2.5..2.8).contains(&top), "top speed {top}");

@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 
 use crate::data::{
-    BulletFile, DropKind, EffectFile, ExplosionFile, GunFile, GunKind, GunsFile, LootEntryFile, LootFile, ShakeFile,
+    AnimationFile, BulletFile, DropKind, EffectFile, EnemiesFile, ExplosionFile, GunFile, GunKind, GunsFile,
+    LootEntryFile, LootFile, OffsetBoxFile, ShakeFile,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -25,6 +26,102 @@ pub struct ChestId(pub u16);
 pub struct PoolId(pub u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DropId(pub u16);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EnemyId(pub u16);
+
+/// The four ways something faces or swings, in the order animations are stored.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Direction {
+    Right,
+    Left,
+    Up,
+    Down,
+}
+
+/// What an enemy's Animator can be playing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Animation {
+    Run(Direction),
+    Attack(Direction),
+}
+
+impl Animation {
+    pub const ALL: [Animation; 8] = [
+        Animation::Run(Direction::Right),
+        Animation::Run(Direction::Left),
+        Animation::Run(Direction::Up),
+        Animation::Run(Direction::Down),
+        Animation::Attack(Direction::Right),
+        Animation::Attack(Direction::Left),
+        Animation::Attack(Direction::Up),
+        Animation::Attack(Direction::Down),
+    ];
+
+    /// Its place in [`EnemyDef::animations`].
+    pub fn index(self) -> usize {
+        Self::ALL.iter().position(|&animation| animation == self).expect("listed")
+    }
+
+    /// Its key in `enemies.json`. Unity calls running up "back" and down "front".
+    fn key(self) -> &'static str {
+        match self {
+            Animation::Run(Direction::Right) => "run_right",
+            Animation::Run(Direction::Left) => "run_left",
+            Animation::Run(Direction::Up) => "run_back",
+            Animation::Run(Direction::Down) => "run_front",
+            Animation::Attack(Direction::Right) => "attack_right",
+            Animation::Attack(Direction::Left) => "attack_left",
+            Animation::Attack(Direction::Up) => "attack_up",
+            Animation::Attack(Direction::Down) => "attack_down",
+        }
+    }
+}
+
+/// A box relative to its owner's position: half its size and its centre's offset.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OffsetBox {
+    pub half: [f32; 2],
+    pub offset: [f32; 2],
+}
+
+impl From<OffsetBoxFile> for OffsetBox {
+    fn from(file: OffsetBoxFile) -> Self {
+        Self { half: [file.size[0] * 0.5, file.size[1] * 0.5], offset: file.offset }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct WarriorDef {
+    pub spotting_length: f32,
+    pub follow_range: f32,
+    pub move_speed: f32,
+    pub wander_interval: f32,
+    pub damage: f32,
+    pub damage_cooldown: f32,
+    pub reach: OffsetBox,
+    /// Indexed like [`Direction`].
+    pub swings: [OffsetBox; 4],
+}
+
+#[derive(Clone, Debug)]
+pub struct EnemyDef {
+    pub name: String,
+    pub max_health: f32,
+    pub sprite: String,
+    pub scale: [f32; 2],
+    pub color: [f32; 4],
+    /// Half its solid box, and where that box sits from its position.
+    pub half: [f32; 2],
+    pub offset: [f32; 2],
+    pub mass: f32,
+    pub drag: f32,
+    pub freezable: bool,
+    pub loot: Vec<LootEntry>,
+    pub dead_sprites: Vec<String>,
+    pub warrior: WarriorDef,
+    /// Indexed by [`Animation::index`].
+    pub animations: [AnimationFile; 8],
+}
 
 #[derive(Clone, Debug)]
 pub struct GunDef {
@@ -135,7 +232,11 @@ pub struct Defs {
     pub chests: Vec<ChestDef>,
     pub pools: Vec<PoolDef>,
     pub drops: Vec<DropDef>,
+    pub enemies: Vec<EnemyDef>,
     gun_by_name: HashMap<String, GunId>,
+    enemy_by_name: HashMap<String, EnemyId>,
+    /// Loot pools by name, for enemies' loot to name them too.
+    pool_by_name: HashMap<String, PoolId>,
     chest_by_name: HashMap<String, ChestId>,
     drop_by_name: HashMap<String, DropId>,
 }
@@ -254,6 +355,7 @@ impl Defs {
             .enumerate()
             .map(|(index, name)| (name.as_str(), PoolId(index as u16)))
             .collect();
+        self.pool_by_name = pool_ids.iter().map(|(name, id)| (name.to_string(), *id)).collect();
         for name in &pool_names {
             let pool = &file.pools[*name];
             let entries = pool
@@ -287,6 +389,79 @@ impl Defs {
             });
         }
         Ok(self)
+    }
+
+    /// Adds the enemies of an `enemies.json`. Their loot names drops and pools, so
+    /// this comes after [`Defs::with_loot`].
+    pub fn with_enemies(mut self, file: &EnemiesFile) -> Result<Self> {
+        let mut names: Vec<&String> = file.enemies.keys().collect();
+        names.sort();
+        let pools: HashMap<&str, PoolId> = self.pool_by_name.iter().map(|(name, id)| (name.as_str(), *id)).collect();
+        for name in names {
+            let enemy = &file.enemies[name];
+            let loot = enemy
+                .loot
+                .iter()
+                .map(|entry| self.loot_entry(entry, Some(&pools)))
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| format!("in enemy `{name}`"))?;
+            let warrior = &enemy.warrior;
+            let swing = |key: &str| -> Result<OffsetBox> {
+                Ok((*warrior.swings.get(key).with_context(|| format!("enemy `{name}` has no `{key}` swing"))?).into())
+            };
+            let animation = |animation: Animation| -> Result<AnimationFile> {
+                let file = enemy
+                    .animations
+                    .get(animation.key())
+                    .with_context(|| format!("enemy `{name}` has no `{}` animation", animation.key()))?;
+                anyhow::ensure!(!file.frames.is_empty() && file.fps > 0.0, "enemy `{name}`: `{}` is empty", animation.key());
+                Ok(file.clone())
+            };
+            self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
+            self.enemies.push(EnemyDef {
+                name: name.clone(),
+                max_health: enemy.max_health,
+                sprite: enemy.sprite.clone(),
+                scale: enemy.scale,
+                color: enemy.color,
+                half: [enemy.size[0] * 0.5, enemy.size[1] * 0.5],
+                offset: enemy.offset,
+                mass: enemy.mass,
+                drag: enemy.drag,
+                freezable: enemy.freezable,
+                loot,
+                dead_sprites: enemy.dead_sprites.clone(),
+                warrior: WarriorDef {
+                    spotting_length: warrior.spotting_length,
+                    follow_range: warrior.follow_range,
+                    move_speed: warrior.move_speed,
+                    wander_interval: warrior.wander_interval,
+                    damage: warrior.damage,
+                    damage_cooldown: warrior.damage_cooldown,
+                    reach: warrior.reach.into(),
+                    swings: [swing("right")?, swing("left")?, swing("up")?, swing("down")?],
+                },
+                animations: [
+                    animation(Animation::ALL[0])?,
+                    animation(Animation::ALL[1])?,
+                    animation(Animation::ALL[2])?,
+                    animation(Animation::ALL[3])?,
+                    animation(Animation::ALL[4])?,
+                    animation(Animation::ALL[5])?,
+                    animation(Animation::ALL[6])?,
+                    animation(Animation::ALL[7])?,
+                ],
+            });
+        }
+        Ok(self)
+    }
+
+    pub fn enemy(&self, id: EnemyId) -> &EnemyDef {
+        &self.enemies[id.0 as usize]
+    }
+
+    pub fn enemy_named(&self, name: &str) -> Option<EnemyId> {
+        self.enemy_by_name.get(name).copied()
     }
 
     /// Resolves a loot line's name: a gun, a drop, or (where `pools` is given) a pool.
@@ -367,7 +542,26 @@ pub(crate) mod tests {
             }"#,
         )
         .unwrap();
-        test_gun_defs().with_loot(&loot).unwrap()
+        let enemies: EnemiesFile = serde_json::from_str(
+            r#"{"enemies": {"brute": {
+                "max_health": 500, "sprite": "idle", "size": [0.2, 0.5], "mass": 1, "drag": 20, "freezable": true,
+                "loot": [{"drop": "cell", "weight": 30}], "dead_sprites": ["body_a", "body_b"],
+                "warrior": {"spotting_length": 5, "follow_range": 4, "move_speed": 10, "wander_interval": 0.25,
+                            "damage": 150, "damage_cooldown": 1.5,
+                            "reach": {"size": [0.225, 0.52]},
+                            "swings": {"right": {"size": [0.64, 0.81], "offset": [0.26, 0.15]},
+                                       "left": {"size": [0.64, 0.81], "offset": [-0.23, 0.15]},
+                                       "up": {"size": [0.59, 0.71], "offset": [0, 0.3]},
+                                       "down": {"size": [0.66, 0.91], "offset": [-0.02, -0.18]}}},
+                "animations": {
+                  "run_right": {"fps": 12, "frames": ["rr0", "rr1"]}, "run_left": {"fps": 12, "frames": ["rl0"]},
+                  "run_back": {"fps": 12, "frames": ["rb0"]}, "run_front": {"fps": 12, "frames": ["rf0"]},
+                  "attack_right": {"fps": 12, "frames": ["ar0"]}, "attack_left": {"fps": 12, "frames": ["al0"]},
+                  "attack_up": {"fps": 12, "frames": ["au0"]}, "attack_down": {"fps": 12, "frames": ["ad0"]}}
+            }}}"#,
+        )
+        .unwrap();
+        test_gun_defs().with_loot(&loot).unwrap().with_enemies(&enemies).unwrap()
     }
 
     /// A pistol-like gun, a shotgun-like gun and their bullets.

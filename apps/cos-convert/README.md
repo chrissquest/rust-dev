@@ -23,6 +23,7 @@ any warnings, and overwrites what is there.
 rooms/<room>.json     one per prefab under Assets/Prefabs/Generatable Rooms
 guns.json             every gun, the bullets they fire and the effects those leave
 loot.json             chests, loot pools and drops
+enemies.json          enemies the port has an AI for
 sprites.json          every sprite the above use: texture, rectangle, pivot, scale
 sprites/<name>.png    the textures themselves, copied unchanged
 ```
@@ -65,6 +66,18 @@ the `Spawner` prefabs those lines name: `multiple` (every line rolls) or not
 `pickup_range`, `pickup_speed`, the rigidbody's `drag`, and its trigger circle
 (`radius`, `offset`). A loot line names a pool, a drop, or a gun in `guns.json`.
 
+`enemies.json` holds, by prefab name, every enemy under `Prefabs/Enemies` whose AI
+is ported (so far `Warrior`, which the EnemyTank also runs): its `Killable`
+numbers and `loot`, the bodies its `deathObject` can show (`dead_sprites`), its
+sprite, `scale`, `color`, solid box, rigidbody `mass` and `drag`, whether it can
+be frozen, the AI's numbers under `warrior` (with its `reach` and four `swings`
+boxes), and its `animations`. Boxes are in world units with the prefab's scale
+applied. An animation is `{"fps", "frames"}`: the sprites the clip keys, one per
+sample, read through the `AnimatorController` the script names.
+
+Room objects carry `overrides`, the settings a placement changes; the game reads
+the drops' `value` from them (the hub's drops are worth more than their prefabs).
+
 `font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
 atlas (`ThaleahFat.fontsettings` and its PNG). `glyphs` maps a character to its
 `sprite`, one of the `font_<code point>` entries the converter adds to
@@ -100,10 +113,15 @@ src/
   room.rs      one room prefab -> one room file
   guns.rs      gun, bullet and effect prefabs -> guns.json
   loot.rs      chest, loot pool and drop prefabs -> loot.json
+  enemies.rs   enemy prefabs and their animations -> enemies.json
   json.rs      JSON output that keeps a row of tiles on one line
 ```
 
-Not converted yet: animations, enemy stats, and audio.
+Not converted yet: the other enemies' AIs, the player's animations (the game
+slices its sheets itself), and audio.
+
+Copied textures are left writable: some files in the Unity project are read-only,
+and `fs::copy` would carry that over and stop the next run overwriting them.
 
 Run on Windows, the converter writes a few room rotations one digit differently in
 the last place (`155.2294` for `155.2295`): float formatting differs from Linux.

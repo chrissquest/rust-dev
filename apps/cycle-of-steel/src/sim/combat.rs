@@ -10,7 +10,8 @@ use crystal_engine::glam::Vec2;
 use super::defs::{BulletId, ChestId, Defs, EffectId, GunDef};
 use super::elemental::Elemental;
 use super::guns::Gun;
-use super::loot::{DROP_CAPACITY, Drop, PICKUP_CAPACITY, Remains, Spawned, spill};
+use super::enemy::Enemy;
+use super::loot::{DROP_CAPACITY, Drop, PICKUP_CAPACITY, Remains, RemainsKind, Spawned, spill};
 use super::rng::Rng;
 use super::room::{Cell, Room};
 use super::{DT, Event};
@@ -90,7 +91,7 @@ pub struct Beam {
     pub length: f32,
 }
 
-/// Something bullets hit and hurt: the hub's dummy, or a chest.
+/// Something bullets hit and hurt: the hub's dummy, a chest or an enemy.
 #[derive(Clone, Debug)]
 pub struct Target {
     /// Stays the same for the target's life, unlike its place in the list.
@@ -103,6 +104,8 @@ pub struct Target {
     pub origin: Vec2,
     /// Set for chests, which are solid and leave loot and remains.
     pub chest: Option<ChestId>,
+    /// Set for enemies, which move, fight, and leave loot and a body.
+    pub enemy: Option<Enemy>,
     pub health: f32,
     pub max_health: f32,
     /// When it was last hit, in world seconds, for the view to flash it.
@@ -268,7 +271,9 @@ impl Combat {
             // Unity rolls the crit on every hit of the beam, not once per trigger pull.
             let crit = rng.chance(crit_chance);
             let damage = if crit { def.damage * CRIT_MULTIPLIER } else { def.damage };
-            hurt(&mut self.targets[index], &mut self.damage_numbers, damage, crit, now, rng);
+            // `LaserGun.updateFire` pushes along the beam.
+            let knockback = aim * def.knockback;
+            hurt(&mut self.targets[index], &mut self.damage_numbers, damage, crit, knockback, now, rng);
         }
     }
 
@@ -314,7 +319,9 @@ impl Combat {
                         continue;
                     }
                     let damage = if bullet.crit { bullet.damage * CRIT_MULTIPLIER } else { bullet.damage };
-                    hurt(target, &mut self.damage_numbers, damage, bullet.crit, now, rng);
+                    // `Bullet.OnTriggerEnter2D` pushes along the bullet's flight.
+                    let knockback = bullet.velocity.normalize_or_zero() * bullet.knockback;
+                    hurt(target, &mut self.damage_numbers, damage, bullet.crit, knockback, now, rng);
                     // `Bullet_Freeze.OnTriggerEnter2D`, beside the bullet's own hit.
                     if let (true, Some(elemental)) = (def.freeze > 0.0, target.elemental.as_mut()) {
                         elemental.freeze(def.freeze);
@@ -381,10 +388,19 @@ impl Combat {
                 continue;
             }
             let target = self.targets.remove(index);
+            let mut out = Spawned { pickups: &mut self.pickups, drops: &mut self.drops };
             if let Some(chest) = target.chest {
-                let mut out = Spawned { pickups: &mut self.pickups, drops: &mut self.drops };
                 spill(&defs.chest(chest).loot, defs, target.origin, rng, &mut out);
-                self.remains.push(Remains { chest, position: target.origin });
+                self.remains.push(Remains { kind: RemainsKind::Chest(chest), position: target.origin });
+            }
+            if let Some(enemy) = &target.enemy {
+                let def = defs.enemy(enemy.def);
+                spill(&def.loot, defs, target.origin, rng, &mut out);
+                if !def.dead_sprites.is_empty() {
+                    // `RandomBodyScript`: `Random.Range(0, count)`.
+                    let pick = ((rng.unit() * def.dead_sprites.len() as f32) as usize).min(def.dead_sprites.len() - 1);
+                    self.remains.push(Remains { kind: RemainsKind::Body(enemy.def, pick as u8), position: target.origin });
+                }
             }
         }
     }
@@ -429,8 +445,6 @@ impl Combat {
 /// - Unity's trigger lasts the effect's whole 0.3 s, so an enemy walking into the
 ///   blast late is still hurt. Targets do not move yet, so damage is dealt once,
 ///   when the explosion appears. Revisit with enemies (step 4).
-/// - Unity pushes what it hurts away from the centre (three times the offset
-///   divided by the radius). Knockback waits for enemies that can move.
 /// - Unity's explosion hurts the player too, the bazooka's owner included. The
 ///   player has no health yet.
 fn explode(
@@ -443,18 +457,33 @@ fn explode(
 ) {
     for target in targets {
         if circle_overlaps_box(center, explosion.radius, target.position, target.half) {
-            // `ExplosionScript` reports its damage as a crit, so it shows as one.
-            hurt(target, numbers, explosion.damage, true, now, rng);
+            // `ExplosionScript` reports its damage as a crit, so it shows as one,
+            // and pushes away from the centre by three times the offset over the radius.
+            let knockback = (target.origin - center) / explosion.radius * 3.0;
+            hurt(target, numbers, explosion.damage, true, knockback, now, rng);
         }
     }
 }
 
 /// Takes `amount` from a target's health and floats the number up from it, as
 /// `Killable.DamageKillable` does. A hit for nothing (the bazooka's missile)
-/// shows no number.
-fn hurt(target: &mut Target, numbers: &mut Vec<DamageNumber>, amount: f32, crit: bool, now: f64, rng: &mut Rng) {
+/// shows no number. An enemy is pushed by the `knockback` impulse; chests are
+/// frozen in place in Unity, and the dummy does not move.
+#[allow(clippy::too_many_arguments)]
+fn hurt(
+    target: &mut Target,
+    numbers: &mut Vec<DamageNumber>,
+    amount: f32,
+    crit: bool,
+    knockback: Vec2,
+    now: f64,
+    rng: &mut Rng,
+) {
     target.health -= amount;
     target.last_hit = now;
+    if let Some(enemy) = &mut target.enemy {
+        enemy.velocity += knockback / enemy.mass;
+    }
     if amount <= 0.0 {
         return;
     }
@@ -503,7 +532,7 @@ fn bullet_hits_wall(room: &Room, center: Vec2, half: Vec2) -> bool {
 
 /// How far along a ray from `origin` in the unit vector `direction` a box is first
 /// touched. A ray starting inside the box touches it at once.
-fn ray_hits_box(origin: Vec2, direction: Vec2, center: Vec2, half: Vec2) -> Option<f32> {
+pub(super) fn ray_hits_box(origin: Vec2, direction: Vec2, center: Vec2, half: Vec2) -> Option<f32> {
     let mut enter = 0.0_f32;
     let mut leave = f32::INFINITY;
     for axis in 0..2 {
@@ -526,7 +555,7 @@ pub(super) fn circle_overlaps_box(center: Vec2, radius: f32, box_center: Vec2, h
     nearest.distance_squared(center) < radius * radius
 }
 
-fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {
+pub(super) fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {
     let gap = (a - b).abs();
     gap.x < a_half.x + b_half.x && gap.y < a_half.y + b_half.y
 }
@@ -535,7 +564,7 @@ fn boxes_overlap(a: Vec2, a_half: Vec2, b: Vec2, b_half: Vec2) -> bool {
 mod tests {
     use super::*;
     use crate::sim::defs::tests::test_defs;
-    use crate::sim::loot::Remains;
+    use crate::sim::loot::{Remains, RemainsKind};
 
     fn fire(combat: &mut Combat, defs: &Defs, gun: &str, from: Vec2, aim: Vec2) -> Vec<Event> {
         let mut events = Vec::new();
@@ -553,6 +582,7 @@ mod tests {
             max_health: health,
             origin: position,
             chest: None,
+            enemy: None,
             last_hit: f64::NEG_INFINITY,
             elemental: None,
         }
@@ -577,7 +607,7 @@ mod tests {
         combat.step(&defs, &room, Vec2::new(2.0, 2.0), 0.0, &mut rng);
         assert!(combat.targets.is_empty());
         assert_eq!(combat.solids().count(), 0, "a broken chest no longer blocks");
-        assert_eq!(combat.remains, vec![Remains { chest, position: origin }]);
+        assert_eq!(combat.remains, vec![Remains { kind: RemainsKind::Chest(chest), position: origin }]);
         assert_eq!(combat.pickups.len(), 1);
         assert_eq!(combat.pickups[0].position, origin);
         assert_eq!(combat.drops.len(), 1);

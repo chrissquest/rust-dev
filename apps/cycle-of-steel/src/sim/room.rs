@@ -23,6 +23,10 @@ pub enum Cell {
     Wall,
 }
 
+/// The world is seen one screen-sized block at a time: a dungeon room, or part of
+/// a larger room. Enemies act only in the player's block (`RoomInfo.width/height`).
+pub const CAMERA_BLOCK: Vec2 = Vec2::new(16.0, 9.0);
+
 pub struct Room {
     pub columns: u32,
     pub rows: u32,

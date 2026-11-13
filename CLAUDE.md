@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies, 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (piece 1 of 5 done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -49,8 +49,22 @@ fly to the player and add to `World::data_cells` or `Player::health` (1000, from
 Waiting for lighting and audio: the chests' and drops' glow, pickup sounds. Waiting
 for the UI pass: chests' health bars.
 
-**Next: step 4, enemies.** Read the Port plan tab first. Convert each new kind of
-data in `cos-convert` when the step needs it, not before.
+Step 4, enemies, is split into five pieces, agreed with the owner: (1) enemy
+basics and the Warrior, (2) ranged enemies (Crab, the turret, LASERCrab) and their
+shots hurting the player, (3) dashers (Drone and the dashing AI), (4) explosions
+hurting the player and enemies walking into them, plus EffectGrate, (5) the boss
+(Priest) and its bar.
+
+Piece 1 is done: `sim/enemy.rs` runs Unity's `Warrior` AI for the Warrior and the
+EnemyTank (`assets/enemies.json`, with animations converted from Unity clips).
+An enemy is a `Target` with `enemy: Some(Enemy)`; knockback, freezing slowdown and
+tint, loot and bodies (`RemainsKind::Body`) work. `Player::hurt` has Unity's 0.5 s
+invulnerability; at 0 health the player restarts the room (placeholder). The hub's
+gun room has a practice EnemyTank, so homing shots fired from the spawn chase it.
+Not yet: enemies and player pushing each other, door barriers, hurt flash.
+
+**Next: step 4 piece 2, ranged enemies.** Convert each new kind of data in
+`cos-convert` when the step needs it, not before.
 
 ### How to work here
 

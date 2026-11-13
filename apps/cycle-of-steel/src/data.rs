@@ -130,6 +130,9 @@ pub struct DecorationFile {
 pub struct ObjectFile {
     pub prefab: String,
     pub position: [f32; 2],
+    /// Settings this placement changes from its prefab, as `Script.field` -> text.
+    #[serde(default)]
+    pub overrides: HashMap<String, String>,
 }
 
 /// An object that carried one of the Unity game's scripts.
@@ -365,6 +368,75 @@ pub struct DropFile {
     pub radius: f32,
     #[serde(default)]
     pub offset: [f32; 2],
+}
+
+/// `enemies.json`: every enemy the port has an AI for.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct EnemiesFile {
+    pub enemies: HashMap<String, EnemyFile>,
+}
+
+impl EnemiesFile {
+    pub fn load(assets: &AssetSource) -> Result<Self> {
+        let bytes = assets.read("enemies.json")?;
+        serde_json::from_slice(&bytes).context("could not parse enemies.json")
+    }
+}
+
+/// An enemy: Unity's `Killable` and its AI script on a prefab under `Prefabs/Enemies`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct EnemyFile {
+    pub max_health: f32,
+    /// Shown until it first moves: Unity's Animator starts with no controller.
+    pub sprite: String,
+    #[serde(default = "one")]
+    pub scale: [f32; 2],
+    #[serde(default = "white")]
+    pub color: [f32; 4],
+    /// Its solid box, relative to its position, in world units.
+    pub size: [f32; 2],
+    #[serde(default)]
+    pub offset: [f32; 2],
+    pub mass: f32,
+    pub drag: f32,
+    /// Has an `ElementalEffectHandler`, so freezing bullets slow it.
+    pub freezable: bool,
+    pub loot: Vec<LootEntryFile>,
+    /// One is picked at random for the body it leaves.
+    pub dead_sprites: Vec<String>,
+    pub warrior: WarriorFile,
+    /// By name: `run_right`, `attack_up` and so on.
+    pub animations: HashMap<String, AnimationFile>,
+}
+
+/// A box relative to its owner's position, in world units.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct OffsetBoxFile {
+    pub size: [f32; 2],
+    #[serde(default)]
+    pub offset: [f32; 2],
+}
+
+/// Unity's `Warrior` script.
+#[derive(Clone, Debug, Deserialize)]
+pub struct WarriorFile {
+    pub spotting_length: f32,
+    pub follow_range: f32,
+    pub move_speed: f32,
+    pub wander_interval: f32,
+    pub damage: f32,
+    pub damage_cooldown: f32,
+    /// The trigger that starts a swing when the player touches it.
+    pub reach: OffsetBoxFile,
+    /// Where each swing lands: `right`, `left`, `up`, `down`.
+    pub swings: HashMap<String, OffsetBoxFile>,
+}
+
+/// Sprites shown one after another at `fps`, looping.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct AnimationFile {
+    pub fps: f32,
+    pub frames: Vec<String>,
 }
 
 fn quarter() -> [f32; 2] {

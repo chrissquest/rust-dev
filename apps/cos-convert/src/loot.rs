@@ -169,15 +169,20 @@ fn drop(project: &Project, name: &str, documents: &[Document], tables: &mut Tabl
 
 /// The sprite on `object`'s `SpriteRenderer`, added to the catalogue.
 fn renderer_sprite(project: &Project, prefab: &Prefab, object: &Document, tables: &mut Tables) -> Result<Option<String>> {
-    let Some(renderer) = prefab.component(object, "SpriteRenderer") else {
-        return Ok(None);
-    };
-    let Some(sprite) = project.sprite(renderer.body.get("m_Sprite"))? else {
+    let Some(sprite) = renderer_sprite_info(project, prefab, object)? else {
         return Ok(None);
     };
     let name = sprite.name.clone();
     tables.sprites.push(sprite);
     Ok(Some(name))
+}
+
+/// The sprite on `object`'s `SpriteRenderer`, if it has one that resolves.
+pub(crate) fn renderer_sprite_info(project: &Project, prefab: &Prefab, object: &Document) -> Result<Option<SpriteInfo>> {
+    let Some(renderer) = prefab.component(object, "SpriteRenderer") else {
+        return Ok(None);
+    };
+    project.sprite(renderer.body.get("m_Sprite"))
 }
 
 /// The sprite of a prefab that is only a picture, such as a broken chest.

@@ -78,6 +78,270 @@
       "rect": [0, 0, 8, 8],
       "texture": "Splash_8x8"
     },
+    "attack_down_0": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [96, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_10": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [960, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [288, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_4": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [384, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [480, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [576, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_7": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [672, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_8": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [768, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_down_9": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [864, 0, 96, 96],
+      "texture": "attack_down"
+    },
+    "attack_left_0": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_1": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_10": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [640, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_2": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_3": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_4": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_5": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_6": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [384, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_7": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [448, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_8": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [512, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_left_9": {
+      "pivot": [0.7, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [576, 0, 64, 56],
+      "texture": "attack_left"
+    },
+    "attack_right_0": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_1": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_10": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [640, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_2": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_3": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_4": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_5": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_6": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [384, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_7": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [448, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_8": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [512, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_right_9": {
+      "pivot": [0.3, 0.35],
+      "pixels_per_unit": 64.0,
+      "rect": [576, 0, 64, 56],
+      "texture": "attack_right"
+    },
+    "attack_up_0": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_1": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_10": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [640, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_2": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_3": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_4": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_5": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_6": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [384, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_7": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [448, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_8": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [512, 0, 64, 64],
+      "texture": "attack_up"
+    },
+    "attack_up_9": {
+      "pivot": [0.25, 0.3],
+      "pixels_per_unit": 64.0,
+      "rect": [576, 0, 64, 64],
+      "texture": "attack_up"
+    },
     "bazooka_1": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
@@ -389,6 +653,294 @@
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 96, 17],
       "texture": "emptyRack"
+    },
+    "enemy_run_back_0": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [32, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_10": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_11": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [352, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [96, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_4": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [160, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_7": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [224, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_8": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_back_9": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [288, 0, 32, 36],
+      "texture": "enemy_run_back"
+    },
+    "enemy_run_front_0": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [32, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_10": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_11": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [352, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [96, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_4": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [160, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_7": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [224, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_8": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_front_9": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [288, 0, 32, 36],
+      "texture": "enemy_run_front"
+    },
+    "enemy_run_left_0": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [32, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_10": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_11": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [352, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [96, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_4": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [160, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_7": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [224, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_8": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_left_9": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [288, 0, 32, 36],
+      "texture": "enemy_run_left"
+    },
+    "enemy_run_right_0": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_1": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [32, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_10": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [320, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_11": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [352, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_2": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [64, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_3": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [96, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_4": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [128, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_5": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [160, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_6": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [192, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_7": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [224, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_8": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [256, 0, 32, 36],
+      "texture": "enemy_run_right"
+    },
+    "enemy_run_right_9": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [288, 0, 32, 36],
+      "texture": "enemy_run_right"
     },
     "explosion": {
       "pivot": [0.5, 0.5],
@@ -1050,6 +1602,12 @@
       "rect": [0, 0, 96, 32],
       "texture": "horizontalDeadRobot-export"
     },
+    "horizontalDeadRobot_revision-export": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 96, 32],
+      "texture": "horizontalDeadRobot_revision-export"
+    },
     "labs_tileset_3": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
@@ -1578,6 +2136,12 @@
       "rect": [0, 0, 32, 64],
       "texture": "sadHeadlessEnemy"
     },
+    "sadHeadlessEnemy_revision": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 64],
+      "texture": "sadHeadlessEnemy_revision"
+    },
     "shadow": {
       "pivot": [0.5, 0.5],
       "pixels_per_unit": 64.0,
@@ -1589,6 +2153,12 @@
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 32, 32],
       "texture": "shotUpEnemy"
+    },
+    "shotUpEnemyRevision": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 32],
+      "texture": "shotUpEnemyRevision"
     },
     "shotgun_orange": {
       "pivot": [0.5, 0.5],
@@ -1619,6 +2189,12 @@
       "pixels_per_unit": 64.0,
       "rect": [0, 0, 32, 32],
       "texture": "wallTileSet_1"
+    },
+    "warrior_idle": {
+      "pivot": [0.5, 0.5],
+      "pixels_per_unit": 64.0,
+      "rect": [0, 0, 32, 36],
+      "texture": "warrior_idle"
     }
   }
 }

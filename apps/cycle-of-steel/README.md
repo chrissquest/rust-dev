@@ -6,7 +6,8 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 to 3 of the port are in (foundation, real rooms, combat):
+Steps 1 to 3 of the port are in (foundation, real rooms, combat), and step 4
+(enemies) is under way:
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -82,8 +83,27 @@ where you spawn and interact. Interact again on the spot inside to leave.
   pass), and the pickup sounds (step 6). Nothing hurts the player yet, so the
   health bar only shows health packs at work once enemies arrive.
 
+- **Warriors.** The Warrior and the EnemyTank (a larger Warrior: 1000 health, a
+  350 swing) stand where Unity placed them; one EnemyTank waits in the hub's gun
+  room as a practice target. They run Unity's `Warrior` AI: wander, picking a new
+  direction every 0.25 s; follow the player for 5 s after seeing them within 4
+  (or 5) units with nothing solid between; swing when the player touches their
+  reach, the blow landing 0.5 s in and hurting for the next 0.4 s, at most every
+  1.5 s. They act only while the player is in their screen-sized block. Bullets,
+  beams and blasts push them back, freezing bullets slow them and tint them cyan,
+  and they die into one of three bodies, sometimes dropping a data cell or a
+  health pack. Their run and swing animations come from Unity's clips. The player
+  can now be hurt, with 0.5 s of invulnerability after each blow; at 0 they start
+  the room again (a placeholder until the full loop, step 7).
+  Differences: Unity pushes enemies every rendered frame, so their speed depends
+  on the frame rate; at the 60 frames assumed here a Warrior walks about 0.36
+  units/s. Unity's Warrior freezes for good if it swings while heading exactly
+  diagonally or nowhere; here it swings at the player. Enemies and the player do
+  not push each other yet, the player does not flash when hurt, and the doors'
+  barriers are not in.
+
 Not in yet:
-enemies; lighting (rooms look flatter and brighter than in
+the other enemies; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
@@ -114,6 +134,7 @@ cargo run -p cycle-of-steel -- --screenshot ns1.png --room ns1 --whole-room
 cargo run -p cycle-of-steel -- --screenshot fire.png --give shotgun_1 --aim 1,0 --ticks 8
 cargo run -p cycle-of-steel -- --screenshot beam.png --give laser_2 --aim -1,0.6 --ticks 8
 cargo run -p cycle-of-steel -- --screenshot chests.png --room n1 --whole-room
+cargo run -p cycle-of-steel -- --screenshot warrior.png --room n1 --ticks 300
 ```
 
 `--room` picks any file under `assets/rooms`; `--whole-room` frames all of it, for
@@ -184,6 +205,7 @@ src/
     guns.rs      one gun's fire timer and heat
     combat.rs    bullets, hit effects, targets and chests, guns on the floor
     loot.rs      rolling a broken chest's loot; drops flying to the player
+    enemy.rs     the Warrior AI: wander, follow, swing
     elemental.rs being frozen (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
@@ -193,6 +215,7 @@ assets/
   rooms/         one JSON file per room (format: see apps/cos-convert/README.md)
   guns.json      every gun, bullet and hit effect, with their numbers
   loot.json      chests, the loot pools they roll on, and drops
+  enemies.json   enemies: health, body, loot, AI numbers, animations
   sprites.json   every sprite by name: texture, rectangle, pivot
   font.json      the pixel font: each character's glyph sprite and advance
   sprites/       PNGs copied from the Unity project

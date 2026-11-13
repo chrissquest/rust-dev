@@ -25,7 +25,7 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::assets::AssetSource;
-use crate::data::{GunsFile, LootFile, RoomFile};
+use crate::data::{EnemiesFile, GunsFile, LootFile, RoomFile};
 use crate::input::{Action, Bindings, Gamepads, InputState, StickVisual, TouchControls};
 use crate::sim::defs::Defs;
 use crate::sim::room::Room;
@@ -353,7 +353,7 @@ fn give_guns(world: &mut World, names: &[String]) -> Result<()> {
 
 /// Loads the game's definitions and a room, and builds the world in it.
 fn load_world(assets: &AssetSource, room: &str, seed: u32) -> Result<World> {
-    let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?.with_loot(&LootFile::load(assets)?)?);
+    let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?.with_loot(&LootFile::load(assets)?)?.with_enemies(&EnemiesFile::load(assets)?)?);
     let room = Room::from_file(RoomFile::load(assets, room)?);
     Ok(World::new(room, defs, seed))
 }
@@ -496,7 +496,10 @@ mod tests {
     fn the_hub_has_guns_a_target_and_a_free_spawn() {
         let world = hub();
         assert!(world.combat.pickups.len() >= 10, "the gun room's guns: {}", world.combat.pickups.len());
-        assert_eq!(world.combat.targets.len(), 1, "the test dummy");
+        assert_eq!(world.combat.targets.len(), 2, "the test dummy and the gun room's EnemyTank");
+        assert!(world.combat.targets[0].enemy.is_none());
+        let tank = world.combat.targets[1].enemy.as_ref().expect("an enemy");
+        assert_eq!(world.defs.enemy(tank.def).name, "EnemyTank");
         assert!(!world.room.box_hits_solid(world.player.position, HALF_SIZE));
     }
 
@@ -520,6 +523,9 @@ mod tests {
     /// the hub's test dummy, and returns the health the dummy lost in two seconds.
     fn shoot_at_the_dummy(name: &str, turned: f32) -> f32 {
         let mut world = hub();
+        // The gun room's EnemyTank is nearer the spawn than the dummy, so homing
+        // shots would chase it, as in Unity. These tests are about the dummy.
+        world.combat.targets.retain(|target| target.enemy.is_none());
         let gun = world.defs.gun_named(name).expect(name);
         world.give(gun);
         let before = world.combat.targets[0].health;
@@ -640,7 +646,8 @@ mod tests {
                 target.health = 0.0;
             }
             world.step(&Input::default());
-            assert_eq!(world.combat.remains.len(), chests.len(), "{room}");
+            let broken = world.combat.remains.iter().filter(|remains| matches!(remains.kind, crate::sim::loot::RemainsKind::Chest(_)));
+            assert_eq!(broken.count(), chests.len(), "{room}");
             for (chest, origin) in chests {
                 let def = world.defs.chest(chest);
                 let gives_gun = def.loot.iter().any(|entry| match entry.loot {
@@ -655,6 +662,29 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_real_enemy_tank_swings_for_350_and_dies_into_a_body() {
+        let mut world = hub();
+        let tank = world.combat.targets.iter().position(|target| target.enemy.is_some()).unwrap();
+        let def = world.defs.enemy(world.combat.targets[tank].enemy.as_ref().unwrap().def);
+        // `EnemyTank.prefab`: Killable maxHealth 1000; Warrior damage 350, followRange 5.
+        assert_eq!((def.max_health, def.warrior.damage, def.warrior.follow_range), (1000.0, 350.0, 5.0));
+        assert_eq!(def.animations[0].frames.len(), 12, "run_right has 12 frames");
+        // Stand right beside it in the gun room, without its health packs healing.
+        world.combat.drops.clear();
+        world.player.position = world.combat.targets[tank].origin + Vec2::new(0.3, 0.0);
+        world.player.previous_position = world.player.position;
+        for _ in 0..120 {
+            world.step(&Input::default());
+        }
+        assert_eq!(world.player.health, 650.0, "one swing landed within two seconds");
+
+        world.combat.targets[tank].health = 0.0;
+        world.step(&Input::default());
+        assert!(world.combat.targets.iter().all(|target| target.enemy.is_none()));
+        assert!(matches!(world.combat.remains[0].kind, crate::sim::loot::RemainsKind::Body(..)));
     }
 
     #[test]
@@ -675,8 +705,8 @@ mod tests {
         for _ in 0..120 {
             world.step(&Input::default());
         }
-        assert_eq!(world.data_cells, 3, "`Data Drop 2` is worth 3");
-        assert_eq!(world.player.health, 1000.0, "healed by 100 but not past the top");
+        assert_eq!(world.data_cells, 10, "the hub sets its `Data Drop 2`s to 10");
+        assert_eq!(world.player.health, 1000.0, "healed by 500 but not past the top");
         assert_eq!(world.combat.drops.len(), 4);
     }
 

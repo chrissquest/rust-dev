@@ -1,0 +1,175 @@
+{
+  "enemies": {
+    "EnemyTank": {
+      "animations": {
+        "attack_down": {
+          "fps": 12.0,
+          "frames": ["attack_down_0", "attack_down_1", "attack_down_2", "attack_down_3", "attack_down_4", "attack_down_5", "attack_down_6", "attack_down_7", "attack_down_8", "attack_down_9", "attack_down_10"]
+        },
+        "attack_left": {
+          "fps": 12.0,
+          "frames": ["attack_left_0", "attack_left_1", "attack_left_2", "attack_left_3", "attack_left_4", "attack_left_5", "attack_left_6", "attack_left_7", "attack_left_8", "attack_left_9", "attack_left_10"]
+        },
+        "attack_right": {
+          "fps": 12.0,
+          "frames": ["attack_right_0", "attack_right_1", "attack_right_2", "attack_right_3", "attack_right_4", "attack_right_5", "attack_right_6", "attack_right_7", "attack_right_8", "attack_right_9", "attack_right_10"]
+        },
+        "attack_up": {
+          "fps": 12.0,
+          "frames": ["attack_up_0", "attack_up_1", "attack_up_2", "attack_up_3", "attack_up_4", "attack_up_5", "attack_up_6", "attack_up_7", "attack_up_8", "attack_up_9", "attack_up_10"]
+        },
+        "run_back": {
+          "fps": 12.0,
+          "frames": ["enemy_run_back_0", "enemy_run_back_1", "enemy_run_back_2", "enemy_run_back_3", "enemy_run_back_4", "enemy_run_back_5", "enemy_run_back_6", "enemy_run_back_7", "enemy_run_back_8", "enemy_run_back_9", "enemy_run_back_10", "enemy_run_back_11"]
+        },
+        "run_front": {
+          "fps": 12.0,
+          "frames": ["enemy_run_front_0", "enemy_run_front_1", "enemy_run_front_2", "enemy_run_front_3", "enemy_run_front_4", "enemy_run_front_5", "enemy_run_front_6", "enemy_run_front_7", "enemy_run_front_8", "enemy_run_front_9", "enemy_run_front_10", "enemy_run_front_11"]
+        },
+        "run_left": {
+          "fps": 12.0,
+          "frames": ["enemy_run_left_0", "enemy_run_left_1", "enemy_run_left_2", "enemy_run_left_3", "enemy_run_left_4", "enemy_run_left_5", "enemy_run_left_6", "enemy_run_left_7", "enemy_run_left_8", "enemy_run_left_9", "enemy_run_left_10", "enemy_run_left_11"]
+        },
+        "run_right": {
+          "fps": 12.0,
+          "frames": ["enemy_run_right_0", "enemy_run_right_1", "enemy_run_right_2", "enemy_run_right_3", "enemy_run_right_4", "enemy_run_right_5", "enemy_run_right_6", "enemy_run_right_7", "enemy_run_right_8", "enemy_run_right_9", "enemy_run_right_10", "enemy_run_right_11"]
+        }
+      },
+      "color": [0.9151, 0.7721, 0.764, 1.0],
+      "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
+      "drag": 15.0,
+      "freezable": true,
+      "loot": [
+        {
+          "drop": "Data Drop",
+          "weight": 30.0
+        },
+        {
+          "drop": "Health Drop",
+          "weight": 10.0
+        }
+      ],
+      "mass": 1.0,
+      "max_health": 1000.0,
+      "offset": [0.0, 0.0],
+      "scale": [2.0, 2.0],
+      "size": [0.4, 1.0],
+      "sprite": "warrior_idle",
+      "warrior": {
+        "damage": 350.0,
+        "damage_cooldown": 1.5,
+        "follow_range": 5.0,
+        "move_speed": 10.0,
+        "reach": {
+          "offset": [0.0, 0.0],
+          "size": [0.45, 1.04]
+        },
+        "spotting_length": 5.0,
+        "swings": {
+          "down": {
+            "offset": [-0.0071, -0.3396],
+            "size": [1.0365, 1.2409]
+          },
+          "left": {
+            "offset": [-0.3129, 0.2457],
+            "size": [1.0076, 1.2206]
+          },
+          "right": {
+            "offset": [0.3474, 0.2466],
+            "size": [1.0489, 1.2243]
+          },
+          "up": {
+            "offset": [0.0372, 0.3872],
+            "size": [0.941, 1.2845]
+          }
+        },
+        "wander_interval": 0.25
+      }
+    },
+    "Warrior": {
+      "animations": {
+        "attack_down": {
+          "fps": 12.0,
+          "frames": ["attack_down_0", "attack_down_1", "attack_down_2", "attack_down_3", "attack_down_4", "attack_down_5", "attack_down_6", "attack_down_7", "attack_down_8", "attack_down_9", "attack_down_10"]
+        },
+        "attack_left": {
+          "fps": 12.0,
+          "frames": ["attack_left_0", "attack_left_1", "attack_left_2", "attack_left_3", "attack_left_4", "attack_left_5", "attack_left_6", "attack_left_7", "attack_left_8", "attack_left_9", "attack_left_10"]
+        },
+        "attack_right": {
+          "fps": 12.0,
+          "frames": ["attack_right_0", "attack_right_1", "attack_right_2", "attack_right_3", "attack_right_4", "attack_right_5", "attack_right_6", "attack_right_7", "attack_right_8", "attack_right_9", "attack_right_10"]
+        },
+        "attack_up": {
+          "fps": 12.0,
+          "frames": ["attack_up_0", "attack_up_1", "attack_up_2", "attack_up_3", "attack_up_4", "attack_up_5", "attack_up_6", "attack_up_7", "attack_up_8", "attack_up_9", "attack_up_10"]
+        },
+        "run_back": {
+          "fps": 12.0,
+          "frames": ["enemy_run_back_0", "enemy_run_back_1", "enemy_run_back_2", "enemy_run_back_3", "enemy_run_back_4", "enemy_run_back_5", "enemy_run_back_6", "enemy_run_back_7", "enemy_run_back_8", "enemy_run_back_9", "enemy_run_back_10", "enemy_run_back_11"]
+        },
+        "run_front": {
+          "fps": 12.0,
+          "frames": ["enemy_run_front_0", "enemy_run_front_1", "enemy_run_front_2", "enemy_run_front_3", "enemy_run_front_4", "enemy_run_front_5", "enemy_run_front_6", "enemy_run_front_7", "enemy_run_front_8", "enemy_run_front_9", "enemy_run_front_10", "enemy_run_front_11"]
+        },
+        "run_left": {
+          "fps": 12.0,
+          "frames": ["enemy_run_left_0", "enemy_run_left_1", "enemy_run_left_2", "enemy_run_left_3", "enemy_run_left_4", "enemy_run_left_5", "enemy_run_left_6", "enemy_run_left_7", "enemy_run_left_8", "enemy_run_left_9", "enemy_run_left_10", "enemy_run_left_11"]
+        },
+        "run_right": {
+          "fps": 12.0,
+          "frames": ["enemy_run_right_0", "enemy_run_right_1", "enemy_run_right_2", "enemy_run_right_3", "enemy_run_right_4", "enemy_run_right_5", "enemy_run_right_6", "enemy_run_right_7", "enemy_run_right_8", "enemy_run_right_9", "enemy_run_right_10", "enemy_run_right_11"]
+        }
+      },
+      "color": [0.9151, 0.7721, 0.764, 1.0],
+      "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
+      "drag": 20.0,
+      "freezable": true,
+      "loot": [
+        {
+          "drop": "Data Drop",
+          "weight": 30.0
+        },
+        {
+          "drop": "Health Drop",
+          "weight": 10.0
+        }
+      ],
+      "mass": 1.0,
+      "max_health": 500.0,
+      "offset": [0.0, 0.0],
+      "size": [0.2, 0.5],
+      "sprite": "warrior_idle",
+      "warrior": {
+        "damage": 150.0,
+        "damage_cooldown": 1.5,
+        "follow_range": 4.0,
+        "move_speed": 10.0,
+        "reach": {
+          "offset": [0.0, 0.0],
+          "size": [0.225, 0.52]
+        },
+        "spotting_length": 5.0,
+        "swings": {
+          "down": {
+            "offset": [-0.0236, -0.1764],
+            "size": [0.6564, 0.9145]
+          },
+          "left": {
+            "offset": [-0.2344, 0.1465],
+            "size": [0.6358, 0.8074]
+          },
+          "right": {
+            "offset": [0.2565, 0.148],
+            "size": [0.6358, 0.8104]
+          },
+          "up": {
+            "offset": [0.0, 0.2984],
+            "size": [0.5857, 0.7102]
+          }
+        },
+        "wander_interval": 0.25
+      }
+    }
+  }
+}

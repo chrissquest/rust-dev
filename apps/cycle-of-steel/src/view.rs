@@ -22,9 +22,10 @@ use crate::data::{DecorationFile, DropKind, FontFile, RoomFile, ShakeFile, Sorti
 use crate::hud::{HudLayout, Rect};
 use crate::input::StickVisual;
 use crate::sim::combat::Interaction;
+use crate::sim::loot::RemainsKind;
 use crate::sim::defs::Defs;
 use crate::sim::player::{Facing, Player};
-use crate::sim::room::Room;
+use crate::sim::room::{CAMERA_BLOCK, Room};
 use crate::sim::{INVENTORY_SLOTS, World};
 
 /// World units from the bottom of the screen to the top: Unity's orthographic
@@ -33,11 +34,6 @@ const VIEW_HEIGHT: f32 = 2.0 * 2.11506;
 /// How fast the camera catches up with where it should be, in units per second.
 /// Fast enough to be invisible inside a room; it shows when changing rooms.
 const CAMERA_SPEED: f32 = 40.0;
-/// The camera stays inside one screen-sized block of the world at a time: a dungeon
-/// room, or the part of a larger room the player is standing in. Unity's
-/// `RoomInfo.width/height`.
-const CAMERA_BLOCK: Vec2 = Vec2::new(16.0, 9.0);
-
 /// Heights of the three draw groups. Under the straight-down camera only their
 /// order matters; they are real heights so a tilted camera can use them later.
 const Z_BELOW: f32 = 0.0;
@@ -89,6 +85,8 @@ const HUD_HEAT_BACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.45];
 const HUD_HEAT_COOL_COLOR: [f32; 4] = [1.0, 0.85, 0.2, 0.9];
 const HUD_HEAT_HOT_COLOR: [f32; 4] = [1.0, 0.2, 0.1, 0.95];
 const HUD_BUTTON_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.28];
+/// A frozen enemy's colour (`ElementalEffectHandler`), as picked on screen.
+const FROZEN_TINT: [f32; 4] = [0.3, 1.0, 1.0, 1.0];
 const HUD_HEALTH_COLOR: [f32; 4] = [0.55, 0.02, 0.02, 0.9];
 const HUD_TEXT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
@@ -156,6 +154,7 @@ pub struct View {
     /// Per chest: whole, damaged and broken.
     chest_sprites: Vec<[Option<ResolvedSprite>; 3]>,
     drop_sprites: Vec<ResolvedSprite>,
+    enemy_sprites: Vec<EnemySprites>,
     /// A data cell's picture, beside the count in the HUD.
     data_icon: Option<ResolvedSprite>,
     /// Per gun: a laser's start cap, middle stretch and end cap.
@@ -229,6 +228,7 @@ impl View {
             font: HashMap::new(),
             chest_sprites: Vec::new(),
             drop_sprites: Vec::new(),
+            enemy_sprites: Vec::new(),
             data_icon: None,
             laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
@@ -262,6 +262,17 @@ impl View {
         for drop in &defs.drops {
             let sprite = view.sprite(renderer, &drop.sprite)?;
             view.drop_sprites.push(sprite);
+        }
+        for enemy in &defs.enemies {
+            let idle = view.sprite(renderer, &enemy.sprite)?;
+            let mut animations: [Vec<ResolvedSprite>; 8] = Default::default();
+            for (frames, animation) in animations.iter_mut().zip(&enemy.animations) {
+                for frame in &animation.frames {
+                    frames.push(view.sprite(renderer, frame)?);
+                }
+            }
+            let bodies = enemy.dead_sprites.iter().map(|name| view.sprite(renderer, name)).collect::<Result<_>>()?;
+            view.enemy_sprites.push(EnemySprites { idle, animations, bodies });
         }
         // The plainest data cell: the one worth least.
         view.data_icon = defs
@@ -494,7 +505,11 @@ impl View {
 
         // Broken chests are on Unity's `Background` sorting layer.
         for remains in &world.combat.remains {
-            if let Some(sprite) = &self.chest_sprites[remains.chest.0 as usize][2] {
+            let sprite = match remains.kind {
+                RemainsKind::Chest(chest) => self.chest_sprites[chest.0 as usize][2].as_ref(),
+                RemainsKind::Body(enemy, pick) => self.enemy_sprites[enemy.0 as usize].bodies.get(pick as usize),
+            };
+            if let Some(sprite) = sprite {
                 let placed = sprite.placed(remains.position.extend(Z_BELOW), [1.0, 1.0], 0.0, [false, false]);
                 self.list.sprite(sprite.texture, placed);
             }
@@ -513,6 +528,7 @@ impl View {
             }
         }
 
+        self.draw_enemies(world, blend);
         self.draw_player(world, player_position);
 
         for bullet in &world.combat.bullets {
@@ -598,6 +614,36 @@ impl View {
     /// `size` is world units per em. Characters the font lacks are skipped.
     fn draw_text(&mut self, text: &str, baseline: Vec2, z: f32, size: f32, color: [f32; 4]) {
         push_text(&mut self.list, &self.font, text, baseline, z, size, color);
+    }
+
+    /// Enemies on Unity's `Entities` layer: their animation's frame, or the idle
+    /// picture until they first move, tinted cyan while frozen.
+    fn draw_enemies(&mut self, world: &World, blend: f32) {
+        let now = world.time();
+        for target in &world.combat.targets {
+            let Some(enemy) = &target.enemy else {
+                continue;
+            };
+            let def = world.defs.enemy(enemy.def);
+            let sprites = &self.enemy_sprites[enemy.def.0 as usize];
+            let sprite = match enemy.animation {
+                Some((animation, started)) => {
+                    let frames = &sprites.animations[animation.index()];
+                    let fps = def.animations[animation.index()].fps as f64;
+                    let frame = ((now - started).max(0.0) * fps) as usize % frames.len().max(1);
+                    frames.get(frame).unwrap_or(&sprites.idle)
+                }
+                None => &sprites.idle,
+            };
+            // `ElementalEffectHandler` sets the renderer's colour while frozen.
+            let frozen = target.elemental.as_ref().is_some_and(|elemental| elemental.is_frozen());
+            let color = if frozen { FROZEN_TINT } else { def.color };
+            let position = enemy.previous_origin.lerp(target.origin, blend);
+            let placed = sprite
+                .placed(position.extend(Z_ENTITIES), def.scale, 0.0, [false, false])
+                .with_color(srgb_to_linear(color));
+            self.list.sprite(sprite.texture, placed);
+        }
     }
 
     /// The player: shadow, the hand behind, the body, the gun and the hand in front.
@@ -817,6 +863,14 @@ struct SpriteGroup {
     /// Drawn over the characters rather than under them.
     above: bool,
     sprites: Vec<(TextureId, Sprite)>,
+}
+
+/// An enemy's pictures: standing, each animation's frames, and its bodies.
+struct EnemySprites {
+    idle: ResolvedSprite,
+    /// Indexed by `Animation::index`.
+    animations: [Vec<ResolvedSprite>; 8],
+    bodies: Vec<ResolvedSprite>,
 }
 
 /// A catalogue sprite ready to be placed: its texture, UVs, size and pivot.

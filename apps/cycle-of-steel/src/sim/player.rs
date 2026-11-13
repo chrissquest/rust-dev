@@ -69,6 +69,8 @@ const STRIDE_BOB: [f32; 6] = [0.0, 0.02, 0.01, 0.0, -0.02, -0.01];
 /// Bullets leave from this far along the aim from the pivot.
 /// `PlayerData.maxHealth` on `Prefabs/Player.prefab`.
 pub const MAX_HEALTH: f32 = 1000.0;
+/// `PlayerData.damagedInvulnerableTime` on `Prefabs/Player.prefab`, in seconds.
+pub const INVULNERABLE_TIME: f64 = 0.5;
 
 pub const MUZZLE_DISTANCE: f32 = 0.35;
 
@@ -104,9 +106,11 @@ pub struct Player {
     pub moved_right: bool,
     /// Chance of a shot doing double damage, 0..=1. Raised by upgrades later.
     pub crit_chance: f32,
-    /// Nothing hurts the player yet; health packs fill this back up to the top.
+    /// Enemies take this down and health packs fill it back up to the top.
     pub health: f32,
     pub max_health: f32,
+    /// When the player was last hurt, in world seconds.
+    pub last_hurt: f64,
 }
 
 impl Player {
@@ -123,6 +127,7 @@ impl Player {
             crit_chance: 0.0,
             health: MAX_HEALTH,
             max_health: MAX_HEALTH,
+            last_hurt: f64::NEG_INFINITY,
         }
     }
 
@@ -149,6 +154,17 @@ impl Player {
     /// Where a bullet fired along `aim` starts.
     pub fn muzzle(&self, aim: Vec2) -> Vec2 {
         self.pivot() + aim * MUZZLE_DISTANCE
+    }
+
+    /// `PlayerData.DamagePlayer`: nothing lands within [`INVULNERABLE_TIME`] of the
+    /// last blow that did. Returns whether this one did.
+    pub fn hurt(&mut self, amount: f32, now: f64) -> bool {
+        if now - self.last_hurt <= INVULNERABLE_TIME {
+            return false;
+        }
+        self.health -= amount;
+        self.last_hurt = now;
+        true
     }
 
     /// `solids` are boxes (centre, half size) that block the player besides walls.
