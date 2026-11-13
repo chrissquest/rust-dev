@@ -146,7 +146,7 @@ pub fn step_drops(
 /// The acceleration, in units/s^2, of a drop pulled with `pickup_speed`: a force
 /// of that much each frame, [`UNITY_FRAME_RATE`] frames a second, on a body of
 /// mass 1, integrated over Unity's physics steps. 7 gives 8.4 units/s^2, which
-/// against the drops' drag of 3 tops out near 2.7 units/s, faster than the player
+/// against the drops' drag of 3 tops out near 2.8 units/s, faster than the player
 /// runs.
 fn pull_acceleration(pickup_speed: f32) -> f32 {
     pickup_speed * UNITY_FRAME_RATE * UNITY_STEP
@@ -221,7 +221,8 @@ mod tests {
             step_drops(&mut drop, &defs, Vec2::ZERO, Vec2::splat(0.01), |_, _| {});
             top = top.max(drop[0].velocity.length());
         }
-        assert!((2.5..2.8).contains(&top), "top speed {top}");
+        // Unity: v = (v + 0.168) / 1.06 settles at 2.8.
+        assert!((2.7..2.9).contains(&top), "top speed {top}");
         assert!(top > crate::sim::player::TOP_SPEED);
     }
 }

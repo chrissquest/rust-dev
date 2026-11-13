@@ -96,7 +96,7 @@ where you spawn and interact. Interact again on the spot inside to leave.
   can now be hurt, with 0.5 s of invulnerability after each blow; at 0 they start
   the room again (a placeholder until the full loop, step 7).
   Differences: Unity pushes enemies every rendered frame, so their speed depends
-  on the frame rate; at the 60 frames assumed here a Warrior walks about 0.36
+  on the frame rate; at the 60 frames assumed here a Warrior walks about 0.6
   units/s. Unity's Warrior freezes for good if it swings while heading exactly
   diagonally or nowhere; here it swings at the player. Enemies and the player do
   not push each other yet, the player does not flash when hurt, and the doors'
@@ -110,7 +110,7 @@ where you spawn and interact. Interact again on the spot inside to leave.
   from all eight muzzles every 1.3 s, sight or no sight. Their bullets fly over
   ledges and through enemies and chests, stop at walls or the player, and leave
   a small splash. The Crab's push is scaled by Unity's frame time, so its speed
-  (about 0.93 units/s) does not depend on the frame-rate assumption.
+  (about 1.33 units/s) does not depend on the frame-rate assumption.
 
 - **LASERCrabs.** They follow like Crabs (and bite like them), drawing a green
   sight line to the player. After a second of following within 4 units they
@@ -127,9 +127,9 @@ where you spawn and interact. Interact again on the spot inside to leave.
   die on the spot, and like every explosive enemy it then explodes: 200 to
   everything within 0.88 units, the player included, pushing them away.
   Explosions now hurt the player too, the bazooka's own included, as in Unity:
-  standing in your own blast costs 200. A Drone's drift is very slow (about 0.07
-  units/s at the 60 frames a second assumed for Unity's per-frame push, against
-  its drag of 35).
+  standing in your own blast costs 200. A Drone drifts in slowly: about 0.24 units/s at
+  the 60 frames a second assumed for Unity's per-frame push, against its drag of
+  35.
 
 Not in yet:
 the boss; lighting (rooms look flatter and brighter than in
@@ -264,7 +264,13 @@ directly and the same inputs always give the same world.
 
 Constants that reproduce the Unity project say where they come from. The player's
 movement, for example, is derived from the old force, mass and drag values and
-tested against them (`sim/player.rs`): top speed about 1.82 units per second.
+tested against them (`sim/player.rs`): top speed about 2.22 units per second.
+
+Drag is applied as Unity's 2D physics (Box2D) applies it: velocity is divided by
+`1 + drag * 0.02` every 0.02 s physics step (`combat::drag_kept`). Until step 4
+the port multiplied by `1 - drag * 0.02` instead, Unity's 3D formula, which made
+the player top out at 1.82 rather than 2.22 and heavily damped enemies far
+slower than in Unity.
 
 Units are Unity's: sprites at 64 pixels per unit, tiles half a unit, rooms 16 by 9.
 

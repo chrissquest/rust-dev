@@ -546,15 +546,18 @@ fn homing_acceleration(homing: f32) -> f32 {
     homing * UNITY_STEP
 }
 
-/// The share of its velocity a bullet keeps over one step of [`DT`] under Unity's
-/// linear `drag`. Unity multiplies velocity by `1 - drag * UNITY_STEP` each
-/// physics step; this is the same decay spread over our shorter step. Homing
-/// bullets have drag 3 and so settle at about 3.1 units/s; the rest have none.
+/// The share of its velocity a body keeps over one step of [`DT`] under Unity's
+/// linear `drag`. Unity's 2D physics is Box2D, which after adding forces divides
+/// velocity by `1 + drag * UNITY_STEP` each physics step; this is the same decay
+/// spread over our shorter step. (Unity's 3D drag, `1 - drag * dt`, is not what
+/// a `Rigidbody2D` does, and with the large drags enemies have, 15 to 35, the two
+/// are far apart.) Homing bullets have drag 3 and so settle at about 3.3
+/// units/s; other bullets have none.
 pub(super) fn drag_kept(drag: f32) -> f32 {
     if drag == 0.0 {
         return 1.0;
     }
-    (1.0 - drag * UNITY_STEP).max(0.0).powf(DT / UNITY_STEP)
+    (1.0 / (1.0 + drag * UNITY_STEP)).powf(DT / UNITY_STEP)
 }
 
 /// Bullets fly over ledges; only walls stop them.
@@ -835,8 +838,8 @@ mod tests {
     fn homing_speed_matches_unitys_force_and_drag() {
         // 500 * 0.02 s, mass 1.
         assert_eq!(homing_acceleration(500.0), 10.0);
-        // Drag 3 keeps 94% per 0.02 s Unity step: over 0.1 s, 0.94^5.
-        assert!((drag_kept(3.0).powi(6) - 0.94f32.powi(5)).abs() < 1e-4);
+        // Drag 3 keeps 1 / 1.06 per 0.02 s Unity step: over 0.1 s, that to the fifth.
+        assert!((drag_kept(3.0).powi(6) - (1.0f32 / 1.06).powi(5)).abs() < 1e-4);
         assert_eq!(drag_kept(0.0), 1.0);
 
         // With nothing to chase a homing bullet only slows: 10 units/s falls
@@ -847,17 +850,17 @@ mod tests {
         fire(&mut combat, &defs, "seeker", Vec2::new(2.0, 4.5), Vec2::X);
         run(&mut combat, &defs, &room, 60);
         let speed = combat.bullets[0].velocity.length();
-        assert!((speed - 10.0 * 0.94f32.powi(50)).abs() < 0.01, "{speed}");
+        assert!((speed - 10.0 * (1.0f32 / 1.06).powi(50)).abs() < 0.01, "{speed}");
 
         // Chasing a far target it settles where push and drag balance. In Unity
-        // that is (v + 0.2) * 0.94 = v, about 3.13 units/s.
+        // that is (v + 0.2) / 1.06 = v, about 3.33 units/s.
         // A fresh bullet, flown almost to the end of its 2 s.
         let mut combat = Combat::new();
         combat.targets.push(target(1, Vec2::new(14.0, 4.5), 1000.0));
         fire(&mut combat, &defs, "seeker", Vec2::new(2.0, 4.5), Vec2::X);
         run(&mut combat, &defs, &room, 115);
         let speed = combat.bullets[0].velocity.length();
-        assert!((speed - 3.13).abs() < 0.05, "{speed}");
+        assert!((speed - 3.33).abs() < 0.06, "{speed}");
     }
 
     #[test]

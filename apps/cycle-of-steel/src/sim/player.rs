@@ -3,9 +3,9 @@
 //! The numbers reproduce the Unity player. There, `PlayerInput` added a force of
 //! `move * moveSpeed * deltaTime * 100` every frame to a body with mass 1 and
 //! linear drag 9 (`moveSpeed` 10). Summed over a 50 Hz physics step that is an
-//! acceleration of 20 units/s^2, and Unity's drag multiplies velocity by
-//! `1 - drag * dt` = 0.82 per step. The player therefore tops out at about
-//! 1.82 units/s and loses 18% of their speed every 0.02 s when input stops.
+//! acceleration of 20 units/s^2, and Unity's 2D drag (Box2D's) divides velocity
+//! by `1 + drag * dt` = 1.18 per step. The player therefore tops out at about
+//! 2.22 units/s and keeps 1 / 1.18 of their speed every 0.02 s when input stops.
 //!
 //! Here the same curve is integrated exactly, so it does not depend on the step
 //! rate: velocity decays towards `input * TOP_SPEED` at `RESPONSE` per second.
@@ -17,10 +17,10 @@ use super::room::Room;
 use super::{DT, Input};
 
 /// Speed reached while holding a direction, in world units per second.
-/// Unity: the fixed point of `v = (v + 0.4) * 0.82`.
-pub const TOP_SPEED: f32 = 0.328 / 0.18;
-/// How quickly velocity closes on its target, per second. Unity: `-ln(0.82) / 0.02`.
-pub const RESPONSE: f32 = 9.922_546;
+/// Unity: the fixed point of `v = (v + 0.4) / 1.18`.
+pub const TOP_SPEED: f32 = 0.4 / 0.18;
+/// How quickly velocity closes on its target, per second. Unity: `ln(1.18) / 0.02`.
+pub const RESPONSE: f32 = 8.275_722;
 
 /// Half the collision box. Unity's player has a 0.19 x 0.48 capsule; this is its
 /// bounding box, so corners are squarer than they were.
@@ -248,7 +248,7 @@ mod tests {
         let mut player = Player::new(Vec2::new(2.0, 4.5));
         step_for(&mut player, &room, Vec2::new(1.0, 0.0), 2.0);
         assert!((player.velocity.x - TOP_SPEED).abs() < 1e-3, "{}", player.velocity.x);
-        assert!((TOP_SPEED - 1.822).abs() < 1e-3);
+        assert!((TOP_SPEED - 2.222).abs() < 1e-3);
     }
 
     #[test]
@@ -257,9 +257,9 @@ mod tests {
         let mut player = Player::new(Vec2::new(2.0, 4.5));
         step_for(&mut player, &room, Vec2::new(1.0, 0.0), 2.0);
         let before = player.velocity.x;
-        // 0.1 s is five of Unity's 0.02 s physics steps, each keeping 82% of the speed.
+        // 0.1 s is five of Unity's 0.02 s physics steps, each keeping 1 / 1.18 of the speed.
         step_for(&mut player, &room, Vec2::ZERO, 0.1);
-        let expected = before * 0.82f32.powf(0.1 / 0.02);
+        let expected = before * (1.0f32 / 1.18).powf(0.1 / 0.02);
         assert!((player.velocity.x - expected).abs() < 1e-3, "{} vs {expected}", player.velocity.x);
     }
 
@@ -267,7 +267,7 @@ mod tests {
     fn diagonal_input_is_not_faster() {
         let room = Room::test_room();
         let mut player = Player::new(Vec2::new(4.0, 2.0));
-        step_for(&mut player, &room, Vec2::new(1.0, 1.0), 2.0);
+        step_for(&mut player, &room, Vec2::new(1.0, 1.0), 1.2);
         assert!((player.velocity.length() - TOP_SPEED).abs() < 1e-3);
     }
 

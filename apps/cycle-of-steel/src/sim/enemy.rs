@@ -49,7 +49,7 @@ use super::room::{CAMERA_BLOCK, Room};
 /// `Warrior.Update` and `Wander` push with `moveSpeed` every rendered frame,
 /// without scaling by the frame time, so Unity's speed depends on the frame
 /// rate. As for drops, one Unity frame is taken to be 1/60 s. A Warrior then
-/// tops out near 0.36 units/s, an EnemyTank near 0.5.
+/// tops out near 0.6 units/s, an EnemyTank (drag 15) near 0.8.
 const UNITY_FRAME_RATE: f32 = 60.0;
 /// `PlayerData.difficulty`: 1 on a new save. It scales how hard enemies push.
 const DIFFICULTY: f32 = 1.0;
@@ -748,7 +748,7 @@ fn warrior_acceleration(warrior: &WarriorDef, def: &EnemyDef) -> f32 {
 
 /// Units/s^2 from `RangedAI`'s push of `moveSpeed * deltaTime` each frame: summed
 /// over a 0.02 s physics step that is `moveSpeed * 0.02`, whatever the frame
-/// rate. The Crab's 1000 against its drag of 15 tops out near 0.93 units/s.
+/// rate. The Crab's 1000 against its drag of 15 tops out near 1.33 units/s.
 fn ranged_acceleration(ranged: &RangedDef, def: &EnemyDef) -> f32 {
     ranged.move_speed * UNITY_STEP / def.mass
 }
@@ -959,13 +959,13 @@ mod tests {
     fn its_top_speed_is_unitys_at_sixty_frames_a_second() {
         let defs = test_defs();
         let def = defs.enemy(defs.enemy_named("brute").unwrap());
-        // v = (v + 10 * 1.2 * 0.02) * (1 - 20 * 0.02) settles at 0.36.
+        // v = (v + 10 * 1.2 * 0.02) / (1 + 20 * 0.02) settles at 0.6.
         let mut speed = 0.0_f32;
         let Ai::Warrior(warrior) = &def.ai else { panic!("a warrior") };
         for _ in 0..600 {
             speed = (speed + warrior_acceleration(warrior, def) * DT) * drag_kept(def.drag);
         }
-        assert!((speed - 0.36).abs() < 0.03, "{speed}");
+        assert!((speed - 0.6).abs() < 0.03, "{speed}");
     }
 
     #[test]

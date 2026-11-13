@@ -76,11 +76,9 @@ Piece 3 is done: `Ai::Drone` (rises, drifts, flies over ledges via
 deaths. Explosions now hurt and push the player (`combat::explode`), which was
 part of piece 4. `DashAI.cs` is used by no prefab and is not ported.
 
-Open question for the owner: Unity 2D (Box2D) applies linear drag as
-`v / (1 + drag * dt)`, but the port uses `v * (1 - drag * dt)` everywhere
-(`combat::drag_kept`, the player's `RESPONSE`). For high drags (Drones 35,
-Warriors 20) that makes things much slower; the player would top out near 2.2
-rather than 1.82 units/s. Not changed without the owner's say.
+Drag follows Unity 2D (Box2D): velocity divided by `1 + drag * dt` per physics
+step (`combat::drag_kept`, the player's `RESPONSE`), switched in step 4 at the
+owner's request; the player now tops out at 2.22 units/s, not 1.82.
 
 **Next: step 4 piece 4**: explosions lasting their 0.3 s (hurting what walks in)
 and EffectGrate hazards. Then piece 5, the boss. Convert each new kind of data in
