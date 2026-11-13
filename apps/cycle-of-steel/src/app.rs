@@ -763,9 +763,27 @@ mod tests {
         world.player.previous_position = at;
         world.step(&Input::default());
         assert!(world.combat.targets.is_empty(), "it died at once");
-        assert_eq!(world.player.last_hurt, 0.0, "its explosion hurt the player");
+        // Its explosion notices the player on the next step, as Unity's trigger does.
+        world.step(&Input::default());
+        assert_eq!(world.player.last_hurt, crate::sim::DT as f64, "its explosion hurt the player");
         // 200 off, unless the health pack it can drop landed on the player too.
         assert!(world.player.health == 800.0 || world.player.health == 900.0, "{}", world.player.health);
+    }
+
+    #[test]
+    fn real_lava_grates_hurry_a_warrior_standing_on_them() {
+        use crate::sim::combat::GrateKind;
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        let mut world = load_world(&assets, "n1", 1).expect("n1 loads");
+        let lava = *world.combat.grates.iter().find(|grate| grate.kind == GrateKind::Lava).expect("n1 has lava");
+        assert_eq!(lava.duration, 3.0);
+        let warrior = world.combat.targets.iter().position(|target| target.enemy.is_some()).unwrap();
+        world.combat.targets[warrior].origin = lava.position;
+        world.combat.targets[warrior].position = lava.position;
+        world.step(&Input::default());
+        let def = world.defs.enemy(world.combat.targets[warrior].enemy.as_ref().unwrap().def);
+        let drag = world.combat.targets[warrior].elemental.unwrap().drag(def.drag);
+        assert_eq!(drag, def.drag - 2.0, "lava takes 2 off its drag");
     }
 
     #[test]

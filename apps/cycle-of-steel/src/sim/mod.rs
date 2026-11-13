@@ -21,7 +21,7 @@ use std::sync::Arc;
 use crystal_engine::glam::Vec2;
 
 use crate::data::{GunKind, ShakeFile};
-use combat::{Combat, Interaction, Pickup, Target, Teleport};
+use combat::{Combat, Grate, GrateKind, Interaction, Pickup, Target, Teleport};
 use crate::data::DropKind;
 use loot::Drop;
 use elemental::Elemental;
@@ -121,6 +121,10 @@ impl World {
             }
             for object in &file.objects {
                 let position = Vec2::from(object.position);
+                if object.prefab == "EffectGrate" {
+                    combat.grates.push(grate(object, position));
+                    continue;
+                }
                 if let Some(gun) = defs.gun_named(&object.prefab) {
                     combat.pickups.push(Pickup { gun: Gun::new(gun), position });
                 } else if let Some(drop) = defs.drop_named(&object.prefab) {
@@ -333,6 +337,24 @@ impl World {
                 }
             }
         }
+    }
+}
+
+/// A placed `EffectGrate`. Every placement in the rooms sets its box and, all
+/// but the plain ones, whether it is water or lava; the rest comes from
+/// `Prefabs/Enemies/EffectGrate.prefab`: water, a 1 by 1 box, duration 3.
+fn grate(object: &crate::data::ObjectFile, position: Vec2) -> Grate {
+    let number = |field: &str, default: f32| {
+        object.overrides.get(field).and_then(|value| value.parse().ok()).unwrap_or(default)
+    };
+    let lava = number("EffectGrate.lava", 0.0) != 0.0;
+    let water = number("EffectGrate.water", 1.0) != 0.0;
+    Grate {
+        position: position + Vec2::new(number("BoxCollider2D.m_Offset.x", 0.0), number("BoxCollider2D.m_Offset.y", 0.0)),
+        half: Vec2::new(number("BoxCollider2D.m_Size.x", 1.0), number("BoxCollider2D.m_Size.y", 1.0)) * 0.5,
+        // `EffectGrate.OnTriggerStay2D` checks water before lava.
+        kind: if water || !lava { GrateKind::Water } else { GrateKind::Lava },
+        duration: number("EffectGrate.duration", 3.0),
     }
 }
 

@@ -714,13 +714,13 @@ fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room,
         .chain(after.iter())
         .filter(|other| other.chest.is_some())
         .map(|other| (other.position, other.half));
-    let added_drag = target.elemental.as_ref().map_or(0.0, |elemental| elemental.added_drag());
+    let drag = target.elemental.as_ref().map_or(def.drag, |elemental| elemental.drag(def.drag));
     let body = grown(OffsetBox { half: def.half, offset: def.offset }, target, def);
     let enemy = target.enemy.as_mut().expect("an enemy");
 
     enemy.previous_origin = target.origin;
     enemy.velocity += push * DT;
-    enemy.velocity *= drag_kept(def.drag + added_drag);
+    enemy.velocity *= drag_kept(drag);
     let half = Vec2::from(body.half);
     let center = target.origin + Vec2::from(body.offset);
     let delta = enemy.velocity * DT;

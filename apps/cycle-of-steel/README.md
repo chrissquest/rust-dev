@@ -131,6 +131,15 @@ where you spawn and interact. Interact again on the spot inside to leave.
   the 60 frames a second assumed for Unity's per-frame push, against its drag of
   35.
 
+- **Lasting blasts, water and lava.** An explosion stays live for its 0.3
+  seconds: whatever walks into it then is hurt and pushed too, once per entry,
+  as Unity's trigger works. The rooms' 179 water and lava pools (Unity's
+  `EffectGrate`, invisible triggers over the tiles) now act on enemies standing
+  in them: water doubles their drag, so they wade; lava takes 2 off it, so they
+  hurry; either wears off about half a second after they step out. In Unity the
+  player has no `ElementalEffectHandler`, so pools do nothing to them, and
+  flying Drones pass over.
+
 Not in yet:
 the boss; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
@@ -237,7 +246,7 @@ src/
     combat.rs    bullets, hit effects, targets and chests, guns on the floor
     loot.rs      rolling a broken chest's loot; drops flying to the player
     enemy.rs     enemy AIs (Warrior, ranged, turret, laser, drone), bites, shots
-    elemental.rs being frozen (Unity's ElementalEffectHandler)
+    elemental.rs freezing, water and lava (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
     collide.rs   moving a box through solid cells

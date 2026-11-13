@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (pieces 1 to 3 done), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (pieces 1 to 4 done; the boss left), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -80,8 +80,12 @@ Drag follows Unity 2D (Box2D): velocity divided by `1 + drag * dt` per physics
 step (`combat::drag_kept`, the player's `RESPONSE`), switched in step 4 at the
 owner's request; the player now tops out at 2.22 units/s, not 1.82.
 
-**Next: step 4 piece 4**: explosions lasting their 0.3 s (hurting what walks in)
-and EffectGrate hazards. Then piece 5, the boss. Convert each new kind of data in
+Piece 4 is done: explosions are `Combat::blasts` that hurt whatever enters them
+while they last; `EffectGrate`s are `Combat::grates` (read from room overrides)
+that wet or heat enemies through `Elemental::wet`/`burn_in_lava`, which change
+the drag `Elemental::drag` gives `move_enemy`.
+
+**Next: step 4 piece 5, the boss** (Priest: `BossAI.cs`, its bullets, `BossBar`). Convert each new kind of data in
 `cos-convert` when the step needs it, not before.
 
 ### How to work here

@@ -162,6 +162,46 @@ pub struct Combat {
     pub damage_numbers: Vec<DamageNumber>,
     /// Bullets enemies fired.
     pub shots: Vec<Shot>,
+    /// Explosions while they can still hurt.
+    pub blasts: Vec<Blast>,
+    /// The room's water and lava pools.
+    pub grates: Vec<Grate>,
+}
+
+/// A floor grate over water or lava (`EffectGrate`): a trigger box that wets or
+/// heats enemies standing on it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Grate {
+    pub position: Vec2,
+    pub half: Vec2,
+    pub kind: GrateKind,
+    /// How long the effect lasts once set, in Unity's 0.1-a-frame units.
+    pub duration: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GrateKind {
+    Water,
+    Lava,
+}
+
+/// Room for this many live explosions before the oldest makes way.
+const BLAST_CAPACITY: usize = 32;
+/// How many targets one explosion remembers being inside it.
+const BLAST_MEMORY: usize = 32;
+
+/// An explosion while its trigger lasts (`ExplosionScript`, the effect's
+/// `TimeToLive`). Anything that comes into it is hurt and pushed once; leaving
+/// and coming back in hurts again, as `OnTriggerEnter2D` would.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Blast {
+    pub center: Vec2,
+    explosion: ExplosionFile,
+    time_left: f32,
+    /// Ids of the targets inside it now.
+    inside: [u32; BLAST_MEMORY],
+    inside_count: usize,
+    player_inside: bool,
 }
 
 impl Combat {
@@ -177,6 +217,8 @@ impl Combat {
             beam: None,
             damage_numbers: Vec::with_capacity(DAMAGE_NUMBER_CAPACITY),
             shots: Vec::with_capacity(SHOT_CAPACITY),
+            blasts: Vec::with_capacity(BLAST_CAPACITY),
+            grates: Vec::new(),
         }
     }
 
@@ -356,7 +398,7 @@ impl Combat {
                         time_left: effect_def.time_to_live,
                     });
                     if let Some(explosion) = effect_def.explosion {
-                        explode(&mut self.targets, &mut self.damage_numbers, player, bullet.position, explosion, now, rng);
+                        start_blast(&mut self.blasts, bullet.position, explosion, effect_def.time_to_live);
                     }
                 }
                 self.bullets.swap_remove(index);
@@ -367,7 +409,26 @@ impl Combat {
             }
         }
 
-        self.break_dead_targets(defs, player, now, rng);
+        self.step_blasts(player, now, rng);
+        // Blasts from deaths here first hurt next step: Unity's trigger notices
+        // what is inside it on the physics step after it appears.
+        self.break_dead_targets(defs, rng);
+        for target in &mut self.targets {
+            if let (Some(elemental), Some(enemy)) = (target.elemental.as_mut(), target.enemy.as_ref()) {
+                // `EffectGrate.OnTriggerStay2D`, every step a walker's box touches one.
+                // Ledges are on the grates' physics layer, which flyers pass.
+                if !defs.enemy(enemy.def).flying {
+                    for grate in &self.grates {
+                        if boxes_overlap(target.position, target.half, grate.position, grate.half) {
+                            match grate.kind {
+                                GrateKind::Water => elemental.wet(grate.duration),
+                                GrateKind::Lava => elemental.burn_in_lava(grate.duration),
+                            }
+                        }
+                    }
+                }
+            }
+        }
         for elemental in self.targets.iter_mut().filter_map(|target| target.elemental.as_mut()) {
             elemental.step();
         }
@@ -387,7 +448,7 @@ impl Combat {
     /// Removes every target out of health, as `Killable.Die`: a chest spills its
     /// loot where it stood and leaves its remains. Order is kept, as homing
     /// bullets break ties by it.
-    fn break_dead_targets(&mut self, defs: &Defs, player: &mut Player, now: f64, rng: &mut Rng) {
+    fn break_dead_targets(&mut self, defs: &Defs, rng: &mut Rng) {
         let mut index = 0;
         while index < self.targets.len() {
             if self.targets[index].health > 0.0 {
@@ -418,7 +479,7 @@ impl Combat {
                         time_left: effect_def.time_to_live,
                     });
                     if let Some(explosion) = effect_def.explosion {
-                        explode(&mut self.targets, &mut self.damage_numbers, player, target.origin, explosion, now, rng);
+                        start_blast(&mut self.blasts, target.origin, explosion, effect_def.time_to_live);
                     }
                 }
                 if !def.dead_sprites.is_empty() {
@@ -460,41 +521,65 @@ impl Combat {
     }
 }
 
-/// Hurts every target the blast circle touches (`ExplosionScript.OnTriggerEnter2D`).
-///
-/// As in Unity the damage is the same anywhere inside the circle, walls do not
-/// shelter anything, and it is separate from the direct hit of the bullet that
-/// set it off (the bazooka's missile itself does 0).
-///
-/// Deliberate differences, until the things they need exist:
-/// - Unity's trigger lasts the effect's whole 0.3 s, so an enemy walking into the
-///   blast late is still hurt. Targets do not move yet, so damage is dealt once,
-///   when the explosion appears. Revisit with enemies (step 4).
-///
-/// It hurts the player too, the bazooka's owner included, and pushes them the
-/// same way, as `PlayerData.DamagePlayer` does: only when the blow lands.
-fn explode(
-    targets: &mut [Target],
-    numbers: &mut Vec<DamageNumber>,
-    player: &mut Player,
-    center: Vec2,
-    explosion: ExplosionFile,
-    now: f64,
-    rng: &mut Rng,
-) {
-    for target in targets {
-        if circle_overlaps_box(center, explosion.radius, target.position, target.half) {
-            // `ExplosionScript` reports its damage as a crit, so it shows as one,
-            // and pushes away from the centre by three times the offset over the radius.
-            let knockback = (target.origin - center) / explosion.knockback_radius.unwrap_or(explosion.radius) * 3.0;
-            hurt(target, numbers, explosion.damage, true, knockback, now, rng);
-        }
+fn start_blast(blasts: &mut Vec<Blast>, center: Vec2, explosion: ExplosionFile, time_to_live: f32) {
+    if blasts.len() == blasts.capacity() {
+        blasts.remove(0);
     }
-    if circle_overlaps_box(center, explosion.radius, player.position, super::player::HALF_SIZE) {
-        let knockback = (player.position - center) / explosion.knockback_radius.unwrap_or(explosion.radius) * 3.0;
-        if player.hurt(explosion.damage, now) {
-            player.velocity += knockback;
+    blasts.push(Blast {
+        center,
+        explosion,
+        time_left: time_to_live,
+        inside: [0; BLAST_MEMORY],
+        inside_count: 0,
+        player_inside: false,
+    });
+}
+
+impl Combat {
+    /// One step of every live explosion (`ExplosionScript.OnTriggerEnter2D`):
+    /// whatever has come into its circle since the last step is hurt and pushed.
+    ///
+    /// As in Unity the damage is the same anywhere inside the circle, walls do
+    /// not shelter anything, and it is separate from the direct hit of the bullet
+    /// that set it off (the bazooka's missile itself does 0). It hurts the player
+    /// too, the bazooka's owner included, and pushes them, as
+    /// `PlayerData.DamagePlayer` does: only when the blow lands.
+    fn step_blasts(&mut self, player: &mut Player, now: f64, rng: &mut Rng) {
+        for blast in &mut self.blasts {
+            let explosion = blast.explosion;
+            let push_radius = explosion.knockback_radius.unwrap_or(explosion.radius);
+            let mut still_inside = [0; BLAST_MEMORY];
+            let mut count = 0;
+            for target in &mut self.targets {
+                if !circle_overlaps_box(blast.center, explosion.radius, target.position, target.half) {
+                    continue;
+                }
+                let was_inside = blast.inside[..blast.inside_count].contains(&target.id);
+                if !was_inside {
+                    // `ExplosionScript` reports its damage as a crit, so it shows as one,
+                    // and pushes away from the centre by three times the offset over the radius.
+                    let knockback = (target.origin - blast.center) / push_radius * 3.0;
+                    hurt(target, &mut self.damage_numbers, explosion.damage, true, knockback, now, rng);
+                }
+                if count < BLAST_MEMORY {
+                    still_inside[count] = target.id;
+                    count += 1;
+                }
+            }
+            blast.inside = still_inside;
+            blast.inside_count = count;
+
+            let player_inside = circle_overlaps_box(blast.center, explosion.radius, player.position, super::player::HALF_SIZE);
+            if player_inside && !blast.player_inside {
+                let knockback = (player.position - blast.center) / push_radius * 3.0;
+                if player.hurt(explosion.damage, now) {
+                    player.velocity += knockback;
+                }
+            }
+            blast.player_inside = player_inside;
+            blast.time_left -= DT;
         }
+        self.blasts.retain(|blast| blast.time_left > 0.0);
     }
 }
 
@@ -647,6 +732,28 @@ mod tests {
         assert_eq!(combat.pickups.len(), 1);
         assert_eq!(combat.pickups[0].position, origin);
         assert_eq!(combat.drops.len(), 1);
+    }
+
+    #[test]
+    fn a_blast_hurts_what_walks_into_it_once_while_it_lasts() {
+        let defs = test_defs();
+        let room = Room::test_room();
+        let mut combat = Combat::new();
+        let blast = ExplosionFile { damage: 200.0, radius: 0.44, knockback_radius: None };
+        start_blast(&mut combat.blasts, Vec2::new(6.0, 4.5), blast, 0.3);
+        // Outside at first, then inside for the rest of the blast's life.
+        combat.targets.push(target(1, Vec2::new(7.0, 4.5), 1000.0));
+        let mut rng = Rng::new(1);
+        let mut player = Player::new(Vec2::new(2.0, 2.0));
+        combat.step(&defs, &room, &mut player, 0.0, &mut rng);
+        assert_eq!(combat.targets[0].health, 1000.0);
+        combat.targets[0].position = Vec2::new(6.2, 4.5);
+        for step in 1..20 {
+            combat.step(&defs, &room, &mut player, step as f64 * DT as f64, &mut rng);
+        }
+        assert_eq!(combat.targets[0].health, 800.0, "hurt once on walking in");
+        assert!(combat.blasts.is_empty(), "gone after its 0.3 s");
+        assert_eq!(player.health, crate::sim::player::MAX_HEALTH, "the player was never in it");
     }
 
     #[test]
