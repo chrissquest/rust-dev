@@ -119,6 +119,13 @@ their phone from that page, so after pushing, check that the run succeeded (GitH
 `actions_list`) and tell them. Building the APK locally is optional; the steps are in
 `apps/cycle-of-steel/README.md` and need the SDK from `dl.google.com`.
 
+The owner does not need you to wait for that run: push and report. A commit
+whose message contains `[skip ci]` builds nothing.
+
+Windows and Linux builds run only on request (`.github/workflows/desktop.yml`):
+from the Actions tab ("Desktop builds" -> "Run workflow"), or by putting
+`[desktop]` in a commit message. They replace the `desktop-latest` pre-release.
+
 Code that differs on Android is behind `cfg(target_os = "android")`: the entry point in
 `lib.rs`, `AssetSource::Apk`, and gamepads (gilrs has no Android backend). Check it
 compiles with `cargo check -p cycle-of-steel --lib --target aarch64-linux-android`

@@ -1,0 +1,83 @@
+# Builds Cycle of Steel for Windows and Linux, only when asked.
+#
+# Run it from the repository's Actions tab ("Desktop builds" -> "Run workflow"),
+# or push a commit whose message contains `[desktop]`. Every run replaces the
+# `desktop-latest` pre-release: a zip for Windows and a tarball for Linux, each the
+# game with its `assets` folder beside it (where it looks for them).
+name: Desktop builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "claude/**"]
+
+permissions:
+  # Needed to create the release and its tag.
+  contents: write
+
+concurrency:
+  group: desktop-builds
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[desktop]')
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            package: cycle-of-steel-windows.zip
+          - os: ubuntu-latest
+            package: cycle-of-steel-linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gamepad support needs libudev on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build -p cycle-of-steel --release
+
+      - name: Package with its assets
+        shell: bash
+        run: |
+          mkdir -p package/cycle-of-steel
+          cp -r apps/cycle-of-steel/assets package/cycle-of-steel/assets
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp target/release/cycle-of-steel.exe package/cycle-of-steel/
+            (cd package && 7z a "../${{ matrix.package }}" cycle-of-steel > /dev/null)
+          else
+            cp target/release/cycle-of-steel package/cycle-of-steel/
+            tar -czf "${{ matrix.package }}" -C package cycle-of-steel
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: ${{ matrix.package }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - name: Publish as the desktop-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete desktop-latest --yes --cleanup-tag || true
+          gh release create desktop-latest packages/* \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Desktop test build" \
+            --notes "Test build of Cycle of Steel from \`${GITHUB_REF_NAME}\` at ${GITHUB_SHA::7}. Unpack and run \`cycle-of-steel\` (\`.exe\` on Windows); keep the \`assets\` folder beside it."
