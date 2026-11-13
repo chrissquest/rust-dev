@@ -396,7 +396,8 @@ impl View {
         let position = Vec2::from(decoration.position).extend(z);
         let sprite = resolved
             .placed(position, decoration.scale, decoration.rotation.to_radians(), decoration.flip)
-            .with_color(decoration.color);
+            // `SpriteRenderer.color` is as picked on screen; tints here are linear.
+            .with_color(srgb_to_linear(decoration.color));
         Ok((resolved.texture, sprite))
     }
 
@@ -476,7 +477,7 @@ impl View {
                 let position = bullet.previous_position.lerp(bullet.position, blend);
                 let placed = sprite
                     .placed(position.extend(Z_BULLETS), def.scale, bullet.rotation, [false, false])
-                    .with_color(def.color);
+                    .with_color(srgb_to_linear(def.color));
                 self.list.sprite(sprite.texture, placed);
             }
         }
@@ -499,7 +500,7 @@ impl View {
             if let Some(sprite) = &self.effect_sprites[effect.def.0 as usize] {
                 let placed = sprite
                     .placed(effect.position.extend(Z_BULLETS), def.scale, effect.rotation, [false, false])
-                    .with_color(effect.color);
+                    .with_color(srgb_to_linear(effect.color));
                 self.list.sprite(sprite.texture, placed);
             }
         }
@@ -831,6 +832,14 @@ impl ResolvedSprite {
 /// A white disc with a soft edge on a transparent background, sampled smoothly so
 /// it stays round at any size.
 /// A colour as Unity's colour picker shows it, as the linear tint that draws it.
+///
+/// Unity's sprite shaders (URP's `Sprite-Lit-Default`, which nearly every sprite and
+/// tilemap of the project uses, and the built-in `Sprites/Default`) multiply the
+/// texture by the vertex colour as it comes. The project is in linear colour space,
+/// where the engine turns `SpriteRenderer.color` from sRGB to linear when it fills
+/// that vertex colour, so a white pixel tinted with a colour shows as that colour.
+/// The render target here is sRGB and tints are linear, hence the same conversion.
+/// Alpha is not a colour and stays as it is.
 fn srgb_to_linear(color: [f32; 4]) -> [f32; 4] {
     let channel = |value: f32| {
         if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) }
@@ -918,6 +927,31 @@ mod tests {
         // The text box's top-left corner, from the prefab: just left of and above
         // the number's position.
         assert!((DAMAGE_NUMBER_BOX - Vec2::new(-0.0454, 0.1426)).length() < 1e-3);
+    }
+
+    /// What an sRGB render target stores for a linear value.
+    fn linear_to_srgb_byte(value: f32) -> u8 {
+        let encoded = if value <= 0.003_130_8 { value * 12.92 } else { 1.055 * value.powf(1.0 / 2.4) - 0.055 };
+        (encoded * 255.0).round() as u8
+    }
+
+    #[test]
+    fn a_unity_tint_reaches_the_screen_as_authored() {
+        // `Bullet_Pistol_2` and a half-clear hub decoration, as in the converted data.
+        for authored in [[0.1273, 0.4008, 0.4906, 1.0], [1.0, 1.0, 1.0, 0.2902], [0.0, 0.03, 0.7642, 0.5]] {
+            let tint = srgb_to_linear(authored);
+            assert_eq!(tint[3], authored[3], "alpha is not converted");
+            for channel in 0..3 {
+                let authored_byte = (authored[channel] * 255.0_f32).round() as u8;
+                assert_eq!(linear_to_srgb_byte(tint[channel]), authored_byte, "{authored:?} channel {channel}");
+            }
+        }
+        // Used as it is, the pistol's teal would be far too bright: (100, 170, 186)
+        // on screen instead of (32, 102, 125).
+        assert_eq!(linear_to_srgb_byte(0.1273), 100);
+        assert_eq!(linear_to_srgb_byte(srgb_to_linear([0.1273, 0.0, 0.0, 1.0])[0]), 32);
+        // White and black tints are the same either way.
+        assert_eq!(srgb_to_linear([1.0, 0.0, 1.0, 1.0]), [1.0, 0.0, 1.0, 1.0]);
     }
 
     #[test]

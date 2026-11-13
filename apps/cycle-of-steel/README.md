@@ -53,6 +53,20 @@ where you spawn and interact. Interact again on the spot inside to leave.
   bitmap atlas rather than its TextMeshPro distance field, so they stay hard-edged
   at any size, and a number fades over its last 0.2 seconds instead of vanishing.
 
+- **Tints as Unity shows them.** A colour set on a Unity `SpriteRenderer` is the
+  colour picked on screen (sRGB). The project is in linear colour space, where
+  Unity converts that colour to linear before its sprite shader (URP's
+  `Sprite-Lit-Default`) multiplies the texture by it; this renderer's tints are
+  linear too, so `view.rs` now makes the same conversion (`srgb_to_linear`) for
+  decoration, bullet and splash tints, as it already did for damage numbers.
+  Before, tints came out too bright and washed out: `pistol_2`'s bullet, authored
+  as teal (32, 102, 125), drew as light blue (100, 170, 186). Every tinted bullet
+  and its splash is darker and more saturated now. Rooms look the same: no
+  decoration in the 34 converted rooms has a tint other than white (one in the
+  hub is only made translucent, and alpha is not converted). Not compared against
+  a running Unity build, and Unity's 2D lights, which the port lacks, also change
+  what a bullet looks like there.
+
 Not in yet:
 enemies, chests and drops; lighting (rooms look flatter and brighter than in
 Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
