@@ -27,6 +27,9 @@ OPTIONS:
     --move <x,y>            direction held during those steps (default: 0,0)
     --aim <x,y>             direction the trigger is held towards during those steps
     --give <gun[,gun]>      start with these guns: names from assets/guns.json
+    --save <file|none>      keep the save here, or play without one (default: the
+                            user's data folder, e.g. %APPDATA%/CycleOfSteel)
+    --menu upgrades         draw the upgrade bench's menu in the screenshot
     --whole-room            frame the whole room in the screenshot instead of
                             following the player
     --touch <x0,y0,x1,y1>   a finger held during those steps: down at x0,y0 and
@@ -36,10 +39,11 @@ OPTIONS:
 KEYS:
     W A S D                 move (or a gamepad's left stick / d-pad)
     arrows / mouse button   shoot that way (or a gamepad's right stick)
-    Space                   pick up (gamepad: A or X)
+    Space / Enter           pick up, use, choose in a menu (gamepad: A or X)
+    W S / arrows            move through a menu (gamepad: d-pad; B leaves it)
     1 2 3 4 / Q E / wheel   choose an inventory slot (gamepad: shoulder buttons)
     F11                     toggle fullscreen
-    Escape                  quit
+    Escape                  leave a menu, or quit
 ";
 
 fn main() -> Result<()> {
@@ -69,6 +73,7 @@ fn main() -> Result<()> {
             give: options.give,
             touch: options.touch,
             whole_room: options.whole_room,
+            upgrades_menu: options.upgrades_menu,
         }),
         None => app::run(
             Launch {
@@ -77,6 +82,7 @@ fn main() -> Result<()> {
                 backends: options.backends,
                 frames: options.frames,
                 give: options.give,
+                save: options.save,
             },
             EventLoop::new().context("could not create the event loop")?,
         ),
@@ -96,6 +102,8 @@ struct Options {
     give: Vec<String>,
     touch: Option<(Vec2, Vec2)>,
     whole_room: bool,
+    save: Option<PathBuf>,
+    upgrades_menu: bool,
 }
 
 fn parse_args() -> Result<Option<Options>> {
@@ -112,6 +120,8 @@ fn parse_args() -> Result<Option<Options>> {
         give: Vec::new(),
         touch: None,
         whole_room: false,
+        save: cycle_of_steel::storage::default_save_path(),
+        upgrades_menu: false,
     };
 
     let mut args = std::env::args().skip(1);
@@ -133,6 +143,14 @@ fn parse_args() -> Result<Option<Options>> {
             "--aim" => options.aim = Some(parse_direction(&value("x,y")?)?),
             "--give" => options.give = value("gun names")?.split(',').map(str::to_string).collect(),
             "--whole-room" => options.whole_room = true,
+            "--save" => {
+                let path = value("a file, or none")?;
+                options.save = (path != "none").then(|| PathBuf::from(path));
+            }
+            "--menu" => match value("a menu name")?.as_str() {
+                "upgrades" => options.upgrades_menu = true,
+                other => bail!("unknown menu `{other}`: the only one is `upgrades`"),
+            },
             "--touch" => options.touch = Some(parse_touch(&value("x0,y0,x1,y1")?)?),
             other => bail!("unknown option `{other}`\n\n{USAGE}"),
         }

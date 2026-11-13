@@ -8,6 +8,8 @@
 //! Two kinds of input come out. *Held* input (move, aim) is read fresh each
 //! frame. *One-shot* input (pick up, change slot) is queued when the button goes
 //! down and handed over exactly once, by [`InputState::take_sim_input`].
+//! While a menu is open the same presses steer it instead
+//! ([`InputState::take_menu_input`]): up and down move, interact chooses.
 
 use crystal_engine::glam::Vec2;
 use winit::event::TouchPhase;
@@ -75,6 +77,7 @@ impl Default for Bindings {
                 (KeyCode::ArrowLeft, Action::AimLeft),
                 (KeyCode::ArrowRight, Action::AimRight),
                 (KeyCode::Space, Action::Interact),
+                (KeyCode::Enter, Action::Interact),
                 (KeyCode::Digit1, Action::Slot1),
                 (KeyCode::Digit2, Action::Slot2),
                 (KeyCode::Digit3, Action::Slot3),
@@ -129,6 +132,20 @@ pub struct InputState {
     interact: bool,
     select_slot: Option<usize>,
     cycle_slot: i32,
+
+    /// The same presses, for a menu.
+    menu: MenuInput,
+}
+
+/// What was pressed for a menu since it was last asked.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MenuInput {
+    /// Rows to move the highlight by: negative is up.
+    pub moves: i32,
+    /// Choose the highlighted row.
+    pub choose: bool,
+    /// Leave the menu.
+    pub back: bool,
 }
 
 impl InputState {
@@ -158,7 +175,15 @@ impl InputState {
     /// Queues what an action does at the moment it is pressed, if anything.
     pub fn press(&mut self, action: Action) {
         match action {
-            Action::Interact => self.interact = true,
+            Action::MoveUp | Action::AimUp => self.menu.moves -= 1,
+            Action::MoveDown | Action::AimDown => self.menu.moves += 1,
+            _ => {}
+        }
+        match action {
+            Action::Interact => {
+                self.interact = true;
+                self.menu.choose = true;
+            }
             Action::Slot1 => self.select_slot = Some(0),
             Action::Slot2 => self.select_slot = Some(1),
             Action::Slot3 => self.select_slot = Some(2),
@@ -167,6 +192,17 @@ impl InputState {
             Action::PreviousSlot => self.cycle_slot -= 1,
             _ => {}
         }
+    }
+
+    /// Asks to leave a menu, from a pad's back button.
+    pub fn press_back(&mut self) {
+        self.menu.back = true;
+    }
+
+    /// The menu presses since the last call. Taken every frame, menu or not, so
+    /// that a press made in play does not reach a menu opened by it.
+    pub fn take_menu_input(&mut self) -> MenuInput {
+        std::mem::take(&mut self.menu)
     }
 
     /// Queues a jump to an inventory slot, e.g. from a tap on it.
@@ -469,6 +505,10 @@ impl Gamepads {
                     Button::RightTrigger => state.press(Action::NextSlot),
                     Button::LeftTrigger => state.press(Action::PreviousSlot),
                     Button::Select => state.request_map(),
+                    // Only menus listen to these.
+                    Button::DPadUp => state.press(Action::MoveUp),
+                    Button::DPadDown => state.press(Action::MoveDown),
+                    Button::East => state.press_back(),
                     _ => {}
                 }
             }

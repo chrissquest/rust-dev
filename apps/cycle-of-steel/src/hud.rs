@@ -116,9 +116,70 @@ impl HudLayout {
     }
 }
 
+/// A placeholder menu: a panel in the middle of the screen, its title on top and
+/// its rows one under another.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MenuLayout {
+    pub panel: Rect,
+    /// The title's top-left corner.
+    pub title: Vec2,
+    /// Pixels per em, for the title and the rows.
+    pub text_size: f32,
+    first_row: Rect,
+    row_step: f32,
+    rows: usize,
+}
+
+impl MenuLayout {
+    pub fn new(screen: Vec2, rows: usize) -> Self {
+        let unit = screen.y.max(1.0);
+        let text_size = unit * 0.05;
+        let row_height = unit * 0.09;
+        let row_step = row_height * 1.15;
+        let width = (unit * 0.9).min(screen.x * 0.9);
+        let height = text_size * 2.5 + row_step * rows as f32 + text_size;
+        let min = Vec2::new(screen.x * 0.5 - width * 0.5, screen.y * 0.5 - height * 0.5);
+        let padding = text_size * 0.6;
+        let first_top = min.y + text_size * 2.5;
+        Self {
+            panel: Rect { min, max: min + Vec2::new(width, height) },
+            title: min + Vec2::splat(padding),
+            text_size,
+            first_row: Rect {
+                min: Vec2::new(min.x + padding, first_top),
+                max: Vec2::new(min.x + width - padding, first_top + row_height),
+            },
+            row_step,
+            rows,
+        }
+    }
+
+    pub fn row(&self, index: usize) -> Rect {
+        let down = Vec2::new(0.0, self.row_step * index as f32);
+        Rect { min: self.first_row.min + down, max: self.first_row.max + down }
+    }
+
+    /// The row under a point, if any.
+    pub fn row_at(&self, point: Vec2) -> Option<usize> {
+        (0..self.rows).find(|&index| self.row(index).contains(point))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn menu_rows_stack_inside_the_panel_and_are_found_by_a_tap() {
+        let menu = MenuLayout::new(Vec2::new(1280.0, 720.0), 4);
+        for index in 0..4 {
+            let row = menu.row(index);
+            assert!(menu.panel.contains(row.min) && menu.panel.contains(row.max));
+            assert_eq!(menu.row_at(row.center()), Some(index));
+        }
+        assert!(menu.row(0).max.y < menu.row(1).min.y);
+        assert_eq!(menu.row_at(Vec2::ZERO), None);
+    }
 
     #[test]
     fn slots_sit_side_by_side_without_overlapping() {

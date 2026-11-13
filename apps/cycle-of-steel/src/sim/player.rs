@@ -19,6 +19,10 @@ use super::{DT, Input};
 /// Speed reached while holding a direction, in world units per second.
 /// Unity: the fixed point of `v = (v + 0.4) / 1.18`.
 pub const TOP_SPEED: f32 = 0.4 / 0.18;
+/// `PlayerData.moveSpeed` on a new save, the speed `TOP_SPEED` is reached at.
+/// The force, and so the top speed, scales with it; how quickly it is reached
+/// does not, since that is the drag's.
+pub const BASE_MOVE_SPEED: f32 = 10.0;
 /// How quickly velocity closes on its target, per second. Unity: `ln(1.18) / 0.02`.
 pub const RESPONSE: f32 = 8.275_722;
 
@@ -104,8 +108,10 @@ pub struct Player {
     /// Whether the last sideways movement was to the right. It decides which side
     /// the gun is carried on while not aiming.
     pub moved_right: bool,
-    /// Chance of a shot doing double damage, 0..=1. Raised by upgrades later.
+    /// Chance of a shot doing double damage, 0..=1. Raised by upgrades.
     pub crit_chance: f32,
+    /// `PlayerData.moveSpeed`: [`BASE_MOVE_SPEED`] until upgraded.
+    pub move_speed: f32,
     /// Enemies take this down and health packs fill it back up to the top.
     pub health: f32,
     pub max_health: f32,
@@ -125,6 +131,7 @@ impl Player {
             aim: None,
             moved_right: false,
             crit_chance: 0.0,
+            move_speed: BASE_MOVE_SPEED,
             health: MAX_HEALTH,
             max_health: MAX_HEALTH,
             last_hurt: f64::NEG_INFINITY,
@@ -177,7 +184,7 @@ impl Player {
         if movement != Vec2::ZERO {
             self.moved_right = movement.x > 0.0;
         }
-        let target_velocity = movement * TOP_SPEED;
+        let target_velocity = movement * TOP_SPEED * (self.move_speed / BASE_MOVE_SPEED);
         self.velocity = target_velocity + (self.velocity - target_velocity) * (-RESPONSE * DT).exp();
 
         let moved = move_box(room, solids, self.position, HALF_SIZE, self.velocity * DT);

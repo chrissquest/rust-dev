@@ -7,7 +7,7 @@ reference for behaviour while the port catches up.
 ## State of the port
 
 Steps 1 to 6 of the port are in (foundation, real rooms, combat, enemies, the
-dungeon, lighting and audio):
+dungeon, lighting and audio), and step 7 (the full loop) is under way:
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -158,8 +158,9 @@ where you spawn and interact. Interact again on the spot inside to leave.
   exit room's stairs (`ExitDungeon`, interact) heal them and take them back to
   the hub, and if all but two of the floor's rooms were cleared the floor is
   replaced by a new one and enemies get harder (difficulty 2: they push harder
-  and fire faster). Dying wakes the player in the hub, healed, with a new floor;
-  Unity's 5 second death screen and its reload of the last save wait for step 7.
+  and fire faster). Dying wakes the player in the hub, healed, with a new floor,
+  holding only the guns of the last save; Unity's 5 second death screen waits
+  for the menus.
   The boss room shuts the player in with the Priest, closing the way they came
   with its wall layers, and opens once the Priest dies; in Unity it never
   reopened. `--room dungeon` starts a run inside the spawn room.
@@ -222,9 +223,21 @@ where you spawn and interact. Interact again on the spot inside to leave.
   machine with no sound device plays nothing. There is no volume setting yet
   (menus, step 7).
 
+- **Saves and upgrades.** As Unity's `PlayerSaveData`: stats, upgrade levels,
+  data cells, difficulty and guns are saved on entering the dungeon, on taking
+  the exit room's stairs, and on dying (then without the guns, so those picked
+  up since are lost). A new save starts with `pistol_1`. The file is
+  `save1.json` in `%APPDATA%\CycleOfSteel` on Windows,
+  `~/.local/share/cycle-of-steel` on Linux and the app's own storage on
+  Android; `--save <file>` puts it elsewhere and `--save none` plays without
+  one. Only a run saves; `--room <name>` never does. The hub's upgrade bench
+  (interact) opens `UpgradeMenu`'s three upgrades for data cells, at Unity's
+  prices: crit chance, 200 more health (healing fully), move speed. The game
+  pauses while the menu is open. The font has no `%`, so crit shows without it.
+
 Not in yet:
-menus, saves and upgrades (rooms look flatter and brighter than in
-Unity); audio; the dungeon; menus. The HUD is a plain placeholder.
+the start, pause and death menus, the hub's dialogue, a volume setting, guns'
+own lights. The HUD and menus are plain placeholders.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
 
@@ -240,11 +253,12 @@ cargo test -p cycle-of-steel                # simulation and input tests, no GPU
 | --- | --- | --- | --- |
 | Move | W A S D | left stick or d-pad | drag on the left half |
 | Shoot | arrows, or hold the mouse button | right stick | drag on the right half |
-| Pick up | Space | A or X | the round button that appears |
+| Pick up, use | Space or Enter | A or X | the round button that appears |
 | Choose a slot | 1 to 4, Q and E, or the wheel | shoulder buttons | tap the slot |
 | Map | Tab | Select | the MAP button |
+| In a menu | W S or arrows, Space or Enter, Escape | d-pad, A, B | tap a row |
 
-F11 toggles fullscreen and Escape quits.
+F11 toggles fullscreen. Escape leaves a menu, and otherwise quits.
 
 `--screenshot` runs the game with no window, steps the simulation, draws one frame
 off-screen and saves it. It needs a GPU or a software rasteriser but no display:
@@ -323,6 +337,8 @@ src/
   view.rs        world state -> sprites; the camera
   assets.rs      loads assets from a folder, or from inside the APK on Android
   audio.rs       plays the sounds the world asks for, and the music
+  menu.rs        the placeholder menus: rows, and what choosing one does
+  storage.rs     where the save file lives; reading and writing it
   data.rs        the room and sprite catalogue file formats
   sim/           the game itself: no window, GPU or clock
     mod.rs       World, Input, the 60 Hz step, the inventory
@@ -334,6 +350,7 @@ src/
     elemental.rs freezing, water and lava (Unity's ElementalEffectHandler)
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
+    save.rs      what a save holds, and the upgrade bench's prices
     dungeon.rs   generating a floor and joining its rooms into one
     collide.rs   moving a box through solid cells
     player.rs    movement, facing, animation

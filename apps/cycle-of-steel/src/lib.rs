@@ -8,6 +8,7 @@
 //!   consumes; `hud` is where the on-screen controls sit.
 //! - `view` turns world state into sprites and owns the camera.
 //! - `assets` finds and reads the files under `assets/`; `data` is their formats.
+//! - `menu` is the placeholder menus; `storage` reads and writes the save.
 //! - `app` is the window, the frame loop and the screenshot mode.
 //!
 //! On desktop `main.rs` starts the game. On Android there is no `main`: the system
@@ -19,7 +20,9 @@ pub mod audio;
 pub mod data;
 pub mod hud;
 pub mod input;
+pub mod menu;
 pub mod sim;
+pub mod storage;
 pub mod view;
 
 /// Android's entry point, called on the app's main thread once the library loads.
@@ -40,6 +43,7 @@ fn android_main(android_app: winit::platform::android::activity::AndroidApp) {
         .build()
         .map_err(anyhow::Error::from)
         .and_then(|event_loop| {
+            let save = android_app.internal_data_path().map(|folder| folder.join(storage::SAVE_NAME));
             app::run(
                 app::Launch {
                     assets: assets::AssetSource::Apk(android_app),
@@ -47,6 +51,7 @@ fn android_main(android_app: winit::platform::android::activity::AndroidApp) {
                     backends: wgpu::Backends::all(),
                     frames: None,
                     give: Vec::new(),
+                    save,
                 },
                 event_loop,
             )

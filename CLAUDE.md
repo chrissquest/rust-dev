@@ -89,8 +89,17 @@ sim asks with `Event::Sound`; `audio.rs` plays clips from `assets/audio` with
 Not yet: guns' own lights, freeform lights' soft edges, depth cues (after
 parity), a volume setting (step 7).
 
-**Next: step 7, the full loop** (hub, upgrades, save, menus). Read the Port plan
-tab first.
+Step 7 (the full loop) is in pieces: 1 saves and upgrades (done), 2 dialogue,
+3 menus (start, pause, death screen). Saves: `sim/save.rs` (`Save`, Unity's
+`PlayerSaveData` as JSON with a version, guns by name), `World::load`/`save`
+(on `ExitHub`, `ExitDungeon` and death, which reloads the saved guns),
+`World::saves` counted for the app to write (`storage.rs`, `--save`). Upgrades:
+`Upgrades` with `UpgradeMenu`'s prices, `World::buy`, the bench
+(`Interaction::Bench` -> `Event::OpenUpgrades`) and `menu.rs`, drawn by the view;
+a menu pauses stepping and takes `InputState::take_menu_input`.
+
+**Next: step 7 piece 2, dialogue** (`DialogueEvent`, `HubRespawn`'s intro,
+`DebugRoom`'s lines, `ExitRoomDialogue`, events kept in the save).
 
 ### How to work here
 

@@ -32,6 +32,9 @@ pub struct Audio {
     walk: Sink,
     /// Kept so the music keeps playing.
     _music: Sink,
+    /// While the game is paused: whether the laser and the footsteps were
+    /// playing, to carry on with them after.
+    paused: Option<(bool, bool)>,
 }
 
 impl Audio {
@@ -53,7 +56,7 @@ impl Audio {
         let laser = Sink::connect_new(stream.mixer());
         let walk = Sink::connect_new(stream.mixer());
         let music = Sink::connect_new(stream.mixer());
-        let mut audio = Self { stream, assets: assets.clone(), clips: HashMap::new(), sounds, laser, walk, _music: music };
+        let mut audio = Self { stream, assets: assets.clone(), clips: HashMap::new(), sounds, laser, walk, _music: music, paused: None };
         if let Some(file) = audio.sounds.music.clone() {
             let clip = audio.clip(&file.clip);
             start(&audio._music, clip, &file);
@@ -100,6 +103,29 @@ impl Audio {
             && let Some(clip) = self.clip(&file.clip)
         {
             self.stream.mixer().add(clip.amplify(file.volume));
+        }
+    }
+
+    /// `PauseMenu.Pause` and `Resume`: the guns' and the player's sounds are
+    /// muted while a menu is open; the music plays on.
+    pub fn set_paused(&mut self, paused: bool) {
+        let playing = |sink: &Sink| !sink.is_paused() && !sink.empty();
+        match (paused, self.paused) {
+            (true, None) => {
+                self.paused = Some((playing(&self.laser), playing(&self.walk)));
+                self.laser.pause();
+                self.walk.pause();
+            }
+            (false, Some((laser, walk))) => {
+                self.paused = None;
+                if laser {
+                    self.laser.play();
+                }
+                if walk {
+                    self.walk.play();
+                }
+            }
+            _ => {}
         }
     }
 

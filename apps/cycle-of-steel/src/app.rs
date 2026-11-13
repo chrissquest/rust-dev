@@ -28,7 +28,11 @@ use crate::assets::AssetSource;
 use crate::audio::Audio;
 use crate::data::{DungeonFile, EnemiesFile, GunsFile, LootFile, RoomFile};
 use crate::sim::dungeon;
-use crate::input::{Action, Bindings, Gamepads, InputState, StickVisual, TouchControls};
+use crate::hud::MenuLayout;
+use crate::input::{Action, Bindings, Gamepads, InputState, MenuInput, StickVisual, TouchControls};
+use crate::menu::{Choice, Menu};
+use crate::sim::save::Save;
+use crate::storage;
 use crate::sim::defs::Defs;
 use crate::sim::room::Room;
 use crate::sim::{self, Event, World};
@@ -52,6 +56,9 @@ pub struct Launch {
     pub frames: Option<u32>,
     /// Guns to start with: names from `guns.json`.
     pub give: Vec<String>,
+    /// Where the save is kept. `None` plays without one. Only a run (the hub
+    /// and its dungeon) loads and saves; a single room never does.
+    pub save: Option<PathBuf>,
 }
 
 /// Runs the game on `event_loop` until its window closes.
@@ -61,7 +68,14 @@ pub struct Launch {
 pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut world = load_world(&launch.assets, &launch.room, clock_seed())?;
+    let save = launch.save.filter(|_| world.floor.is_some());
+    if let Some(path) = &save {
+        // `PlayerData.Start` loads the save, or starts a new one.
+        let loaded = storage::read_save(path).unwrap_or_else(|| Save::new_game(world.player.max_health));
+        world.load(&loaded);
+    }
     give_guns(&mut world, &launch.give)?;
+    let saves_written = world.saves;
 
     let audio = Audio::new(&launch.assets);
     let mut app = App {
@@ -76,6 +90,9 @@ pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
         cursor: Vec2::ZERO,
         mouse_held: false,
         world,
+        save,
+        saves_written,
+        menu: None,
         accumulator: 0.0,
         last_frame: None,
         graphics: None,
@@ -115,6 +132,11 @@ struct App {
     mouse_held: bool,
 
     world: World,
+    /// Where the save is written, and the world's save count last written.
+    save: Option<PathBuf>,
+    saves_written: u64,
+    /// The menu open, if any. The world does not step while there is one.
+    menu: Option<Menu>,
     /// Real time not yet turned into simulation steps, in seconds.
     accumulator: f32,
     last_frame: Option<Instant>,
@@ -185,8 +207,16 @@ impl App {
         };
         self.input.set_mouse_aim(mouse_aim);
 
+        let menu_input = self.input.take_menu_input();
+        if self.menu.is_some() {
+            // Paused: presses go to the menu, and none is left for the world
+            // to act on once it closes.
+            self.input.take_sim_input();
+            self.steer_menu(menu_input);
+            self.accumulator = 0.0;
+        }
         self.accumulator += frame_seconds;
-        if self.accumulator >= sim::DT {
+        if self.menu.is_none() && self.accumulator >= sim::DT {
             // Presses are handed over once, to the first step that can act on them.
             let mut input = self.input.take_sim_input();
             while self.accumulator >= sim::DT {
@@ -197,6 +227,8 @@ impl App {
         }
         let blend = self.accumulator / sim::DT;
 
+        self.write_save();
+        let menu_view = self.menu.map(|menu| menu.view(&self.world));
         let Some(graphics) = self.graphics.as_mut() else {
             return;
         };
@@ -209,7 +241,16 @@ impl App {
                         audio.play(sound, &defs);
                     }
                 }
+                Event::OpenUpgrades => self.menu = Some(Menu::upgrades()),
             }
+        }
+        if let Some(audio) = &mut self.audio {
+            audio.set_paused(self.menu.is_some());
+        }
+        if self.menu.is_some() {
+            // Fingers on the sticks lift onto the menu, which takes their touches.
+            self.touch.release();
+            self.mouse_held = false;
         }
         if self.input.take_map_request() {
             graphics.view.toggle_map();
@@ -242,12 +283,66 @@ impl App {
             blend,
             frame_seconds,
             &stick_visuals(&self.touch, screen),
+            menu_view.as_ref(),
         );
         graphics.surface.present(frame, encoder);
     }
 
+    /// Acts on the presses meant for the open menu.
+    fn steer_menu(&mut self, input: MenuInput) {
+        let Some(menu) = self.menu.as_mut() else {
+            return;
+        };
+        menu.move_by(input.moves);
+        if input.back {
+            self.menu = None;
+        } else if input.choose {
+            let row = menu.selected;
+            self.choose(row);
+        }
+    }
+
+    /// Chooses a row of the open menu.
+    fn choose(&mut self, row: usize) {
+        let Some(menu) = self.menu.as_mut() else {
+            return;
+        };
+        menu.selected = row;
+        match menu.choice(row) {
+            Choice::Buy(upgrade) => {
+                self.world.buy(upgrade);
+            }
+            Choice::Close => self.menu = None,
+        }
+    }
+
+    /// A tap or click at `point` on the open menu chooses the row under it.
+    fn press_menu(&mut self, point: Vec2) {
+        let Some(menu) = &self.menu else {
+            return;
+        };
+        if let Some(row) = MenuLayout::new(self.screen_size(), menu.row_count()).row_at(point) {
+            self.choose(row);
+        }
+    }
+
+    /// Writes the world's newest save, if it has one not yet written.
+    fn write_save(&mut self) {
+        if self.world.saves == self.saves_written {
+            return;
+        }
+        self.saves_written = self.world.saves;
+        if let (Some(path), Some(save)) = (&self.save, &self.world.saved)
+            && let Err(error) = storage::write_save(path, save)
+        {
+            log::error!("could not save: {error:#}");
+        }
+    }
+
     fn command(&mut self, action: Action, event_loop: &ActiveEventLoop) {
         match action {
+            // Escape leaves a menu before it leaves the game.
+            Action::Quit if self.menu.is_some() => self.input.press_back(),
             Action::Quit => event_loop.exit(),
             Action::ToggleMap => self.input.request_map(),
             Action::ToggleFullscreen => {
@@ -325,7 +420,16 @@ impl ApplicationHandler for App {
                 state,
                 button: MouseButton::Left,
                 ..
-            } => self.mouse_held = state == ElementState::Pressed,
+            } => {
+                let pressed = state == ElementState::Pressed;
+                if self.menu.is_some() {
+                    if pressed {
+                        self.press_menu(self.cursor);
+                    }
+                } else {
+                    self.mouse_held = pressed;
+                }
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 let lines = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y,
@@ -340,6 +444,12 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Touch(touch) => {
                 let position = Vec2::new(touch.location.x as f32, touch.location.y as f32);
+                if self.menu.is_some() {
+                    if touch.phase == TouchPhase::Started {
+                        self.press_menu(position);
+                    }
+                    return;
+                }
                 let screen = self.screen_size();
                 let can_interact = self.world.can_interact();
                 self.touch
@@ -443,6 +553,8 @@ pub struct Screenshot {
     pub touch: Option<(Vec2, Vec2)>,
     /// Frame the whole room instead of following the player.
     pub whole_room: bool,
+    /// Draw the upgrade bench's menu over the frame.
+    pub upgrades_menu: bool,
 }
 
 /// Runs the game for a while with no window, draws one frame off-screen and saves
@@ -485,6 +597,7 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
         1.0,
         0.0,
         &stick_visuals(&touch, screen),
+        options.upgrades_menu.then(|| Menu::upgrades().view(&world)).as_ref(),
     );
     queue.submit(std::iter::once(encoder.finish()));
 
@@ -934,6 +1047,75 @@ mod tests {
         assert_eq!(world.room_version, version + 1, "a new floor");
         assert_eq!(world.difficulty, 2.0);
         assert!(world.combat.targets.iter().any(|target| target.origin.x > start_x && target.enemy.is_some()));
+    }
+
+    #[test]
+    fn a_new_player_starts_dies_upgrades_and_continues_from_the_save() {
+        use crate::sim::save::Upgrade;
+        let mut world = hub();
+        world.load(&Save::new_game(world.player.max_health));
+        let pistol = world.defs.gun_named("pistol_1").unwrap();
+        assert_eq!(world.inventory[0].as_ref().map(|gun| gun.def), Some(pistol), "a new save starts with the pistol");
+
+        // `ExitHub` saves on the way in, guns and all.
+        let saves = world.saves;
+        world.player.position = world.combat.entrances[0].0;
+        world.step(&Input::default());
+        assert_eq!(world.saves, saves + 1);
+        assert_eq!(world.saved.as_ref().unwrap().inventory[0].as_deref(), Some("pistol_1"));
+
+        // A gun and data cells found in the dungeon, then death: the gun is
+        // lost with the reload, the cells are kept.
+        world.give(world.defs.gun_named("laser_2").unwrap());
+        world.data_cells = 40;
+        world.player.health = 0.0;
+        world.step(&Input::default());
+        assert!(world.player.position.x < world.floor.as_ref().unwrap().start_x, "back in the hub");
+        assert!(world.inventory[1].is_none(), "the laser was not saved");
+        assert_eq!(world.data_cells, 40);
+
+        // The bench: interacting opens its menu; buying spends the cells.
+        let (bench, _) = world.combat.benches[0];
+        world.teleport(bench);
+        assert!(matches!(world.interaction(), Some(Interaction::Bench(_))));
+        world.drain_events().for_each(drop);
+        interact(&mut world);
+        assert!(world.drain_events().any(|event| event == Event::OpenUpgrades));
+        assert!(world.buy(Upgrade::Health), "10 cells");
+        assert!(world.buy(Upgrade::Crit), "5 cells");
+        assert!(world.buy(Upgrade::Move), "6 cells");
+        assert!(world.buy(Upgrade::Health), "15 cells");
+        assert_eq!(world.data_cells, 4);
+        assert!(!world.buy(Upgrade::Crit), "7 cells are not there");
+        assert_eq!(world.player.max_health, 1400.0);
+        assert_eq!(world.player.health, 1400.0, "more health heals fully");
+        assert_eq!(world.player.crit_chance, 0.05);
+        assert_eq!(world.player.move_speed, 12.0);
+
+        // Out through the dungeon's exit, which saves, and into a new launch.
+        world.teleport(world.combat.exits[0].0);
+        interact(&mut world);
+        let text = world.saved.as_ref().unwrap().to_json();
+        let mut next = hub();
+        next.load(&Save::from_json(&text).unwrap());
+        assert_eq!(next.player.max_health, 1400.0);
+        assert_eq!(next.player.crit_chance, 0.05);
+        assert_eq!(next.player.move_speed, 12.0);
+        assert_eq!(next.data_cells, 4);
+        assert_eq!(next.upgrades.level(Upgrade::Health), 2);
+        assert_eq!(next.upgrades.price(Upgrade::Health), 20);
+        assert_eq!(next.inventory[0].as_ref().map(|gun| gun.def), Some(pistol));
+
+        // Faster: `moveSpeed` 12 tops out 1.2 times as fast.
+        next.teleport(next.room.spawn);
+        let right = Input { movement: Vec2::X, ..Input::default() };
+        // Ten steps in, short of any wall, on the same curve as at 10.
+        for _ in 0..10 {
+            next.step(&right);
+        }
+        let curve = 1.0 - (-crate::sim::player::RESPONSE * 10.0 * sim::DT).exp();
+        let expected = crate::sim::player::TOP_SPEED * 1.2 * curve;
+        assert!((next.player.velocity.x - expected).abs() < 1e-3, "{} against {expected}", next.player.velocity.x);
     }
 
     #[test]

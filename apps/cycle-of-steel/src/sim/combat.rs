@@ -148,6 +148,8 @@ pub enum Interaction {
     Teleport(usize),
     /// An index into [`Combat::exits`]: the exit room's stairs out.
     Exit(usize),
+    /// An index into [`Combat::benches`]: the hub's upgrade bench.
+    Bench(usize),
 }
 
 #[derive(Default)]
@@ -176,6 +178,8 @@ pub struct Combat {
     pub exits: Vec<(Vec2, Vec2)>,
     /// Walk in here to enter the dungeon (`ExitHub`), as (centre, half size).
     pub entrances: Vec<(Vec2, Vec2)>,
+    /// Interact here to buy upgrades (`UpgradeBench`), as (centre, half size).
+    pub benches: Vec<(Vec2, Vec2)>,
 }
 
 /// A floor grate over water or lava (`EffectGrate`): a trigger box that wets or
@@ -233,6 +237,7 @@ impl Combat {
             sounds: Vec::with_capacity(32),
             exits: Vec::new(),
             entrances: Vec::new(),
+            benches: Vec::new(),
         }
     }
 
@@ -537,9 +542,11 @@ impl Combat {
             .map(|(index, teleport)| (Interaction::Teleport(index), teleport.position, teleport.half));
 
         let exits = self.exits.iter().enumerate().map(|(index, &(center, half))| (Interaction::Exit(index), center, half));
+        let benches = self.benches.iter().enumerate().map(|(index, &(center, half))| (Interaction::Bench(index), center, half));
         pickups
             .chain(teleports)
             .chain(exits)
+            .chain(benches)
             .filter(|(_, position, half)| boxes_overlap(player, player_half, *position, *half))
             .min_by(|(_, a, _), (_, b, _)| a.distance_squared(player).total_cmp(&b.distance_squared(player)))
             .map(|(interaction, _, _)| interaction)

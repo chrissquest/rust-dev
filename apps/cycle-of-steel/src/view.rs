@@ -19,8 +19,9 @@ use crystal_engine::sprite::{Grid, Sheet, Sprite};
 
 use crate::assets::{AssetSource, PIXELS_PER_UNIT};
 use crate::data::{DecorationFile, DropKind, FontFile, LightFile, LightKind, RoomFile, ShakeFile, SortingLayer, SpriteCatalogue};
-use crate::hud::{HudLayout, Rect};
+use crate::hud::{HudLayout, MenuLayout, Rect};
 use crate::input::StickVisual;
+use crate::menu::MenuView;
 use crate::sim::combat::Interaction;
 use crate::sim::defs::Ai;
 use crate::sim::enemy::BeamPhase;
@@ -115,6 +116,10 @@ const FROZEN_TINT: [f32; 4] = [0.3, 1.0, 1.0, 1.0];
 const HUD_MAP_BACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.8];
 const HUD_HEALTH_COLOR: [f32; 4] = [0.55, 0.02, 0.02, 0.9];
 const HUD_TEXT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+/// Over the game while a menu is open, and a row that cannot be chosen yet.
+const MENU_SHADE_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.5];
+const MENU_ROW_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
+const MENU_DISABLED_TEXT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.4];
 
 const CLEAR_COLOR: [f32; 4] = [0.012, 0.012, 0.016, 1.0];
 
@@ -659,6 +664,7 @@ impl View {
         blend: f32,
         frame_seconds: f32,
         sticks: &[StickVisual],
+        menu: Option<&MenuView>,
     ) {
         let blend = blend.clamp(0.0, 1.0);
         let aspect = target.width.max(1) as f32 / target.height.max(1) as f32;
@@ -813,7 +819,7 @@ impl View {
             &self.list,
         );
 
-        self.draw_hud(renderer, encoder, target, world, sticks);
+        self.draw_hud(renderer, encoder, target, world, sticks, menu);
     }
 
     /// Adds one line of text to the world, starting at `baseline`, its left end.
@@ -987,6 +993,7 @@ impl View {
         target: Target<'_>,
         world: &World,
         sticks: &[StickVisual],
+        menu: Option<&MenuView>,
     ) {
         let screen = Vec2::new(target.width as f32, target.height as f32);
         let hud = HudLayout::new(screen);
@@ -1146,6 +1153,39 @@ impl View {
             );
         }
 
+        // A menu: the game shaded behind a panel of rows, the highlighted one
+        // lit, prices on the right beside a data cell.
+        if let Some(menu) = menu {
+            let layout = MenuLayout::new(screen, menu.rows.len());
+            let size = layout.text_size;
+            let text_at = |top_left: Vec2| flip(top_left).truncate() - Vec2::new(0.0, FONT_ASCENT * size);
+            self.overlay.sprite(self.white, rect(Rect { min: Vec2::ZERO, max: screen }, MENU_SHADE_COLOR));
+            self.overlay.sprite(self.white, rect(layout.panel, HUD_MAP_BACK_COLOR));
+            push_text(&mut self.overlay, &self.font, menu.title, text_at(layout.title), 0.0, size, HUD_TEXT_COLOR);
+            for (index, row) in menu.rows.iter().enumerate() {
+                let area = layout.row(index);
+                if index == menu.selected {
+                    let border = Vec2::splat(size * 0.12);
+                    self.overlay.sprite(self.white, rect(Rect { min: area.min - border, max: area.max + border }, HUD_SELECTED_COLOR));
+                }
+                self.overlay.sprite(self.white, rect(area, MENU_ROW_COLOR));
+                let color = if row.enabled { HUD_TEXT_COLOR } else { MENU_DISABLED_TEXT_COLOR };
+                let inset = Vec2::new(size * 0.5, (area.size().y - size) * 0.5);
+                push_text(&mut self.overlay, &self.font, &row.label, text_at(area.min + inset), 0.0, size, color);
+                if let Some(price) = row.price {
+                    let mut buffer = [0; 16];
+                    let text = number_text(price as f32, &mut buffer);
+                    let width = text_width(&self.font, text, size);
+                    let left = Vec2::new(area.max.x - inset.x - width, area.min.y + inset.y);
+                    push_text(&mut self.overlay, &self.font, text, text_at(left), 0.0, size, color);
+                    if let Some(sprite) = &self.data_icon {
+                        let centre = Vec2::new(left.x - size * 0.7, area.center().y);
+                        self.overlay.sprite(sprite.texture, icon(sprite, centre, size).with_color(color));
+                    }
+                }
+            }
+        }
+
         renderer.draw(
             encoder,
             target,
@@ -1232,6 +1272,11 @@ fn push_text(
             pen.x += advance * size;
         }
     }
+}
+
+/// How wide `text` is at `size`, in the same units.
+fn text_width(font: &HashMap<char, (ResolvedSprite, f32)>, text: &str, size: f32) -> f32 {
+    text.chars().filter_map(|character| font.get(&character)).map(|(_, advance)| advance * size).sum()
 }
 
 fn beam_pieces(origin: Vec2, direction: Vec2, length: f32) -> [(Vec2, f32); 3] {

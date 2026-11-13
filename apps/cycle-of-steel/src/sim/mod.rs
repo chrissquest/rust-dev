@@ -16,6 +16,7 @@ pub mod loot;
 pub mod player;
 pub mod rng;
 pub mod room;
+pub mod save;
 
 use std::sync::Arc;
 
@@ -31,6 +32,7 @@ use guns::Gun;
 use player::Player;
 use rng::Rng;
 use room::Room;
+use save::{Save, Upgrade, Upgrades};
 
 /// Simulation steps per second.
 pub const TICK_RATE: u32 = 60;
@@ -84,6 +86,8 @@ impl Input {
 pub enum Event {
     Shake(ShakeFile),
     Sound(Sound),
+    /// The upgrade bench was used: the app shows its menu (`UpgradeBench`).
+    OpenUpgrades,
 }
 
 /// A sound the world asks for. What each sounds like is in the definitions.
@@ -127,6 +131,12 @@ pub struct World {
     pub difficulty: f32,
     /// Goes up whenever the room is rebuilt (a new floor), for the view to redraw it.
     pub room_version: u64,
+    /// What the upgrade bench has sold.
+    pub upgrades: Upgrades,
+    /// The last save made or loaded, and how many saves have been made, for
+    /// the app to notice a new one and write it out.
+    pub saved: Option<Save>,
+    pub saves: u64,
     /// The laser whose sound is playing, and whether the walking sound is.
     laser_sounding: Option<GunId>,
     walking: bool,
@@ -163,6 +173,9 @@ impl World {
             run: None,
             difficulty: 1.0,
             room_version: 0,
+            upgrades: Upgrades::default(),
+            saved: None,
+            saves: 0,
             laser_sounding: None,
             walking: false,
             last_block: enemy::block_of(player_position),
@@ -207,6 +220,7 @@ impl World {
         combat.teleports.retain(|teleport| in_hub(teleport.position));
         combat.exits.retain(|(center, _)| in_hub(*center));
         combat.entrances.retain(|(center, _)| in_hub(*center));
+        combat.benches.retain(|(center, _)| in_hub(*center));
         combat.bullets.clear();
         combat.shots.clear();
         combat.blasts.clear();
@@ -258,6 +272,7 @@ impl World {
     /// replaced by a new one, and enemies get harder.
     fn leave_dungeon(&mut self) {
         self.player.health = self.player.max_health;
+        self.save(true);
         let spawn = self.room.spawn;
         self.teleport(spawn);
         let Some(floor) = &self.floor else {
@@ -267,6 +282,68 @@ impl World {
             self.difficulty = CLEARED_DIFFICULTY;
             self.new_floor();
         }
+    }
+
+    /// `PlayerData.LoadData`: the player as a save left them. Guns whose
+    /// names are no longer in `guns.json` are left out.
+    pub fn load(&mut self, save: &Save) {
+        let player = &mut self.player;
+        player.max_health = save.max_health;
+        // `SetHealth`: never above the maximum.
+        player.health = save.health.min(save.max_health);
+        player.move_speed = save.move_speed;
+        player.crit_chance = save.crit_chance;
+        self.data_cells = save.data_cells;
+        self.select_slot(save.selected_slot);
+        // Saves from before Unity kept a difficulty read it as 0.
+        self.difficulty = if save.difficulty != 0.0 { save.difficulty } else { 1.0 };
+        for (slot, name) in self.inventory.iter_mut().zip(&save.inventory) {
+            *slot = name.as_deref().and_then(|name| self.defs.gun_named(name)).map(Gun::new);
+        }
+        self.upgrades = save.upgrades;
+        self.saved = Some(save.clone());
+    }
+
+    /// `PlayerData.SaveData`. Without the inventory, the guns of the last save
+    /// are kept (a new save's starting gun when there is none): dying and
+    /// quitting to the menu do not keep what was picked up since.
+    fn save(&mut self, with_inventory: bool) {
+        let mut save = Save::new_game(self.player.max_health);
+        save.health = self.player.health;
+        save.move_speed = self.player.move_speed;
+        save.crit_chance = self.player.crit_chance;
+        save.data_cells = self.data_cells;
+        save.selected_slot = self.selected_slot;
+        save.upgrades = self.upgrades;
+        save.difficulty = self.difficulty;
+        if with_inventory {
+            save.inventory = std::array::from_fn(|slot| self.inventory[slot].as_ref().map(|gun| self.defs.gun(gun.def).name.clone()));
+        } else if let Some(saved) = &self.saved {
+            save.inventory = saved.inventory.clone();
+        }
+        self.saved = Some(save);
+        self.saves += 1;
+    }
+
+    /// `UpgradeMenu.UpgradeCrit`, `UpgradeHp`, `UpgradeMove`: buys one if the
+    /// data cells cover it. More health also heals fully (`AddMaxHealth`).
+    pub fn buy(&mut self, upgrade: Upgrade) -> bool {
+        let price = self.upgrades.price(upgrade);
+        if self.data_cells < price {
+            return false;
+        }
+        self.data_cells -= price;
+        let gain = self.upgrades.gain(upgrade);
+        match upgrade {
+            Upgrade::Crit => self.player.crit_chance += gain,
+            Upgrade::Health => {
+                self.player.max_health += gain;
+                self.player.health = self.player.max_health;
+            }
+            Upgrade::Move => self.player.move_speed += gain,
+        }
+        self.upgrades.bought(upgrade);
+        true
     }
 
     /// Seconds since the world was created.
@@ -311,6 +388,8 @@ impl World {
 
         self.player.step(input, &self.room, self.combat.solids());
         if self.combat.entrances.iter().any(|&(center, half)| combat::boxes_overlap(self.player.position, player::HALF_SIZE, center, half)) {
+            // `ExitHub`: saved, guns and all, on the way in.
+            self.save(true);
             self.enter_dungeon();
         }
         self.update_rooms();
@@ -326,6 +405,7 @@ impl World {
             match self.interaction() {
                 Some(Interaction::Pickup(index)) => self.pick_up(index),
                 Some(Interaction::Exit(_)) => self.leave_dungeon(),
+                Some(Interaction::Bench(_)) => self.events.push(Event::OpenUpgrades),
                 Some(Interaction::Teleport(index)) => {
                     self.player.position += self.combat.teleports[index].offset;
                     // No blending across the jump: the player is simply there.
@@ -414,11 +494,15 @@ impl World {
             self.events.push(Event::Sound(Sound::Hurt));
         }
         if self.player.health <= 0.0 {
-            // `PlayerData.Die` and `Respawn`: back in the hub, healed, with a new
-            // floor. Unity's 5 second death screen and its reload of the last
-            // save (losing what was picked up) wait for menus and saves (step 7).
-            // A world that is one room simply starts it again.
+            // `PlayerData.Die` and `Respawn`: healed, saved without the guns and
+            // reloaded, so what was picked up since the last save is lost; back
+            // in the hub with a new floor. Unity's 5 second death screen waits
+            // for the menus. A world that is one room simply starts it again.
             self.player.health = self.player.max_health;
+            self.save(false);
+            if let Some(saved) = self.saved.clone() {
+                self.load(&saved);
+            }
             let spawn = self.room.spawn;
             self.teleport(spawn);
             self.new_floor();
@@ -605,6 +689,7 @@ fn populate(combat: &mut Combat, file: &crate::data::RoomFile, defs: &Defs, keep
     }
     combat.exits.extend(boxes(file, "ExitDungeon").filter(|(position, _)| keep(*position)));
     combat.entrances.extend(boxes(file, "ExitHub").filter(|(position, _)| keep(*position)));
+    combat.benches.extend(boxes(file, "UpgradeBench").filter(|(position, _)| keep(*position)));
 }
 
 /// A placed `EffectGrate`. Every placement in the rooms sets its box and, all
