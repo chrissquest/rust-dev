@@ -51,6 +51,20 @@
     "w1": 0,
     "w2": 3
   },
+  "door_tiles": {
+    "bottom": {
+      "solid": false,
+      "sprite": "doors_dark_compound_4"
+    },
+    "top": {
+      "solid": true,
+      "sprite": "doors_dark_compound_0"
+    },
+    "vertical": {
+      "solid": true,
+      "sprite": "doors_dark_compound_1"
+    }
+  },
   "exit_room": "exit_room",
   "grid_size": 10,
   "open_room": "open_room",

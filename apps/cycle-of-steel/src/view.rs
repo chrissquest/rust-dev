@@ -161,6 +161,8 @@ pub struct View {
     enemy_sprites: Vec<EnemySprites>,
     /// Per enemy: a boss's laser start, middle and end, if it has lasers.
     boss_laser_sprites: Vec<Option<[ResolvedSprite; 3]>>,
+    /// The three door tiles a sealed room shows: top, bottom, vertical.
+    door_sprites: Option<[ResolvedSprite; 3]>,
     /// A data cell's picture, beside the count in the HUD.
     data_icon: Option<ResolvedSprite>,
     /// Per gun: a laser's start cap, middle stretch and end cap.
@@ -237,6 +239,7 @@ impl View {
             enemy_sprites: Vec::new(),
             boss_laser_sprites: Vec::new(),
             data_icon: None,
+            door_sprites: None,
             laser_sprites: Vec::new(),
             // Placeholders until the catalogue is consulted just below.
             shadow: ResolvedSprite::EMPTY,
@@ -516,6 +519,29 @@ impl View {
         self.list.clear();
         for &batch in &self.below {
             self.list.batch(batch);
+        }
+
+        // Sealed doors: tiles on each room's `Background2` layer.
+        if let Some(floor) = &world.floor {
+            if self.door_sprites.is_none()
+                && let (Ok(top), Ok(bottom), Ok(vertical)) = (
+                    self.sprite(renderer, &floor.door_tiles.top.sprite),
+                    self.sprite(renderer, &floor.door_tiles.bottom.sprite),
+                    self.sprite(renderer, &floor.door_tiles.vertical.sprite),
+                )
+            {
+                self.door_sprites = Some([top, bottom, vertical]);
+            }
+            if let Some(sprites) = self.door_sprites {
+                let cell = world.room.cell;
+                for room in floor.rooms.iter().filter(|room| room.sealed) {
+                    for ((x, y), piece) in room.door_cells() {
+                        let sprite = &sprites[piece as usize];
+                        let centre = Vec3::new((x as f32 + 0.5) * cell, (y as f32 + 0.5) * cell, Z_BELOW);
+                        self.list.sprite(sprite.texture, sprite.placed(centre, [1.0, 1.0], 0.0, [false, false]));
+                    }
+                }
+            }
         }
 
         // Broken chests are on Unity's `Background` sorting layer.

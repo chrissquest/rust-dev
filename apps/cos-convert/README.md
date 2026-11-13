@@ -93,6 +93,9 @@ size and room count (constants in the script), the spawn's place, the room files
 it uses for grown, spawn, exit and boss rooms, `by_doors` (for each set of doors,
 `N` to `NSEW`, the rooms that fit, in the order it tries them) and `distance`
 (each room's `distanceFromSpawn`). Room names are the room files' names.
+`door_tiles` names the three tiles `RoomScript.SealRoom` places in a doorway
+(`top`, `bottom` and `vertical`) with each one's sprite and whether it blocks.
+Each enemy also has `counts_as_enemy` (`Killable.countAsEnemy`).
 
 `font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
 atlas (`ThaleahFat.fontsettings` and its PNG). `glyphs` maps a character to its

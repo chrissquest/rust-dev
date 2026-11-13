@@ -8,6 +8,7 @@
         }
       },
       "color": [0.9717, 0.7563, 0.7563, 1.0],
+      "counts_as_enemy": true,
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
       "drag": 15.0,
       "freezable": true,
@@ -48,6 +49,7 @@
     "Drone": {
       "animations": {},
       "color": [0.9434, 0.8381, 0.8321, 1.0],
+      "counts_as_enemy": true,
       "dead_sprites": [],
       "detonate": {
         "offset": [-0.0017, 0.0],
@@ -115,6 +117,7 @@
         }
       },
       "color": [0.9151, 0.7721, 0.764, 1.0],
+      "counts_as_enemy": true,
       "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
       "drag": 15.0,
       "freezable": true,
@@ -173,6 +176,7 @@
         }
       },
       "color": [0.4802, 0.8507, 0.934, 1.0],
+      "counts_as_enemy": true,
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
       "drag": 15.0,
       "freezable": true,
@@ -240,6 +244,7 @@
       },
       "boss_bar": "Archbishop",
       "color": [0.9151, 0.9151, 0.9151, 1.0],
+      "counts_as_enemy": true,
       "dead_sprites": ["crab_dead_1", "crab_dead_2"],
       "drag": 15.0,
       "freezable": false,
@@ -324,6 +329,7 @@
         }
       },
       "color": [0.9151, 0.7721, 0.764, 1.0],
+      "counts_as_enemy": true,
       "dead_sprites": ["horizontalDeadRobot_revision-export", "sadHeadlessEnemy_revision", "shotUpEnemyRevision"],
       "drag": 20.0,
       "freezable": true,
@@ -375,6 +381,7 @@
     },
     "multi-turret_1": {
       "animations": {},
+      "counts_as_enemy": true,
       "dead_sprites": [],
       "drag": 35.0,
       "explosion": "Explosion",

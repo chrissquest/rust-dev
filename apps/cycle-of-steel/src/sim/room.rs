@@ -92,6 +92,13 @@ impl Room {
         self.nearest_open(wanted)
     }
 
+    /// Changes one cell, as a door closing or opening does. Outside the room, nothing.
+    pub fn set_cell(&mut self, x: i32, y: i32, cell: Cell) {
+        if (0..self.columns as i32).contains(&x) && (0..self.rows as i32).contains(&y) {
+            self.cells[y as usize * self.columns as usize + x as usize] = cell;
+        }
+    }
+
     /// Puts the spawn at the open floor nearest `wanted`.
     pub fn place_spawn(&mut self, wanted: Vec2) {
         self.spawn = self.nearest_open(wanted);

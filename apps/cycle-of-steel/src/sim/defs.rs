@@ -172,6 +172,7 @@ pub struct EnemyDef {
     pub ai: Ai,
     pub touch: Option<TouchDef>,
     pub flying: bool,
+    pub counts_as_enemy: bool,
     pub boss_bar: Option<String>,
     pub sprite_offset: [f32; 2],
     /// The effect it leaves when it dies, which hurts what is near.
@@ -539,6 +540,7 @@ impl Defs {
             self.enemy_by_name.insert(name.clone(), EnemyId(self.enemies.len() as u16));
             self.enemies.push(EnemyDef {
                 flying: enemy.flying,
+                counts_as_enemy: enemy.counts_as_enemy,
                 boss_bar: enemy.boss_bar.clone(),
                 sprite_offset: enemy.sprite_offset,
                 explosion,

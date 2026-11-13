@@ -99,6 +99,8 @@ pub fn convert(project: &Project) -> Result<ConvertedEnemies> {
                 && project.stem_of(script_guid(component)).as_deref() == Some("ElementalEffectHandler")
         });
         enemy.insert("freezable".into(), json!(freezable));
+        // Whether the room waits for it to die before opening (`countAsEnemy`).
+        enemy.insert("counts_as_enemy".into(), json!(killable.get("countAsEnemy").bool()));
         // The `FlyingEnemy` physics layer does not collide with ledges.
         if root.body.get("m_Layer").i64() == FLYING_LAYER {
             enemy.insert("flying".into(), json!(true));

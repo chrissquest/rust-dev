@@ -166,6 +166,8 @@ pub struct Combat {
     pub blasts: Vec<Blast>,
     /// The room's water and lava pools.
     pub grates: Vec<Grate>,
+    /// The boxes at doorways that keep enemies in their room, as (centre, half size).
+    pub barriers: Vec<(Vec2, Vec2)>,
 }
 
 /// A floor grate over water or lava (`EffectGrate`): a trigger box that wets or
@@ -219,6 +221,7 @@ impl Combat {
             shots: Vec::with_capacity(SHOT_CAPACITY),
             blasts: Vec::with_capacity(BLAST_CAPACITY),
             grates: Vec::new(),
+            barriers: Vec::new(),
         }
     }
 

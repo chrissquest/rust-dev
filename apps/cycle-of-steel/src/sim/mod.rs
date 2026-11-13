@@ -37,6 +37,10 @@ pub const TICK_RATE: u32 = 60;
 /// Seconds per simulation step.
 pub const DT: f32 = 1.0 / TICK_RATE as f32;
 
+/// How far further in `PlayerData.Update` moves a player entering a room that
+/// seals, in units.
+const ROOM_ENTRY_STEP: f32 = 0.75;
+
 /// How many guns the player can carry.
 pub const INVENTORY_SLOTS: usize = 4;
 
@@ -85,6 +89,10 @@ pub struct World {
     pub selected_slot: usize,
     /// The currency the player picks up (`PlayerData.dataCells`).
     pub data_cells: u32,
+    /// A dungeon floor's rooms, when the world is one.
+    pub floor: Option<dungeon::Floor>,
+    /// The block the player was in last step, to notice them entering a room.
+    last_block: (i32, i32),
     /// Steps taken since the world was created.
     pub tick: u64,
     rng: Rng,
@@ -97,10 +105,14 @@ impl World {
     /// targets and chests standing.
     pub fn new(room: Room, defs: Arc<Defs>, seed: u32) -> Self {
         let player = Player::new(room.spawn);
+        let player_position = player.position;
         let mut combat = Combat::new();
 
         if let Some(file) = &room.file {
             // The dummy comes first, so that it keeps the first place among targets.
+            for barrier in &file.barriers {
+                combat.barriers.push((Vec2::from(barrier.center), Vec2::from(barrier.size) * 0.5));
+            }
             for marker in file.markers.iter().filter(|marker| marker.has_script("Killable")) {
                 let Some(bounds) = marker.bounds else {
                     continue;
@@ -137,7 +149,12 @@ impl World {
                     let value = object.overrides.get(field).and_then(|value| value.parse().ok());
                     combat.drops.push(Drop::new(drop, value.unwrap_or(defs.drop_def(drop).value), position));
                 } else if let Some(enemy) = defs.enemy_named(&object.prefab) {
-                    combat.targets.push(enemy::spawn(&defs, enemy, position, combat.targets.len() as u32));
+                    let mut target = enemy::spawn(&defs, enemy, position, combat.targets.len() as u32);
+                    if let Some(state) = &mut target.enemy {
+                        // `Killable.safeToUpdateRoomCounter`: under the room's `Enemies`.
+                        state.counted = defs.enemy(enemy).counts_as_enemy && object.group.as_deref() == Some("Enemies");
+                    }
+                    combat.targets.push(target);
                 } else if let Some(chest) = defs.chest_named(&object.prefab) {
                     let def = defs.chest(chest);
                     combat.targets.push(Target {
@@ -176,6 +193,8 @@ impl World {
             inventory: [None, None, None, None],
             selected_slot: 0,
             data_cells: 0,
+            floor: None,
+            last_block: enemy::block_of(player_position),
             tick: 0,
             rng: Rng::new(seed),
             events: Vec::new(),
@@ -223,6 +242,7 @@ impl World {
         let now = self.time();
 
         self.player.step(input, &self.room, self.combat.solids());
+        self.update_rooms();
 
         if let Some(slot) = input.select_slot {
             self.select_slot(slot);
@@ -290,7 +310,7 @@ impl World {
         }
 
         let combat = &mut self.combat;
-        enemy::step_enemies(&mut combat.targets, &mut combat.shots, &defs, &self.room, &mut self.player, now, &mut self.rng);
+        enemy::step_enemies(&mut combat.targets, &combat.barriers, &mut combat.shots, &defs, &self.room, &mut self.player, now, &mut self.rng);
         enemy::step_shots(&mut combat.shots, &mut combat.effects, &defs, &self.room, &mut self.player, now);
         self.combat.step(&defs, &self.room, &mut self.player, now, &mut self.rng);
         if self.player.health <= 0.0 {
@@ -312,6 +332,41 @@ impl World {
             self.events.drain(..self.events.len() - 256);
         }
         self.tick += 1;
+    }
+
+    /// `PlayerData.Update` and `RoomScript`: stepping into a room whose enemies
+    /// still live seals its doors and moves the player 0.75 further in, so the
+    /// door does not close on them; a sealed room opens once its last counted
+    /// enemy dies.
+    fn update_rooms(&mut self) {
+        let Some(floor) = &mut self.floor else {
+            return;
+        };
+        let block = enemy::block_of(self.player.position);
+        let enemies_left = |targets: &[Target], block: (i32, i32)| {
+            targets
+                .iter()
+                .filter_map(|target| target.enemy.as_ref())
+                .any(|enemy| enemy.counted && enemy.home == block)
+        };
+        if block != self.last_block {
+            let from = self.last_block;
+            self.last_block = block;
+            if let Some(index) = floor.room_at(block)
+                && !floor.rooms[index].sealed
+                && enemies_left(&self.combat.targets, block)
+            {
+                floor.seal(index, &mut self.room);
+                let entered = Vec2::new((block.0 - from.0) as f32, (block.1 - from.1) as f32);
+                self.player.position += entered * ROOM_ENTRY_STEP;
+                self.player.previous_position = self.player.position;
+            }
+        }
+        for index in 0..floor.rooms.len() {
+            if floor.rooms[index].sealed && !enemies_left(&self.combat.targets, floor.rooms[index].block) {
+                floor.unseal(index, &mut self.room);
+            }
+        }
     }
 
     fn select_slot(&mut self, slot: usize) {

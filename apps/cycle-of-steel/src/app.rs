@@ -359,16 +359,17 @@ pub const DUNGEON: &str = "dungeon";
 
 fn load_world(assets: &AssetSource, room: &str, seed: u32) -> Result<World> {
     let defs = Arc::new(Defs::from_file(&GunsFile::load(assets)?)?.with_loot(&LootFile::load(assets)?)?.with_enemies(&EnemiesFile::load(assets)?)?);
-    let room = if room == DUNGEON {
-        load_dungeon(assets, seed)?
-    } else {
-        Room::from_file(RoomFile::load(assets, room)?)
-    };
-    Ok(World::new(room, defs, seed))
+    if room == DUNGEON {
+        let (room, floor) = load_dungeon(assets, seed)?;
+        let mut world = World::new(room, defs, seed);
+        world.floor = Some(floor);
+        return Ok(world);
+    }
+    Ok(World::new(Room::from_file(RoomFile::load(assets, room)?), defs, seed))
 }
 
 /// Generates a floor from `seed` and joins its rooms into one room.
-fn load_dungeon(assets: &AssetSource, seed: u32) -> Result<Room> {
+fn load_dungeon(assets: &AssetSource, seed: u32) -> Result<(Room, dungeon::Floor)> {
     let settings = DungeonFile::load(assets)?;
     let layout = dungeon::generate(&settings, &mut Rng::new(seed));
     let mut files = std::collections::HashMap::new();
@@ -377,10 +378,11 @@ fn load_dungeon(assets: &AssetSource, seed: u32) -> Result<Room> {
             files.insert(planned.name.clone(), RoomFile::load(assets, &planned.name)?);
         }
     }
-    let (floor, spawn) = dungeon::build(&layout, &files)?;
-    let mut room = Room::from_file(floor);
+    let (floor_file, spawn) = dungeon::build(&layout, &files)?;
+    let floor = dungeon::floor_rooms(&layout, &files, &settings);
+    let mut room = Room::from_file(floor_file);
     room.place_spawn(spawn);
-    Ok(room)
+    Ok((room, floor))
 }
 
 /// A seed that differs from launch to launch. The simulation itself never reads
@@ -836,6 +838,47 @@ mod tests {
             assert_eq!((world.room.size().x % 16.0, world.room.size().y % 9.0), (0.0, 0.0));
             assert!(world.combat.targets.iter().any(|target| target.enemy.is_some()), "seed {seed} has enemies");
         }
+    }
+
+    #[test]
+    fn a_room_with_enemies_seals_when_entered_and_opens_when_cleared() {
+        use crate::sim::enemy::block_of;
+        let assets = AssetSource::folder(None).expect("assets folder beside the manifest");
+        let mut world = load_world(&assets, DUNGEON, 1).expect("the floor builds");
+        let floor = world.floor.as_ref().unwrap();
+        // A room with enemies and a door, beside a room the player can stand in.
+        let index = floor
+            .rooms
+            .iter()
+            .position(|room| {
+                room.doors.left
+                    && world.combat.targets.iter().any(|target| target.enemy.as_ref().is_some_and(|enemy| enemy.counted && enemy.home == room.block))
+            })
+            .expect("seed 1 has a room with enemies and a left door");
+        let block = floor.rooms[index].block;
+        // Step in through its left doorway.
+        let doorway = Vec2::new(block.0 as f32 * 16.0 + 0.1, block.1 as f32 * 9.0 + 4.75);
+        world.player.position = doorway - Vec2::new(0.3, 0.0);
+        world.player.previous_position = world.player.position;
+        world.step(&Input::default());
+        world.player.position = doorway + Vec2::new(0.2, 0.0);
+        world.step(&Input::default());
+        let floor = world.floor.as_ref().unwrap();
+        assert!(floor.rooms[index].sealed, "entering sealed it");
+        assert!(world.player.position.x > doorway.x + 0.9, "and moved the player further in");
+        // The door's cells are the room's first column, from row 8 to 10.
+        assert!(world.room.box_hits_solid(doorway, Vec2::splat(0.05)), "its left door blocks");
+
+        for target in &mut world.combat.targets {
+            if target.enemy.as_ref().is_some_and(|enemy| enemy.home == block) {
+                target.health = 0.0;
+            }
+        }
+        world.step(&Input::default());
+        world.step(&Input::default());
+        assert!(!world.floor.as_ref().unwrap().rooms[index].sealed, "cleared, it opened");
+        assert!(!world.room.box_hits_solid(doorway, Vec2::splat(0.05)));
+        assert_eq!(block_of(world.player.position), block);
     }
 
     #[test]

@@ -161,8 +161,14 @@ where you spawn and interact. Interact again on the spot inside to leave.
   list for those doors that its distance from the spawn allows; the spawn, exit
   and boss rooms switch on their wall layers on the sides that lead nowhere. The
   rooms are joined into one, so the player walks from room to room, and each
-  room's enemies wake when the player is in it. Not yet: doors sealing during a
-  fight, the way in from the hub and out through the exit, the minimap.
+  room's enemies wake when the player is in it.
+- **Sealed rooms.** Stepping into a room whose enemies still live closes its
+  doorways with Unity's door tiles and moves the player 0.75 units further in,
+  so the door does not close on them (`PlayerData.Update`, `RoomScript`); when
+  the last enemy counted for the room dies, the doors open. Barriers at every
+  doorway keep enemies in their own room. Not yet: the arrows Unity shows
+  towards the opened doors, the way in from the hub and out through the exit,
+  the boss room's locking, the minimap.
 
 Not in yet:
 lighting (rooms look flatter and brighter than in

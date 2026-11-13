@@ -20,7 +20,8 @@ use anyhow::{Context, Result};
 use crystal_engine::glam::Vec2;
 
 use super::rng::Rng;
-use crate::data::{DungeonFile, LayerFile, RoomFile};
+use super::room::{Cell, Room};
+use crate::data::{DoorTilesFile, DoorsFile, DungeonFile, LayerFile, RoomFile};
 
 /// `DungeonGenerator`'s give-up count: rounds in a row that add no room.
 const MAX_TRIES: u32 = 7;
@@ -177,6 +178,102 @@ fn opposite(index: usize) -> usize {
     [1, 0, 3, 2][index]
 }
 
+/// A floor while it is played: its rooms, and which are sealed.
+#[derive(Clone, Debug)]
+pub struct Floor {
+    pub rooms: Vec<FloorRoom>,
+    pub door_tiles: DoorTilesFile,
+}
+
+/// What a door tile is, of the three `SealRoom` places.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DoorPiece {
+    Top,
+    Bottom,
+    Vertical,
+}
+
+/// The most cells one room's doors can cover: 4 + 2 + 3 + 3.
+const DOOR_CELLS: usize = 12;
+
+#[derive(Clone, Debug)]
+pub struct FloorRoom {
+    /// Its screen-sized block in the floor.
+    pub block: (i32, i32),
+    pub kind: RoomKind,
+    /// Its doorways that `SealRoom` closes with door tiles.
+    pub doors: DoorsFile,
+    pub sealed: bool,
+    /// While sealed: the cells its door tiles cover, what each is, and the cell
+    /// each covered before.
+    cells: [((i32, i32), DoorPiece, Cell); DOOR_CELLS],
+    cell_count: usize,
+}
+
+impl FloorRoom {
+    /// The door tiles in place while it is sealed.
+    pub fn door_cells(&self) -> impl Iterator<Item = ((i32, i32), DoorPiece)> + '_ {
+        self.cells[..self.cell_count].iter().map(|&(cell, piece, _)| (cell, piece))
+    }
+}
+
+impl Floor {
+    pub fn room_at(&self, block: (i32, i32)) -> Option<usize> {
+        self.rooms.iter().position(|room| room.block == block)
+    }
+
+    /// `RoomScript.SealRoom`: door tiles in each of the room's doorways, at the
+    /// cells the script names; those whose tile collides block.
+    pub fn seal(&mut self, index: usize, room: &mut Room) {
+        let floor_room = &mut self.rooms[index];
+        if floor_room.sealed {
+            return;
+        }
+        let base = (floor_room.block.0 * ROOM_CELLS[0] as i32, floor_room.block.1 * ROOM_CELLS[1] as i32);
+        let doors = floor_room.doors;
+        let mut place: Vec<((i32, i32), DoorPiece)> = Vec::with_capacity(DOOR_CELLS);
+        if doors.top {
+            place.extend([((15, 17), DoorPiece::Top), ((16, 17), DoorPiece::Top)]);
+            place.extend([((15, 16), DoorPiece::Bottom), ((16, 16), DoorPiece::Bottom)]);
+        }
+        if doors.bottom {
+            place.extend([((15, 0), DoorPiece::Top), ((16, 0), DoorPiece::Top)]);
+        }
+        if doors.left {
+            place.extend([((0, 8), DoorPiece::Vertical), ((0, 9), DoorPiece::Vertical), ((0, 10), DoorPiece::Vertical)]);
+        }
+        if doors.right {
+            place.extend([((31, 8), DoorPiece::Vertical), ((31, 9), DoorPiece::Vertical), ((31, 10), DoorPiece::Vertical)]);
+        }
+        floor_room.cell_count = 0;
+        for ((x, y), piece) in place {
+            let cell = (base.0 + x, base.1 + y);
+            let before = room.cell_at(cell.0, cell.1);
+            let tile = match piece {
+                DoorPiece::Top => &self.door_tiles.top,
+                DoorPiece::Bottom => &self.door_tiles.bottom,
+                DoorPiece::Vertical => &self.door_tiles.vertical,
+            };
+            if tile.solid {
+                room.set_cell(cell.0, cell.1, Cell::Wall);
+            }
+            floor_room.cells[floor_room.cell_count] = (cell, piece, before);
+            floor_room.cell_count += 1;
+        }
+        floor_room.sealed = true;
+    }
+
+    /// `RoomScript.UnsealRoom`: the door tiles go and the cells are as they were.
+    pub fn unseal(&mut self, index: usize, room: &mut Room) {
+        let floor_room = &mut self.rooms[index];
+        for &((x, y), _, before) in &floor_room.cells[..floor_room.cell_count] {
+            room.set_cell(x, y, before);
+        }
+        floor_room.cell_count = 0;
+        floor_room.sealed = false;
+    }
+}
+
 /// Joins the layout's rooms into one room, each at its place on the grid, and
 /// says where the player starts: the middle of the spawn room.
 pub fn build(layout: &Layout, files: &HashMap<String, RoomFile>) -> Result<(RoomFile, Vec2)> {
@@ -196,6 +293,8 @@ pub fn build(layout: &Layout, files: &HashMap<String, RoomFile>) -> Result<(Room
         decorations: Vec::new(),
         objects: Vec::new(),
         markers: Vec::new(),
+        barriers: Vec::new(),
+        doors: DoorsFile::default(),
     };
     let mut palette_index: HashMap<String, i32> = HashMap::new();
     // One floor layer per (sorting layer, order, ledge), in order of first sight.
@@ -278,6 +377,11 @@ pub fn build(layout: &Layout, files: &HashMap<String, RoomFile>) -> Result<(Room
             object.position = moved(object.position);
             floor.objects.push(object);
         }
+        for barrier in &file.barriers {
+            let mut barrier = *barrier;
+            barrier.center = moved(barrier.center);
+            floor.barriers.push(barrier);
+        }
         for marker in &file.markers {
             let mut marker = marker.clone();
             marker.position = moved(marker.position);
@@ -288,6 +392,30 @@ pub fn build(layout: &Layout, files: &HashMap<String, RoomFile>) -> Result<(Room
         }
     }
     Ok((floor, spawn))
+}
+
+/// The floor's rooms as they are played, in the blocks `build` put them in.
+pub fn floor_rooms(layout: &Layout, files: &HashMap<String, RoomFile>, settings: &DungeonFile) -> Floor {
+    let min_x = layout.rooms.iter().map(|room| room.coord.0).min().unwrap_or(0);
+    let min_y = layout.rooms.iter().map(|room| room.coord.1).min().unwrap_or(0);
+    let rooms = layout
+        .rooms
+        .iter()
+        .map(|room| FloorRoom {
+            block: (room.coord.0 - min_x, room.coord.1 - min_y),
+            kind: room.kind,
+            // Only rooms picked for their doors seal with door tiles.
+            doors: if room.kind == RoomKind::Random {
+                files.get(&room.name).map(|file| file.doors).unwrap_or_default()
+            } else {
+                DoorsFile::default()
+            },
+            sealed: false,
+            cells: [((0, 0), DoorPiece::Top, Cell::Free); DOOR_CELLS],
+            cell_count: 0,
+        })
+        .collect();
+    Floor { rooms, door_tiles: settings.door_tiles.clone() }
 }
 
 /// Whether a room's layer is drawn: enabled ones always, and the spawn, exit and
@@ -316,6 +444,8 @@ mod tests {
     fn settings() -> DungeonFile {
         serde_json::from_str(
             r#"{"grid_size": 10, "rooms": 8, "spawn": [5, 5], "open_room": "open", "spawn_room": "spawn",
+                "door_tiles": {"top": {"sprite": "t", "solid": true}, "bottom": {"sprite": "b", "solid": false},
+                               "vertical": {"sprite": "v", "solid": true}},
                 "exit_room": "exit", "boss_room": "boss",
                 "by_doors": {"N": ["n_far", "n"], "S": ["s"], "E": ["e"], "W": ["w"], "NS": ["ns"], "EW": ["ew"],
                              "NE": ["ne"], "NW": ["nw"], "SE": ["se"], "SW": ["sw"], "NSE": ["nse"],

@@ -21,7 +21,7 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon (piece 1 of 4), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
+combat (done), 4 enemies (done), 5 dungeon (pieces 1 and 2 of 4), 5 dungeon, 6 lighting and audio, 7 full loop (hub,
 upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
@@ -71,8 +71,14 @@ clearing, (3) the way in from the hub, the exit room and the boss room's locking
 `assets/dungeon.json` and joins the picked rooms into one `RoomFile`
 (`dungeon::build`); `--room dungeon` loads a floor (`app::DUNGEON`).
 
-**Next: step 5 piece 2, doors sealing and rooms clearing** (`RoomScript`'s
-`SealRoom`, `UnsealRoom`, `PlayerEnteredRoom`, enemy counts).
+Piece 2 is done: `dungeon::Floor` seals a room's doorways (`Floor::seal`, door
+cells made walls) when the player enters it with counted enemies left
+(`World::update_rooms`, `Enemy::counted` and `home`), and opens them when they
+die; room barriers keep enemies in (`Combat::barriers`).
+
+**Next: step 5 piece 3**: the way in from the hub, the exit room (`ExitDungeon`:
+full heal, back to the hub, the next floor harder) and the boss room's locking
+(it is a `SpawnRoom` with `doorsInverseGenerated`).
 `cos-convert` when the step needs it, not before.
 
 ### How to work here

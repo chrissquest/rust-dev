@@ -152,7 +152,10 @@ fn main() -> Result<()> {
         add_sprite(&mut catalogue, sprite)?;
     }
 
-    let dungeon = dungeon::convert(&project)?;
+    let (dungeon, dungeon_sprites) = dungeon::convert(&project)?;
+    for sprite in dungeon_sprites {
+        add_sprite(&mut catalogue, sprite)?;
+    }
     let dungeon_path = output.join("dungeon.json");
     std::fs::write(&dungeon_path, json::to_string(&dungeon))
         .with_context(|| format!("could not write {}", dungeon_path.display()))?;

@@ -5,6 +5,10 @@
 //! in the order it tries them; each room prefab's `RoomScript` says how far from
 //! the spawn it may be placed at the least (`distanceFromSpawn`). The grid size
 //! and room count are constants in the script itself.
+//!
+//! It also writes the tiles `RoomScript.SealRoom` puts in a room's doorways while
+//! the player fights there, and whether each blocks: every room uses the same
+//! three, so they are read from the first room that names them.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -13,7 +17,7 @@ use anyhow::{Context, Result};
 use serde_json::{Value as Json, json};
 
 use crate::guns::root_script;
-use crate::project::Project;
+use crate::project::{Project, SpriteInfo, TileCollider};
 use crate::room::Prefab;
 use crate::slug;
 
@@ -26,7 +30,7 @@ const ROOM_COUNT: u32 = 8;
 const DOOR_SETS: [&str; 15] =
     ["NSEW", "NSE", "NEW", "NSW", "SEW", "NE", "NS", "NW", "SE", "EW", "SW", "N", "E", "S", "W"];
 
-pub fn convert(project: &Project) -> Result<Json> {
+pub fn convert(project: &Project) -> Result<(Json, Vec<SpriteInfo>)> {
     let documents = project.documents(Path::new(SCENE))?;
     let generator = documents
         .iter()
@@ -51,17 +55,32 @@ pub fn convert(project: &Project) -> Result<Json> {
     }
 
     let mut distance = BTreeMap::new();
+    let mut door_tiles = None;
+    let mut sprites = Vec::new();
     for path in project.prefabs_under(ROOMS_FOLDER)? {
         let documents = project.documents(&path)?;
         let prefab = Prefab::new(&documents);
         if let Some((_, _, script)) = root_script(project, &prefab, &["RoomScript", "SpawnRoom"]) {
             let name = path.file_stem().map(|stem| slug(&stem.to_string_lossy())).unwrap_or_default();
             distance.insert(name, script.get("distanceFromSpawn").i64());
+            if door_tiles.is_none() {
+                let mut tiles = serde_json::Map::new();
+                for (key, field) in [("top", "doorHorzTop"), ("bottom", "doorHorzBot"), ("vertical", "doorVert")] {
+                    if let Some((sprite, solid)) = tile(project, script.get(field).get("guid").str())? {
+                        tiles.insert(key.into(), json!({ "sprite": sprite.name, "solid": solid }));
+                        sprites.push(sprite);
+                    }
+                }
+                if tiles.len() == 3 {
+                    door_tiles = Some(Json::Object(tiles));
+                }
+            }
         }
     }
 
     let spawn = body.get("spawnCoord");
-    Ok(json!({
+    Ok((json!({
+        "door_tiles": door_tiles,
         "grid_size": GRID_SIZE,
         "rooms": ROOM_COUNT,
         "spawn": [spawn.get("x").i64(), spawn.get("y").i64()],
@@ -71,5 +90,18 @@ pub fn convert(project: &Project) -> Result<Json> {
         "boss_room": room("bossRoom"),
         "by_doors": by_doors,
         "distance": distance,
-    }))
+    }), sprites))
+}
+
+/// A Tile asset's sprite and whether it blocks.
+fn tile(project: &Project, guid: &str) -> Result<Option<(SpriteInfo, bool)>> {
+    let Some(path) = project.path_of(guid).map(Path::to_path_buf) else {
+        return Ok(None);
+    };
+    let documents = project.documents(&path)?;
+    let Some(document) = documents.iter().find(|document| document.body.has("m_Sprite")) else {
+        return Ok(None);
+    };
+    let solid = project.tile_collider(guid) == TileCollider::Solid;
+    Ok(project.sprite(document.body.get("m_Sprite"))?.map(|sprite| (sprite, solid)))
 }

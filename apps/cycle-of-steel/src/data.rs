@@ -4,8 +4,8 @@
 //! now the source of truth. Everything is in room space: x right, y up, origin at
 //! the room's bottom-left corner, in world units.
 //!
-//! Only what the game uses so far is read. A room file also lists `lights` and
-//! `barriers`; those are skipped here until the steps that need them.
+//! Only what the game uses so far is read. A room file also lists `lights`;
+//! those are skipped here until the step that needs them.
 
 use std::collections::HashMap;
 
@@ -84,6 +84,20 @@ pub struct RoomFile {
     pub objects: Vec<ObjectFile>,
     #[serde(default)]
     pub markers: Vec<MarkerFile>,
+    /// Boxes at the doorways that stop enemies (Unity: everything but the player).
+    #[serde(default)]
+    pub barriers: Vec<BoxFile>,
+    /// Which sides have a doorway that `RoomScript.SealRoom` closes.
+    #[serde(default)]
+    pub doors: DoorsFile,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+pub struct DoorsFile {
+    pub top: bool,
+    pub bottom: bool,
+    pub left: bool,
+    pub right: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -130,6 +144,9 @@ pub struct DecorationFile {
 pub struct ObjectFile {
     pub prefab: String,
     pub position: [f32; 2],
+    /// The object it sits under in the room, such as `Enemies`.
+    #[serde(default)]
+    pub group: Option<String>,
     /// Settings this placement changes from its prefab, as `Script.field` -> text.
     #[serde(default)]
     pub overrides: HashMap<String, String>,
@@ -320,9 +337,26 @@ pub struct DungeonFile {
     /// For each set of doors (`N`, `NE`, `NSEW`...), the rooms that fit, in the
     /// order they are tried.
     pub by_doors: HashMap<String, Vec<String>>,
+    /// The tiles `SealRoom` puts in doorways.
+    pub door_tiles: DoorTilesFile,
     /// Each room's `distanceFromSpawn`: the layer it may appear from.
     #[serde(default)]
     pub distance: HashMap<String, i32>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DoorTilesFile {
+    /// The two rows of a top doorway, and the one of a bottom doorway (`top`).
+    pub top: DoorTileFile,
+    pub bottom: DoorTileFile,
+    /// The three cells of a side doorway.
+    pub vertical: DoorTileFile,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DoorTileFile {
+    pub sprite: String,
+    pub solid: bool,
 }
 
 impl DungeonFile {
@@ -434,6 +468,9 @@ pub struct EnemyFile {
     pub drag: f32,
     /// Has an `ElementalEffectHandler`, so freezing bullets slow it.
     pub freezable: bool,
+    /// Its room stays sealed until it dies (`countAsEnemy`).
+    #[serde(default)]
+    pub counts_as_enemy: bool,
     pub loot: Vec<LootEntryFile>,
     /// One is picked at random for the body it leaves.
     pub dead_sprites: Vec<String>,

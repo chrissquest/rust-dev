@@ -191,6 +191,11 @@ pub struct Enemy {
     drift: Vec2,
     /// The Priest's state.
     pub boss: BossState,
+    /// Whether its room waits for it to die before opening: Unity counts a
+    /// `countAsEnemy` killable placed under the room's `Enemies`.
+    pub counted: bool,
+    /// The screen-sized block, so the room, it was placed in.
+    pub home: (i32, i32),
     /// A LASERCrab's line, while it shows.
     pub beam: Option<EnemyBeam>,
     /// The swing in progress: its direction and when it started.
@@ -228,6 +233,8 @@ impl Enemy {
             risen: 0,
             drift: Vec2::ZERO,
             boss: BossState::default(),
+            counted: false,
+            home: block_of(origin),
             swing: None,
             animation: None,
         }
@@ -285,6 +292,7 @@ pub fn spawn(defs: &Defs, enemy: EnemyId, origin: Vec2, id: u32) -> Target {
 #[allow(clippy::too_many_arguments)]
 pub fn step_enemies(
     targets: &mut [Target],
+    barriers: &[(Vec2, Vec2)],
     shots: &mut Vec<Shot>,
     defs: &Defs,
     room: &Room,
@@ -328,7 +336,7 @@ pub fn step_enemies(
         if let Some(touch) = def.touch {
             bite(&mut targets[index], touch, player, now);
         }
-        move_enemy(targets, index, def, room, push);
+        move_enemy(targets, barriers, index, def, room, push);
     }
 }
 
@@ -883,14 +891,15 @@ fn swing(target: &mut Target, warrior: &WarriorDef, player: &mut Player, now: f6
 
 /// Pushes the enemy with acceleration `push`, applies drag, and moves it through
 /// the room. Walls and ledges stop it, and so do chests.
-fn move_enemy(targets: &mut [Target], index: usize, def: &EnemyDef, room: &Room, push: Vec2) {
+fn move_enemy(targets: &mut [Target], barriers: &[(Vec2, Vec2)], index: usize, def: &EnemyDef, room: &Room, push: Vec2) {
     let (before, after) = targets.split_at_mut(index);
     let (target, after) = after.split_first_mut().expect("index is in range");
     let solids = before
         .iter()
         .chain(after.iter())
         .filter(|other| other.chest.is_some())
-        .map(|other| (other.position, other.half));
+        .map(|other| (other.position, other.half))
+        .chain(barriers.iter().copied());
     let drag = target.elemental.as_ref().map_or(def.drag, |elemental| elemental.drag(def.drag));
     let body = grown(OffsetBox { half: def.half, offset: def.offset }, target, def);
     let enemy = target.enemy.as_mut().expect("an enemy");
@@ -966,7 +975,7 @@ fn nearest_axis(vector: Vec2) -> Option<Direction> {
 }
 
 /// Which screen-sized block of the world a point is in (`RoomInfo.width/height`).
-fn block_of(point: Vec2) -> (i32, i32) {
+pub fn block_of(point: Vec2) -> (i32, i32) {
     ((point.x / CAMERA_BLOCK.x).floor() as i32, (point.y / CAMERA_BLOCK.y).floor() as i32)
 }
 
@@ -985,7 +994,7 @@ mod tests {
         let mut effects = Vec::with_capacity(8);
         for tick in 0..steps {
             let now = tick as f64 * DT as f64;
-            step_enemies(targets, &mut shots, defs, room, player, now, &mut rng);
+            step_enemies(targets, &[], &mut shots, defs, room, player, now, &mut rng);
             step_shots(&mut shots, &mut effects, defs, room, player, now);
         }
         shots
@@ -1050,7 +1059,7 @@ mod tests {
             let now = tick as f64 * DT as f64;
             // Keep the player in place, out of its bite.
             player.position = Vec2::new(4.0, 2.0);
-            step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, now, &mut rng);
+            step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, now, &mut rng);
             if let Some(beam) = targets[0].enemy.as_ref().unwrap().beam
                 && phases.last() != Some(&beam.phase)
             {
@@ -1070,11 +1079,11 @@ mod tests {
         let mut targets = vec![spawn(&defs, drone, Vec2::new(4.6, 2.0), 0)];
         let mut rng = Rng::new(5);
         let mut shots = Vec::new();
-        step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
+        step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
         assert_eq!(targets[0].enemy.as_ref().unwrap().risen, 1, "it saw the player and began to rise");
         let mut tick = 1;
         while targets[0].health > 0.0 && tick < 60 * 30 {
-            step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, tick as f64 * DT as f64, &mut rng);
+            step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, tick as f64 * DT as f64, &mut rng);
             tick += 1;
         }
         assert_eq!(targets[0].health, 0.0, "touching the player set it off");
@@ -1102,7 +1111,7 @@ mod tests {
         for tick in 0..60 * 30 {
             let now = tick as f64 * DT as f64;
             player.health = player::MAX_HEALTH;
-            step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, now, &mut rng);
+            step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, now, &mut rng);
             let attack = targets[0].enemy.as_ref().unwrap().boss.attack;
             if attacks.last().map(|(last, _)| *last) != Some(attack) {
                 attacks.push((attack, tick));
@@ -1126,7 +1135,7 @@ mod tests {
         state.until = 100.0;
         let mut rng = Rng::new(3);
         let mut shots = Vec::new();
-        step_enemies(&mut targets, &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
+        step_enemies(&mut targets, &[], &mut shots, &defs, &room, &mut player, 0.0, &mut rng);
         assert_eq!(player.health, player::MAX_HEALTH - 20.0);
         let beam = targets[0].enemy.as_ref().unwrap().boss.beams[0].unwrap();
         assert!((beam.length - (3.0 - player::HALF_SIZE.x)).abs() < 1e-3, "it stops on the player: {}", beam.length);
