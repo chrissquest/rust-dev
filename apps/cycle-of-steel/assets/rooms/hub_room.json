@@ -436,6 +436,9 @@
         "DialogueEvent.destroyOnEventTriggered": "0",
         "DialogueEvent.playerEvent": "4"
       },
+      "lists": {
+        "DialogueEvent.dialogue": ["And my desk... here I can perform upgrades on my shell"]
+      },
       "name": "Dialogue",
       "position": [8.09, 4.44],
       "scripts": ["DialogueEvent"]
@@ -470,6 +473,9 @@
         "DialogueEvent.destroyOnEventTriggered": "1",
         "DialogueEvent.playerEvent": "5"
       },
+      "lists": {
+        "DialogueEvent.dialogue": ["Guns have a cooldown meter on the top left, keep it in mind", "It is encouraged to swap between weapons while others are on cooldown", "Shoot the button with the blue gun to proceed"]
+      },
       "name": "ExitDialogue",
       "position": [14.512, 4.595],
       "scripts": ["DialogueEvent"]
@@ -483,6 +489,9 @@
       "fields": {
         "DialogueEvent.destroyOnEventTriggered": "1",
         "DialogueEvent.playerEvent": "3"
+      },
+      "lists": {
+        "DialogueEvent.dialogue": ["My other gun, I should pick it up before heading out."]
       },
       "name": "Pedestal",
       "position": [3.64, 1.618],

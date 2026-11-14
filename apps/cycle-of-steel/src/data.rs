@@ -201,6 +201,9 @@ pub struct MarkerFile {
     /// Settings typed into the Unity inspector, as `Script.field` -> text.
     #[serde(default)]
     pub fields: HashMap<String, String>,
+    /// Lists of text typed into the inspector, such as dialogue lines.
+    #[serde(default)]
+    pub lists: HashMap<String, Vec<String>>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

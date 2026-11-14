@@ -1125,15 +1125,31 @@ impl View {
         let baseline = top - Vec2::new(0.0, FONT_ASCENT * hud.text_size);
         push_text(&mut self.overlay, &self.font, count, baseline, 0.0, hud.text_size, HUD_TEXT_COLOR);
 
+        // The player's line, wrapped to the box (`PlayerUI.dialogueText`).
+        if let Some(line) = world.dialogue.current() {
+            let size = hud.text_size;
+            let padding = size * 0.6;
+            self.overlay.sprite(self.white, rect(hud.dialogue, HUD_MAP_BACK_COLOR));
+            let width = hud.dialogue.size().x - padding * 2.0;
+            let mut top_left = hud.dialogue.min + Vec2::splat(padding);
+            let font = &self.font;
+            for piece in wrap(line, |text| text_width(font, text, size), width) {
+                let baseline = flip(top_left).truncate() - Vec2::new(0.0, FONT_ASCENT * size);
+                push_text(&mut self.overlay, font, piece, baseline, 0.0, size, HUD_TEXT_COLOR);
+                top_left.y += size * 1.4;
+            }
+        }
+
         // The interact button shows what would be picked up; over a hidden spot
-        // it is just the button.
-        if let Some(interaction) = world.interaction() {
+        // or a line to read on through it is just the button.
+        if world.can_interact() {
             let diameter = hud.interact_radius * 2.0;
             self.overlay.sprite(
                 self.disc,
                 Sprite::new(flip(hud.interact_center), [diameter, diameter], full).with_color(HUD_BUTTON_COLOR),
             );
-            if let Interaction::Pickup(index) = interaction
+            if !world.dialogue.is_showing()
+                && let Some(Interaction::Pickup(index)) = world.interaction()
                 && let Some(sprite) = &self.gun_sprites[world.combat.pickups[index].gun.def.0 as usize]
             {
                 self.overlay
@@ -1272,6 +1288,28 @@ fn push_text(
             pen.x += advance * size;
         }
     }
+}
+
+/// `text` broken at spaces into lines no wider than `width` by `width_of`. A
+/// word wider than that on its own gets a line of its own.
+fn wrap<'a>(text: &'a str, width_of: impl Fn(&str) -> f32 + 'a, width: f32) -> impl Iterator<Item = &'a str> + 'a {
+    let mut rest = text.trim_start();
+    std::iter::from_fn(move || {
+        if rest.is_empty() {
+            return None;
+        }
+        let mut end = 0;
+        for word in rest.split_inclusive(' ') {
+            let next = end + word.len();
+            if end > 0 && width_of(rest[..next].trim_end()) > width {
+                break;
+            }
+            end = next;
+        }
+        let line = rest[..end].trim_end();
+        rest = rest[end..].trim_start();
+        Some(line)
+    })
 }
 
 /// How wide `text` is at `size`, in the same units.
@@ -1422,6 +1460,15 @@ mod tests {
             assert!(gun_direction.distance(aim) < 1e-5, "aiming {aim}: gun at {gun_direction}");
             assert_eq!(mirrored, aim.x >= 0.0);
         }
+    }
+
+    #[test]
+    fn long_lines_wrap_at_spaces() {
+        let width_of = |text: &str| text.len() as f32;
+        let lines: Vec<&str> = wrap("The Core AI is close... go on", width_of, 12.0).collect();
+        assert_eq!(lines, ["The Core AI", "is close...", "go on"]);
+        let lines: Vec<&str> = wrap("unbreakableword x", width_of, 5.0).collect();
+        assert_eq!(lines, ["unbreakableword", "x"]);
     }
 
     #[test]

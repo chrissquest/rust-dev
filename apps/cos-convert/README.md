@@ -42,7 +42,7 @@ corner, in world units (half a unit per tile).
 | `objects` | Nested prefabs to spawn: enemies, chests, hazards, pickups, with any overridden settings. |
 | `lights` | Point, freeform and global lights with colour, intensity, range and the sorting layers they light. |
 | `barriers` | Boxes at the doors that stop everything except the player. |
-| `markers` | Other objects that carried a game script (triggers, the upgrade bench), with their settings. |
+| `markers` | Other objects that carried a game script (triggers, the upgrade bench), with their settings: `fields` for single values, `lists` for lists of text such as `DialogueEvent.dialogue`. |
 
 A tile is one number: -1 for empty, otherwise `palette index * 8 + transform`. The
 transform's low two bits are quarter turns counter-clockwise; adding 4 mirrors the

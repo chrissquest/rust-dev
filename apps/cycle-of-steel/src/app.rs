@@ -1283,6 +1283,12 @@ mod tests {
             .fold(f32::INFINITY, f32::min);
         assert!(nearest_gun < 6.0, "no gun within reach of the gun room: nearest is {nearest_gun} away");
 
+        // `DebugRoom`: two lines on the way in, read through with interact.
+        assert_eq!(world.dialogue.current(), Some(crate::sim::dialogue::SECRET[0]));
+        interact(&mut world);
+        interact(&mut world);
+        assert!(!world.dialogue.is_showing());
+
         // Stand on the way out and interact.
         let exit = 1 - entrance;
         world.player.position = world.combat.teleports[exit].position;
@@ -1290,5 +1296,61 @@ mod tests {
         let outside = world.player.position;
         assert!(!world.room.box_hits_solid(outside, HALF_SIZE), "left into a wall at {outside}");
         assert!(outside.y < inside.y);
+        assert_eq!(world.dialogue.current(), Some(crate::sim::dialogue::SECRET2[0]));
+    }
+
+    #[test]
+    fn the_hub_says_its_lines_once_per_save_and_they_hold_the_player() {
+        use crate::sim::dialogue::{INTRO, PlayerEvent};
+        let mut world = hub();
+        world.load(&Save::new_game(world.player.max_health));
+        // `HubRespawn`: the intro, 1.5 seconds in.
+        for _ in 0..90 {
+            world.step(&Input::default());
+        }
+        assert!(!world.dialogue.is_showing());
+        world.step(&Input::default());
+        assert_eq!(world.dialogue.current(), Some(INTRO[0]));
+
+        // A line holds the player still; interact reads on.
+        let before = world.player.position;
+        for _ in 0..10 {
+            world.step(&Input { movement: Vec2::X, ..Input::default() });
+        }
+        assert_eq!(world.player.position, before, "held while a line shows");
+        interact(&mut world);
+        interact(&mut world);
+        assert!(!world.dialogue.is_showing());
+
+        // The desk's box: its line once, and remembered by the save.
+        let desk = world.combat.dialogues.iter().find(|trigger| trigger.event == Some(PlayerEvent::Desk)).unwrap();
+        world.teleport(desk.center);
+        world.step(&Input::default());
+        assert_eq!(world.dialogue.current(), Some("And my desk... here I can perform upgrades on my shell"));
+        interact(&mut world);
+        world.player.position = world.combat.entrances[0].0;
+        world.step(&Input::default());
+        let saved = world.saved.clone().unwrap();
+        assert!(saved.events.iter().any(|name| name == "Intro") && saved.events.iter().any(|name| name == "Desk"));
+
+        // A new launch from that save says neither again.
+        let mut next = hub();
+        next.load(&saved);
+        for _ in 0..120 {
+            next.step(&Input::default());
+        }
+        let desk = next.combat.dialogues.iter().find(|trigger| trigger.event == Some(PlayerEvent::Desk)).unwrap();
+        next.teleport(desk.center);
+        next.step(&Input::default());
+        assert!(!next.dialogue.is_showing());
+    }
+
+    #[test]
+    fn the_exit_room_speaks_on_the_way_in() {
+        let mut world = hub();
+        let trigger = world.combat.dialogues.iter().find(|trigger| trigger.event.is_none()).expect("the exit room's box");
+        world.teleport(trigger.center);
+        world.step(&Input::default());
+        assert_eq!(world.dialogue.current(), Some(crate::sim::dialogue::EXIT_ROOM[0]));
     }
 }

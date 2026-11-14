@@ -89,8 +89,8 @@ sim asks with `Event::Sound`; `audio.rs` plays clips from `assets/audio` with
 Not yet: guns' own lights, freeform lights' soft edges, depth cues (after
 parity), a volume setting (step 7).
 
-Step 7 (the full loop) is in pieces: 1 saves and upgrades (done), 2 dialogue,
-3 menus (start, pause, death screen). Saves: `sim/save.rs` (`Save`, Unity's
+Step 7 (the full loop) is in pieces: 1 saves and upgrades (done), 2 dialogue
+(done), 3 menus (start, pause, death screen). Saves: `sim/save.rs` (`Save`, Unity's
 `PlayerSaveData` as JSON with a version, guns by name), `World::load`/`save`
 (on `ExitHub`, `ExitDungeon` and death, which reloads the saved guns),
 `World::saves` counted for the app to write (`storage.rs`, `--save`). Upgrades:
@@ -98,8 +98,12 @@ Step 7 (the full loop) is in pieces: 1 saves and upgrades (done), 2 dialogue,
 (`Interaction::Bench` -> `Event::OpenUpgrades`) and `menu.rs`, drawn by the view;
 a menu pauses stepping and takes `InputState::take_menu_input`.
 
-**Next: step 7 piece 2, dialogue** (`DialogueEvent`, `HubRespawn`'s intro,
-`DebugRoom`'s lines, `ExitRoomDialogue`, events kept in the save).
+Dialogue: `sim/dialogue.rs` (`PlayerEvent` as Unity's, `Dialogue` queue,
+`DialogueTrigger` boxes in `Combat::dialogues` from markers' `lists`), said
+events kept in the save; a showing line holds the player and interact reads on.
+
+**Next: step 7 piece 3, menus** (start menu with delete save, pause menu with
+Menu/Quit and touch toggle, the 5 second death screen, `HubRespawn`'s wake-up).
 
 ### How to work here
 

@@ -850,6 +850,7 @@ fn scripted_object(project: &Project, prefab: &Prefab, object: &Document) -> Opt
 
     let mut scripts = Vec::new();
     let mut fields = BTreeMap::new();
+    let mut lists = BTreeMap::new();
     for component in prefab.components(object) {
         if component.class != "MonoBehaviour" || !component.body.get("m_Enabled").bool() {
             continue;
@@ -868,8 +869,19 @@ fn scripted_object(project: &Project, prefab: &Prefab, object: &Document) -> Opt
         // Plain settings typed into the inspector; references to other objects are
         // left out, since their ids mean nothing outside Unity.
         for (key, value) in component.body.entries() {
-            if !key.starts_with("m_") && matches!(value, Value::Scalar(text) if !text.is_empty()) {
-                fields.insert(format!("{script}.{key}"), value.str().to_string());
+            if key.starts_with("m_") {
+                continue;
+            }
+            match value {
+                Value::Scalar(text) if !text.is_empty() => {
+                    fields.insert(format!("{script}.{key}"), text.clone());
+                }
+                // Lists of plain text, such as `DialogueEvent.dialogue`'s lines.
+                Value::Seq(items) if !items.is_empty() && items.iter().all(|item| matches!(item, Value::Scalar(_))) => {
+                    let texts: Vec<&str> = items.iter().map(Value::str).collect();
+                    lists.insert(format!("{script}.{key}"), texts);
+                }
+                _ => {}
             }
         }
         scripts.push(script);
@@ -907,6 +919,9 @@ fn scripted_object(project: &Project, prefab: &Prefab, object: &Document) -> Opt
     }
     if !fields.is_empty() {
         entry.insert("fields".into(), json!(fields));
+    }
+    if !lists.is_empty() {
+        entry.insert("lists".into(), json!(lists));
     }
     Some(Scripted::Marker(Json::Object(entry)))
 }

@@ -137,6 +137,8 @@ pub struct Teleport {
     pub half: Vec2,
     /// Added to the player's position.
     pub offset: Vec2,
+    /// What the player says on the way through, once per save.
+    pub says: Option<(super::dialogue::PlayerEvent, &'static [&'static str])>,
 }
 
 /// What pressing interact would act on.
@@ -180,6 +182,8 @@ pub struct Combat {
     pub entrances: Vec<(Vec2, Vec2)>,
     /// Interact here to buy upgrades (`UpgradeBench`), as (centre, half size).
     pub benches: Vec<(Vec2, Vec2)>,
+    /// Boxes that say something when walked into.
+    pub dialogues: Vec<super::dialogue::DialogueTrigger>,
 }
 
 /// A floor grate over water or lava (`EffectGrate`): a trigger box that wets or
@@ -238,6 +242,7 @@ impl Combat {
             exits: Vec::new(),
             entrances: Vec::new(),
             benches: Vec::new(),
+            dialogues: Vec::new(),
         }
     }
 
@@ -1101,6 +1106,7 @@ mod tests {
             position: Vec2::new(1.0, 1.0),
             half: Vec2::splat(0.1),
             offset: Vec2::new(7.0, 0.0),
+            says: None,
         });
         assert_eq!(combat.interaction(&defs, Vec2::new(1.0, 1.0), half), Some(Interaction::Teleport(0)));
     }

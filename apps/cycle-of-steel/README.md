@@ -234,10 +234,16 @@ where you spawn and interact. Interact again on the spot inside to leave.
   (interact) opens `UpgradeMenu`'s three upgrades for data cells, at Unity's
   prices: crit chance, 200 more health (healing fully), move speed. The game
   pauses while the menu is open. The font has no `%`, so crit shows without it.
+- **Dialogue.** The player's lines show one at a time in a box at the bottom;
+  interact (or the round button) reads on, and while one shows the player can
+  neither move nor shoot, as in Unity. The intro 1.5 seconds after waking in
+  the hub (`HubRespawn`), the hub's boxes (`DialogueEvent`: the desk, the
+  pedestal, the way out), the gun room's two (`DebugRoom`, `DebugRoomExit`) are
+  said once per save; the exit room's (`ExitRoomDialogue`) once per floor.
 
 Not in yet:
-the start, pause and death menus, the hub's dialogue, a volume setting, guns'
-own lights. The HUD and menus are plain placeholders.
+the start, pause and death menus, waking in the hub's rack (`HubRespawn`'s
+animation), a volume setting, guns' own lights. The HUD and menus are plain placeholders.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
 
@@ -351,6 +357,7 @@ src/
     rng.rs       the simulation's own random numbers
     room.rs      a room's grid of free, ledge and wall cells
     save.rs      what a save holds, and the upgrade bench's prices
+    dialogue.rs  the player's lines, the events they belong to, their boxes
     dungeon.rs   generating a floor and joining its rooms into one
     collide.rs   moving a box through solid cells
     player.rs    movement, facing, animation

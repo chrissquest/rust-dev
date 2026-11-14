@@ -50,6 +50,8 @@ pub struct HudLayout {
     /// The button that shows the minimap, top right, and where the map is drawn.
     pub map_button: Rect,
     pub map_area: Rect,
+    /// The player's line, along the bottom over the boss bar (`PlayerUI.dialogueUI`).
+    pub dialogue: Rect,
     /// The round "pick up" button on the right, shown when something is in reach.
     pub interact_center: Vec2,
     pub interact_radius: f32,
@@ -100,6 +102,10 @@ impl HudLayout {
             boss_bar: Rect {
                 min: Vec2::new(screen.x * 0.25, screen.y - margin - unit * 0.03),
                 max: Vec2::new(screen.x * 0.75, screen.y - margin),
+            },
+            dialogue: Rect {
+                min: Vec2::new(screen.x * 0.5 - unit * 0.75, screen.y - margin - unit * 0.3),
+                max: Vec2::new(screen.x * 0.5 + unit * 0.75, screen.y - margin - unit * 0.08),
             },
             interact_center: Vec2::new(screen.x - unit * 0.16, unit * 0.32),
             interact_radius: unit * 0.075,

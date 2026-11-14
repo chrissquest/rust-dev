@@ -100,6 +100,10 @@ pub struct Save {
     pub upgrades: Upgrades,
     /// `PlayerData.difficulty`.
     pub difficulty: f32,
+    /// `PlayerData.eventsCompleted`: the [`PlayerEvent`](super::dialogue::PlayerEvent)s
+    /// said, by name.
+    #[serde(default)]
+    pub events: Vec<String>,
 }
 
 impl Save {
@@ -117,6 +121,7 @@ impl Save {
             inventory: [Some(STARTING_GUN.to_string()), None, None, None],
             upgrades: Upgrades::default(),
             difficulty: 1.0,
+            events: Vec::new(),
         }
     }
 

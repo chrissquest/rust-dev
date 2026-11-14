@@ -8,6 +8,7 @@
 pub mod collide;
 pub mod combat;
 pub mod defs;
+pub mod dialogue;
 pub mod dungeon;
 pub mod elemental;
 pub mod enemy;
@@ -33,6 +34,7 @@ use player::Player;
 use rng::Rng;
 use room::Room;
 use save::{Save, Upgrade, Upgrades};
+use dialogue::{Dialogue, DialogueTrigger, PlayerEvent};
 
 /// Simulation steps per second.
 pub const TICK_RATE: u32 = 60;
@@ -133,6 +135,10 @@ pub struct World {
     pub room_version: u64,
     /// What the upgrade bench has sold.
     pub upgrades: Upgrades,
+    /// The player's lines, showing and to come.
+    pub dialogue: Dialogue,
+    /// When the intro is said (`HubRespawn`), in world seconds.
+    intro_at: Option<f64>,
     /// The last save made or loaded, and how many saves have been made, for
     /// the app to notice a new one and write it out.
     pub saved: Option<Save>,
@@ -174,6 +180,8 @@ impl World {
             difficulty: 1.0,
             room_version: 0,
             upgrades: Upgrades::default(),
+            dialogue: Dialogue::default(),
+            intro_at: None,
             saved: None,
             saves: 0,
             laser_sounding: None,
@@ -195,6 +203,7 @@ impl World {
         world.floor = Some(built.floor);
         world.mark_rooms();
         world.run = Some(assets);
+        world.intro_at = Some(dialogue::INTRO_DELAY);
         Ok(world)
     }
 
@@ -221,6 +230,7 @@ impl World {
         combat.exits.retain(|(center, _)| in_hub(*center));
         combat.entrances.retain(|(center, _)| in_hub(*center));
         combat.benches.retain(|(center, _)| in_hub(*center));
+        combat.dialogues.retain(|trigger| in_hub(trigger.center));
         combat.bullets.clear();
         combat.shots.clear();
         combat.blasts.clear();
@@ -301,6 +311,9 @@ impl World {
             *slot = name.as_deref().and_then(|name| self.defs.gun_named(name)).map(Gun::new);
         }
         self.upgrades = save.upgrades;
+        for (said, event) in self.dialogue.said.iter_mut().zip(PlayerEvent::ALL) {
+            *said = save.events.iter().any(|name| name == event.name());
+        }
         self.saved = Some(save.clone());
     }
 
@@ -316,6 +329,11 @@ impl World {
         save.selected_slot = self.selected_slot;
         save.upgrades = self.upgrades;
         save.difficulty = self.difficulty;
+        save.events = PlayerEvent::ALL
+            .into_iter()
+            .filter(|&event| self.dialogue.said[event as usize])
+            .map(|event| event.name().to_string())
+            .collect();
         if with_inventory {
             save.inventory = std::array::from_fn(|slot| self.inventory[slot].as_ref().map(|gun| self.defs.gun(gun.def).name.clone()));
         } else if let Some(saved) = &self.saved {
@@ -362,8 +380,10 @@ impl World {
             .interaction(&self.defs, self.player.position, player::HALF_SIZE)
     }
 
+    /// Whether interact does anything: reads on through a line, or acts on
+    /// something in reach.
     pub fn can_interact(&self) -> bool {
-        self.interaction().is_some()
+        self.dialogue.is_showing() || self.interaction().is_some()
     }
 
     /// Puts a gun straight into the first free slot. Returns false when full.
@@ -386,7 +406,17 @@ impl World {
     pub fn step(&mut self, input: &Input) {
         let now = self.time();
 
+        // `PlayerInput`: while a line shows, interact moves the dialogue on
+        // and the player neither moves nor shoots.
+        let talking = self.dialogue.is_showing();
+        if talking && input.interact {
+            self.dialogue.advance();
+        }
+        let held = *input;
+        let input = &if talking { Input { movement: Vec2::ZERO, aim: None, interact: false, ..held } } else { held };
+
         self.player.step(input, &self.room, self.combat.solids());
+        self.say_what_is_due(now);
         if self.combat.entrances.iter().any(|&(center, half)| combat::boxes_overlap(self.player.position, player::HALF_SIZE, center, half)) {
             // `ExitHub`: saved, guns and all, on the way in.
             self.save(true);
@@ -407,7 +437,11 @@ impl World {
                 Some(Interaction::Exit(_)) => self.leave_dungeon(),
                 Some(Interaction::Bench(_)) => self.events.push(Event::OpenUpgrades),
                 Some(Interaction::Teleport(index)) => {
-                    self.player.position += self.combat.teleports[index].offset;
+                    let teleport = &self.combat.teleports[index];
+                    if let Some((event, lines)) = teleport.says {
+                        self.dialogue.event(event, dialogue::lines(lines));
+                    }
+                    self.player.position += teleport.offset;
                     // No blending across the jump: the player is simply there.
                     self.player.previous_position = self.player.position;
                     self.player.velocity = Vec2::ZERO;
@@ -429,8 +463,9 @@ impl World {
             pickup.gun.cool(defs.gun(pickup.gun.def), now);
         }
 
-        // `PlayerAnimations.AnimateOnMove`: the walking sound plays while moving.
-        let walking = input.movement != Vec2::ZERO;
+        // `PlayerAnimations.AnimateOnMove`: the walking sound plays while moving
+        // is held, even while a line stops the player.
+        let walking = held.movement != Vec2::ZERO;
         if walking != self.walking {
             self.walking = walking;
             self.events.push(Event::Sound(if walking { Sound::WalkStart } else { Sound::WalkStop }));
@@ -503,6 +538,8 @@ impl World {
             if let Some(saved) = self.saved.clone() {
                 self.load(&saved);
             }
+            // `HubRespawn.StartAnim`: waking in the hub, then the intro if unsaid.
+            self.intro_at = self.run.is_some().then_some(now + dialogue::INTRO_DELAY);
             let spawn = self.room.spawn;
             self.teleport(spawn);
             self.new_floor();
@@ -527,6 +564,26 @@ impl World {
             self.events.drain(..self.events.len() - 256);
         }
         self.tick += 1;
+    }
+
+    /// Says the intro once its time comes, and what the boxes the player
+    /// stands in have to say (`DialogueEvent`, `ExitRoomDialogue`).
+    fn say_what_is_due(&mut self, now: f64) {
+        if self.intro_at.is_some_and(|at| now >= at) {
+            self.intro_at = None;
+            self.dialogue.event(PlayerEvent::Intro, dialogue::lines(&dialogue::INTRO));
+        }
+        let (position, dialogue) = (self.player.position, &mut self.dialogue);
+        for trigger in self.combat.dialogues.iter_mut().filter(|trigger| !trigger.said) {
+            if combat::boxes_overlap(position, player::HALF_SIZE, trigger.center, trigger.half) {
+                trigger.said = true;
+                let lines = trigger.lines.iter().cloned();
+                match trigger.event {
+                    Some(event) => dialogue.event(event, lines),
+                    None => dialogue.queue(lines),
+                }
+            }
+        }
     }
 
     /// `PlayerData.Update` and `RoomScript`: stepping into a room whose enemies
@@ -681,11 +738,40 @@ fn populate(combat: &mut Combat, file: &crate::data::RoomFile, defs: &Defs, keep
         })
     }
     // Unity's `DebugRoom` and `DebugRoomExit`: interact on the spot to be moved
-    // by a fixed amount, into the gun room and back out of it.
-    for (script, offset) in [("DebugRoom", Vec2::new(7.0, 0.0)), ("DebugRoomExit", Vec2::new(0.0, -2.5))] {
+    // by a fixed amount, into the gun room and back out of it, with a line.
+    let ways = [
+        ("DebugRoom", Vec2::new(7.0, 0.0), (PlayerEvent::Secret, &dialogue::SECRET[..])),
+        ("DebugRoomExit", Vec2::new(0.0, -2.5), (PlayerEvent::Secret2, &dialogue::SECRET2[..])),
+    ];
+    for (script, offset, says) in ways {
         for (position, half) in boxes(file, script).filter(|(position, _)| keep(*position)) {
-            combat.teleports.push(Teleport { position, half, offset });
+            combat.teleports.push(Teleport { position, half, offset, says: Some(says) });
         }
+    }
+    // `DialogueEvent` boxes, with their event and lines, and the exit room's.
+    for marker in &file.markers {
+        let (event, lines): (Option<PlayerEvent>, std::sync::Arc<[std::sync::Arc<str>]>) = if marker.has_script("DialogueEvent") {
+            let event = marker.number("DialogueEvent.playerEvent").and_then(|number| PlayerEvent::from_number(number as usize));
+            let lines = marker.lists.get("DialogueEvent.dialogue").map(|lines| lines.iter().map(|line| std::sync::Arc::from(line.as_str())).collect());
+            match (event, lines) {
+                (Some(event), Some(lines)) => (Some(event), lines),
+                _ => continue,
+            }
+        } else if marker.has_script("ExitRoomDialogue") {
+            (None, dialogue::lines(&dialogue::EXIT_ROOM).collect())
+        } else {
+            continue;
+        };
+        let Some(bounds) = marker.bounds.filter(|bounds| keep(Vec2::from(bounds.center))) else {
+            continue;
+        };
+        combat.dialogues.push(DialogueTrigger {
+            center: Vec2::from(bounds.center),
+            half: Vec2::from(bounds.size) * 0.5,
+            event,
+            lines,
+            said: false,
+        });
     }
     combat.exits.extend(boxes(file, "ExitDungeon").filter(|(position, _)| keep(*position)));
     combat.entrances.extend(boxes(file, "ExitHub").filter(|(position, _)| keep(*position)));
@@ -832,6 +918,7 @@ mod tests {
             position: here,
             half: Vec2::splat(0.1),
             offset: Vec2::new(3.0, 0.0),
+            says: None,
         });
         assert!(world.can_interact());
         world.step(&Input {
