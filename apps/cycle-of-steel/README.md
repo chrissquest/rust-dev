@@ -296,6 +296,26 @@ checking a room against its Unity original.
 On Linux, building needs libudev's headers for gamepad support
 (`apt-get install libudev-dev`).
 
+## Measuring
+
+F3 shows frames a second, frame and work times, the simulation step's time and
+memory. `--measure` prints a summary when the game closes: load time to the
+first frame, frame interval and work per frame (mean, median, 99th percentile,
+longest), the step's mean and memory (resident, peak, private). With `info`
+logging (`RUST_LOG=cycle_of_steel=info`) memory is also logged at each stage of
+loading. For example, 600 frames of the dungeon, without touching the save:
+
+```powershell
+cargo run --release -p cycle-of-steel -- --room dungeon --save none --measure --frames 600
+```
+
+On an RTX 3080 under Windows (release, Vulkan, 240 Hz display) that gives
+frames at the display's 4.2 ms with 0.4 ms of work, 0.012 ms per simulation
+step, 0.5 s to the first frame, and about 160 MB resident. The game's own share
+is about 40 MB (16 of it the music, decoded); the rest is the graphics driver,
+which takes 140 MB the moment the GPU is opened, about the same on DX12 and a
+little less on GL. Memory is reported on Windows, Linux and Android.
+
 ## Android
 
 The same game builds as an APK for 64-bit ARM phones, Android 8.0 and up. It runs

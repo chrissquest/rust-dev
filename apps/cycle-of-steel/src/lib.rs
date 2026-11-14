@@ -22,6 +22,7 @@ pub mod hud;
 pub mod input;
 pub mod menu;
 pub mod sim;
+pub mod stats;
 pub mod storage;
 pub mod view;
 
@@ -52,6 +53,7 @@ fn android_main(android_app: winit::platform::android::activity::AndroidApp) {
                     frames: None,
                     give: Vec::new(),
                     save,
+                    measure: false,
                 },
                 event_loop,
             )

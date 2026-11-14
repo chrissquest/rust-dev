@@ -108,7 +108,13 @@ stepping; the app counts 5 real seconds, then `World::respawn`). Waking:
 `World::wake_in_hub` slides the player with `Rack.anim`, then the intro.
 `--menu <name>` draws one in a screenshot.
 
-**Next: step 8, parity and measurement.** Read the Port plan tab first.
+Step 8 (parity and measurement) is in pieces: 1 measuring (done: `stats.rs`,
+F3, `--measure`, memory per loading stage at `info`; figures in the README and
+the plan doc's Port plan tab; the surface now really asks for vsync), 2 a
+parity checklist in the plan doc for the owner to sign off, then fixes from it.
+The Unity build's figures need the owner: there is no Unity build here.
+
+**Next: step 8 piece 2, the parity checklist.**
 
 ### How to work here
 

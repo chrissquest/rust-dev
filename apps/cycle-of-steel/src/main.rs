@@ -31,6 +31,8 @@ OPTIONS:
                             user's data folder, e.g. %APPDATA%/CycleOfSteel)
     --menu <name>           draw a menu in the screenshot: start, controls, pause,
                             upgrades or death
+    --measure               print load time, frame times and memory on exit
+                            (F3 shows them while playing)
     --whole-room            frame the whole room in the screenshot instead of
                             following the player
     --touch <x0,y0,x1,y1>   a finger held during those steps: down at x0,y0 and
@@ -44,6 +46,7 @@ KEYS:
     W S / arrows            move through a menu (gamepad: d-pad; B leaves it)
     1 2 3 4 / Q E / wheel   choose an inventory slot (gamepad: shoulder buttons)
     F11                     toggle fullscreen
+    F3                      show frame times and memory
     Escape                  pause, or leave a menu (gamepad: Start; B leaves)
 ";
 
@@ -84,6 +87,7 @@ fn main() -> Result<()> {
                 frames: options.frames,
                 give: options.give,
                 save: options.save,
+                measure: options.measure,
             },
             EventLoop::new().context("could not create the event loop")?,
         ),
@@ -105,6 +109,7 @@ struct Options {
     whole_room: bool,
     save: Option<PathBuf>,
     menu: Option<cycle_of_steel::menu::Menu>,
+    measure: bool,
 }
 
 fn parse_args() -> Result<Option<Options>> {
@@ -123,6 +128,7 @@ fn parse_args() -> Result<Option<Options>> {
         whole_room: false,
         save: cycle_of_steel::storage::default_save_path(),
         menu: None,
+        measure: false,
     };
 
     let mut args = std::env::args().skip(1);
@@ -144,6 +150,7 @@ fn parse_args() -> Result<Option<Options>> {
             "--aim" => options.aim = Some(parse_direction(&value("x,y")?)?),
             "--give" => options.give = value("gun names")?.split(',').map(str::to_string).collect(),
             "--whole-room" => options.whole_room = true,
+            "--measure" => options.measure = true,
             "--save" => {
                 let path = value("a file, or none")?;
                 options.save = (path != "none").then(|| PathBuf::from(path));

@@ -42,10 +42,12 @@ pub enum Action {
     ToggleMap,
     /// Open the pause menu, or leave the menu that is open (Escape).
     Pause,
+    /// Show or hide the frame time and memory figures.
+    ToggleStats,
 }
 
 impl Action {
-    const COUNT: usize = 18;
+    const COUNT: usize = 19;
 
     fn index(self) -> usize {
         self as usize
@@ -53,7 +55,7 @@ impl Action {
 
     /// Actions the window itself carries out, once per press.
     pub fn is_window_command(self) -> bool {
-        matches!(self, Action::ToggleFullscreen | Action::ToggleMap | Action::Pause)
+        matches!(self, Action::ToggleFullscreen | Action::ToggleMap | Action::Pause | Action::ToggleStats)
     }
 }
 
@@ -86,6 +88,7 @@ impl Default for Bindings {
                 (KeyCode::KeyE, Action::NextSlot),
                 (KeyCode::KeyQ, Action::PreviousSlot),
                 (KeyCode::F11, Action::ToggleFullscreen),
+                (KeyCode::F3, Action::ToggleStats),
                 // Unity's map key; the hub's floor says "Map (tab)".
                 (KeyCode::Tab, Action::ToggleMap),
                 // Unity's pause key ("ESC: pause menu").

@@ -71,12 +71,11 @@ impl WindowSurface {
             .copied()
             .find(|format| format.is_srgb())
             .unwrap_or(capabilities.formats[0]);
-        let present_mode = capabilities
-            .present_modes
-            .iter()
-            .copied()
-            .find(|mode| *mode == wgpu::PresentMode::AutoVsync)
-            .unwrap_or(capabilities.present_modes[0]);
+        // Synced to the display. `AutoVsync` is never in the listed modes (wgpu
+        // picks FifoRelaxed or Fifo for it, and every surface has Fifo), so it
+        // is asked for directly; looking for it in the list fell through to the
+        // first mode, which on DX12 ran uncapped.
+        let present_mode = wgpu::PresentMode::AutoVsync;
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

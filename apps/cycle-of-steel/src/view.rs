@@ -667,6 +667,7 @@ impl View {
         frame_seconds: f32,
         sticks: &[StickVisual],
         menu: Option<&MenuView>,
+        stats: Option<&str>,
     ) {
         let blend = blend.clamp(0.0, 1.0);
         let aspect = target.width.max(1) as f32 / target.height.max(1) as f32;
@@ -821,7 +822,7 @@ impl View {
             &self.list,
         );
 
-        self.draw_hud(renderer, encoder, target, world, sticks, menu);
+        self.draw_hud(renderer, encoder, target, world, sticks, menu, stats);
     }
 
     /// Adds one line of text to the world, starting at `baseline`, its left end.
@@ -988,6 +989,7 @@ impl View {
 
     /// A second pass in pixel space, over the finished world: inventory slots, the
     /// heat bar, the pick-up button and any on-screen sticks.
+    #[allow(clippy::too_many_arguments)]
     fn draw_hud(
         &mut self,
         renderer: &mut Renderer2d,
@@ -996,6 +998,7 @@ impl View {
         world: &World,
         sticks: &[StickVisual],
         menu: Option<&MenuView>,
+        stats: Option<&str>,
     ) {
         let screen = Vec2::new(target.width as f32, target.height as f32);
         let hud = HudLayout::new(screen);
@@ -1218,6 +1221,19 @@ impl View {
                     }
                 }
             }
+        }
+
+        // F3's figures, along the top in the middle.
+        if let Some(line) = stats {
+            let size = hud.text_size * 0.6;
+            let width = text_width(&self.font, line, size);
+            let top_left = Vec2::new((screen.x - width) * 0.5, size * 0.5);
+            self.overlay.sprite(
+                self.white,
+                rect(Rect { min: top_left - Vec2::splat(size * 0.3), max: top_left + Vec2::new(width + size * 0.3, size * 1.3) }, HUD_MAP_BACK_COLOR),
+            );
+            let baseline = flip(top_left).truncate() - Vec2::new(0.0, FONT_ASCENT * size);
+            push_text(&mut self.overlay, &self.font, line, baseline, 0.0, size, HUD_TEXT_COLOR);
         }
 
         renderer.draw(

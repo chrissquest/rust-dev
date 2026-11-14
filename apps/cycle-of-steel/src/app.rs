@@ -32,6 +32,7 @@ use crate::hud::MenuLayout;
 use crate::input::{Action, Bindings, Gamepads, InputState, MenuInput, StickVisual, TouchControls};
 use crate::menu::{Choice, Menu, MenuKind};
 use crate::sim::save::Save;
+use crate::stats::FrameStats;
 use crate::storage;
 use crate::sim::defs::Defs;
 use crate::sim::room::Room;
@@ -59,6 +60,8 @@ pub struct Launch {
     /// Where the save is kept. `None` plays without one. Only a run (the hub
     /// and its dungeon) loads and saves; a single room never does.
     pub save: Option<PathBuf>,
+    /// Print load time, frame times and memory when the game closes.
+    pub measure: bool,
 }
 
 /// Runs the game on `event_loop` until its window closes.
@@ -66,8 +69,11 @@ pub struct Launch {
 /// The caller builds the event loop because Android's needs the handle the system
 /// passes to `android_main`; on desktop it is a plain `EventLoop::new()`.
 pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
+    let started = Instant::now();
     event_loop.set_control_flow(ControlFlow::Poll);
+    crate::stats::log_memory("start");
     let world = new_game(&launch.assets, &launch.room, &launch.give, launch.save.as_deref())?;
+    crate::stats::log_memory("loading the world");
     let save = launch.save.filter(|_| world.floor.is_some());
     let saves_written = world.saves;
     // The game opens on the start menu (Unity's `StartMenu` scene), the hub
@@ -75,11 +81,16 @@ pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     let menu = (launch.room == DEFAULT_ROOM).then(Menu::start);
 
     let audio = Audio::new(&launch.assets);
+    crate::stats::log_memory("opening the sound device and the music");
     let mut app = App {
         audio,
         room: launch.room,
         give: launch.give,
         exit_requested: false,
+        stats: FrameStats::new(launch.measure),
+        show_stats: false,
+        stats_text: String::new(),
+        started,
         assets: launch.assets,
         backends: launch.backends,
         frames_left: launch.frames,
@@ -99,6 +110,9 @@ pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
         error: None,
     };
     event_loop.run_app(&mut app)?;
+    if launch.measure {
+        print!("{}", app.stats.summary());
+    }
     match app.error {
         Some(error) => Err(error),
         None => Ok(()),
@@ -123,6 +137,12 @@ struct App {
     give: Vec<String>,
     /// A menu chose to leave the game.
     exit_requested: bool,
+    /// Frame times and memory; whether F3 shows them, and their line.
+    stats: FrameStats,
+    show_stats: bool,
+    stats_text: String,
+    /// When `run` began, for the load time.
+    started: Instant,
     assets: AssetSource,
     backends: wgpu::Backends,
     frames_left: Option<u32>,
@@ -164,12 +184,15 @@ impl App {
                 .context("could not create the window")?,
         );
 
+        crate::stats::log_memory("creating the window");
         let surface = pollster::block_on(WindowSurface::new(window.clone(), self.backends))?;
+        crate::stats::log_memory("opening the GPU");
         log::info!("drawing with {} ({:?})", surface.adapter_name(), surface.backend());
 
         let mut renderer = Renderer2d::new(surface.device(), surface.queue(), surface.format());
         let mut view = View::new(&mut renderer, &self.assets, &self.world.defs)?;
         view.set_room(&mut renderer, &self.world.room)?;
+        crate::stats::log_memory("loading sprites and the room onto the GPU");
 
         Ok(Graphics {
             window,
@@ -193,11 +216,8 @@ impl App {
 
     fn frame(&mut self) {
         let now = Instant::now();
-        let frame_seconds = self
-            .last_frame
-            .map(|last| now.duration_since(last).as_secs_f32())
-            .unwrap_or(0.0)
-            .min(MAX_FRAME_SECONDS);
+        let interval = self.last_frame.map(|last| now.duration_since(last).as_secs_f32()).unwrap_or(0.0);
+        let frame_seconds = interval.min(MAX_FRAME_SECONDS);
         self.last_frame = Some(now);
 
         let screen = self.screen_size();
@@ -234,11 +254,15 @@ impl App {
         if self.menu.is_none() && self.accumulator >= sim::DT {
             // Presses are handed over once, to the first step that can act on them.
             let mut input = self.input.take_sim_input();
+            let stepping = Instant::now();
+            let mut steps = 0;
             while self.accumulator >= sim::DT {
                 self.world.step(&input);
                 input = input.held_only();
                 self.accumulator -= sim::DT;
+                steps += 1;
             }
+            self.stats.steps(steps, stepping.elapsed().as_secs_f32());
         }
         let blend = self.accumulator / sim::DT;
 
@@ -278,11 +302,17 @@ impl App {
             }
             graphics.room_version = self.world.room_version;
         }
+        let waiting = Instant::now();
         let frame = match graphics.surface.acquire() {
             Ok(frame) => frame,
             // Nothing to draw into this time (minimised, mid-resize): try next frame.
             Err(_) => return,
         };
+        // Waiting for the screen to take a frame is not work.
+        let waited = waiting.elapsed();
+        if self.show_stats {
+            self.stats.line(&mut self.stats_text);
+        }
         let mut encoder = graphics
             .surface
             .device()
@@ -300,8 +330,13 @@ impl App {
             frame_seconds,
             &stick_visuals(&self.touch, screen),
             menu_view.as_ref(),
+            self.show_stats.then_some(self.stats_text.as_str()),
         );
         graphics.surface.present(frame, encoder);
+        self.stats.frame(interval, (now.elapsed() - waited).as_secs_f32());
+        if self.stats.load.is_none() {
+            self.stats.load = Some(self.started.elapsed());
+        }
     }
 
     /// Acts on the presses meant for the open menu.
@@ -431,6 +466,7 @@ impl App {
     fn command(&mut self, action: Action) {
         match action {
             Action::Pause => self.pause(),
+            Action::ToggleStats => self.show_stats = !self.show_stats,
             Action::ToggleMap => self.input.request_map(),
             Action::ToggleFullscreen => {
                 if let Some(graphics) = &self.graphics {
@@ -706,6 +742,7 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
         0.0,
         &stick_visuals(&touch, screen),
         options.menu.map(|menu| menu.view(&world)).as_ref(),
+        None,
     );
     queue.submit(std::iter::once(encoder.finish()));
 
