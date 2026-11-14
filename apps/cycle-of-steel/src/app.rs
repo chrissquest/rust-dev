@@ -30,7 +30,7 @@ use crate::data::{DungeonFile, EnemiesFile, GunsFile, LootFile, RoomFile};
 use crate::sim::dungeon;
 use crate::hud::MenuLayout;
 use crate::input::{Action, Bindings, Gamepads, InputState, MenuInput, StickVisual, TouchControls};
-use crate::menu::{Choice, Menu};
+use crate::menu::{Choice, Menu, MenuKind};
 use crate::sim::save::Save;
 use crate::storage;
 use crate::sim::defs::Defs;
@@ -67,19 +67,19 @@ pub struct Launch {
 /// passes to `android_main`; on desktop it is a plain `EventLoop::new()`.
 pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Poll);
-    let mut world = load_world(&launch.assets, &launch.room, clock_seed())?;
+    let world = new_game(&launch.assets, &launch.room, &launch.give, launch.save.as_deref())?;
     let save = launch.save.filter(|_| world.floor.is_some());
-    if let Some(path) = &save {
-        // `PlayerData.Start` loads the save, or starts a new one.
-        let loaded = storage::read_save(path).unwrap_or_else(|| Save::new_game(world.player.max_health));
-        world.load(&loaded);
-    }
-    give_guns(&mut world, &launch.give)?;
     let saves_written = world.saves;
+    // The game opens on the start menu (Unity's `StartMenu` scene), the hub
+    // waiting behind it; a room or the dungeon asked for by name opens on it.
+    let menu = (launch.room == DEFAULT_ROOM).then(Menu::start);
 
     let audio = Audio::new(&launch.assets);
     let mut app = App {
         audio,
+        room: launch.room,
+        give: launch.give,
+        exit_requested: false,
         assets: launch.assets,
         backends: launch.backends,
         frames_left: launch.frames,
@@ -92,7 +92,7 @@ pub fn run(launch: Launch, event_loop: EventLoop<()>) -> Result<()> {
         world,
         save,
         saves_written,
-        menu: None,
+        menu,
         accumulator: 0.0,
         last_frame: None,
         graphics: None,
@@ -118,6 +118,11 @@ struct Graphics {
 struct App {
     /// `None` on a machine with no sound device.
     audio: Option<Audio>,
+    /// What a new game starts in and with, for Play.
+    room: String,
+    give: Vec<String>,
+    /// A menu chose to leave the game.
+    exit_requested: bool,
     assets: AssetSource,
     backends: wgpu::Backends,
     frames_left: Option<u32>,
@@ -215,6 +220,16 @@ impl App {
             self.steer_menu(menu_input);
             self.accumulator = 0.0;
         }
+        // `DeathMenu`: counted in real time, as the game stands still.
+        if let Some(Menu { kind: MenuKind::Death { seconds_left }, .. }) = &mut self.menu {
+            *seconds_left -= frame_seconds;
+            if *seconds_left <= 0.0 {
+                self.respawn();
+            }
+        }
+        if self.input.take_pause_request() {
+            self.pause();
+        }
         self.accumulator += frame_seconds;
         if self.menu.is_none() && self.accumulator >= sim::DT {
             // Presses are handed over once, to the first step that can act on them.
@@ -242,6 +257,7 @@ impl App {
                     }
                 }
                 Event::OpenUpgrades => self.menu = Some(Menu::upgrades()),
+                Event::Died => self.menu = Some(Menu::death()),
             }
         }
         if let Some(audio) = &mut self.audio {
@@ -295,7 +311,7 @@ impl App {
         };
         menu.move_by(input.moves);
         if input.back {
-            self.menu = None;
+            self.back();
         } else if input.choose {
             let row = menu.selected;
             self.choose(row);
@@ -309,10 +325,83 @@ impl App {
         };
         menu.selected = row;
         match menu.choice(row) {
+            Choice::Nothing => {}
             Choice::Buy(upgrade) => {
                 self.world.buy(upgrade);
             }
             Choice::Close => self.menu = None,
+            Choice::Play => self.play(),
+            Choice::Controls => self.menu = Some(Menu::new(MenuKind::Controls)),
+            Choice::BackToStart => self.menu = Some(Menu::start()),
+            Choice::DeleteSave => {
+                if let MenuKind::Start { confirm_delete } = &mut menu.kind {
+                    if *confirm_delete {
+                        // `MainMenu.DeleteSave`.
+                        if let Some(path) = &self.save
+                            && let Err(error) = std::fs::remove_file(path)
+                            && error.kind() != std::io::ErrorKind::NotFound
+                        {
+                            log::error!("could not delete {}: {error}", path.display());
+                        }
+                        *confirm_delete = false;
+                    } else {
+                        *confirm_delete = true;
+                    }
+                }
+            }
+            Choice::Exit => self.exit_requested = true,
+            Choice::ToStartMenu => {
+                // `PauseMenu.Menu`.
+                self.world.save_progress();
+                self.write_save();
+                self.menu = Some(Menu::start());
+            }
+            Choice::Respawn => self.respawn(),
+        }
+    }
+
+    /// Escape, or a pad's B: out of a menu that can be left.
+    fn back(&mut self) {
+        match self.menu {
+            Some(menu) if menu.can_go_back() => {
+                self.menu = match menu.kind {
+                    MenuKind::Controls => Some(Menu::start()),
+                    _ => None,
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `PauseMenu.OnEscape`: pause, or leave the menu that is open.
+    fn pause(&mut self) {
+        if self.menu.is_some() {
+            self.back();
+        } else {
+            self.menu = Some(Menu::new(MenuKind::Pause));
+        }
+    }
+
+    /// `DeathMenu`'s end or its Respawn button.
+    fn respawn(&mut self) {
+        self.world.respawn();
+        self.menu = None;
+    }
+
+    /// `MainMenu.PlayGame`: the Dungeon scene afresh, from the save.
+    fn play(&mut self) {
+        match new_game(&self.assets, &self.room, &self.give, self.save.as_deref()) {
+            Ok(world) => {
+                self.world = world;
+                self.saves_written = self.world.saves;
+                self.accumulator = 0.0;
+                self.menu = None;
+                if let Some(graphics) = &mut self.graphics {
+                    // A different world: its room is uploaded afresh.
+                    graphics.room_version = u64::MAX;
+                }
+            }
+            Err(error) => log::error!("could not start a game: {error:#}"),
         }
     }
 
@@ -339,11 +428,9 @@ impl App {
         }
     }
 
-    fn command(&mut self, action: Action, event_loop: &ActiveEventLoop) {
+    fn command(&mut self, action: Action) {
         match action {
-            // Escape leaves a menu before it leaves the game.
-            Action::Quit if self.menu.is_some() => self.input.press_back(),
-            Action::Quit => event_loop.exit(),
+            Action::Pause => self.pause(),
             Action::ToggleMap => self.input.request_map(),
             Action::ToggleFullscreen => {
                 if let Some(graphics) = &self.graphics {
@@ -410,7 +497,7 @@ impl ApplicationHandler for App {
                 };
                 let pressed = event.state == ElementState::Pressed;
                 if let Some(action) = self.input.key(&self.bindings, key, pressed) {
-                    self.command(action, event_loop);
+                    self.command(action);
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -457,6 +544,9 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 self.frame();
+                if self.exit_requested {
+                    event_loop.exit();
+                }
                 if let Some(left) = self.frames_left.as_mut() {
                     *left = left.saturating_sub(1);
                     if *left == 0 {
@@ -485,6 +575,24 @@ fn give_guns(world: &mut World, names: &[String]) -> Result<()> {
         world.give(gun);
     }
     Ok(())
+}
+
+/// A world ready to play: `room` loaded, the save at `save` (or a new one) in
+/// a run, `give`'s guns added, and the player waking in the hub.
+fn new_game(assets: &AssetSource, room: &str, give: &[String], save: Option<&Path>) -> Result<World> {
+    let mut world = load_world(assets, room, clock_seed())?;
+    if world.floor.is_some()
+        && let Some(path) = save
+    {
+        // `PlayerData.Start` loads the save, or starts a new one.
+        let loaded = storage::read_save(path).unwrap_or_else(|| Save::new_game(world.player.max_health));
+        world.load(&loaded);
+    }
+    give_guns(&mut world, give)?;
+    if room == DEFAULT_ROOM {
+        world.wake_in_hub();
+    }
+    Ok(world)
 }
 
 /// Loads the game's definitions and a room, and builds the world in it.
@@ -553,8 +661,8 @@ pub struct Screenshot {
     pub touch: Option<(Vec2, Vec2)>,
     /// Frame the whole room instead of following the player.
     pub whole_room: bool,
-    /// Draw the upgrade bench's menu over the frame.
-    pub upgrades_menu: bool,
+    /// A menu to draw over the frame.
+    pub menu: Option<Menu>,
 }
 
 /// Runs the game for a while with no window, draws one frame off-screen and saves
@@ -597,7 +705,7 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
         1.0,
         0.0,
         &stick_visuals(&touch, screen),
-        options.upgrades_menu.then(|| Menu::upgrades().view(&world)).as_ref(),
+        options.menu.map(|menu| menu.view(&world)).as_ref(),
     );
     queue.submit(std::iter::once(encoder.finish()));
 
@@ -1070,6 +1178,14 @@ mod tests {
         world.data_cells = 40;
         world.player.health = 0.0;
         world.step(&Input::default());
+        world.respawn();
+        // Off the rack, then read through the intro.
+        for _ in 0..91 {
+            world.step(&Input::default());
+        }
+        interact(&mut world);
+        interact(&mut world);
+        assert!(!world.dialogue.is_showing() && !world.is_waking());
         assert!(world.player.position.x < world.floor.as_ref().unwrap().start_x, "back in the hub");
         assert!(world.inventory[1].is_none(), "the laser was not saved");
         assert_eq!(world.data_cells, 40);
@@ -1124,7 +1240,25 @@ mod tests {
         let start_x = world.floor.as_ref().unwrap().start_x;
         let version = world.room_version;
         world.player.health = 0.0;
+        world.drain_events().for_each(drop);
         world.step(&Input::default());
+        // `PlayerData.Die`: everything stands still for the death screen.
+        assert!(world.dead);
+        assert!(world.drain_events().any(|event| event == Event::Died));
+        let (tick, position) = (world.tick, world.player.position);
+        world.step(&Input { movement: Vec2::X, ..Input::default() });
+        assert_eq!((world.tick, world.player.position), (tick, position));
+        world.respawn();
+        assert!(!world.dead);
+        // Woken on the hub's rack: carried right, then free.
+        assert!(world.is_waking());
+        assert_eq!(world.player.position, world.room.spawn);
+        for _ in 0..91 {
+            world.step(&Input { movement: Vec2::X, ..Input::default() });
+        }
+        assert!(!world.is_waking());
+        assert!((world.player.position.x - world.room.spawn.x - (4.092 - 3.676)).abs() < 1e-3, "carried the rack's 0.416, no further");
+        assert!(!world.room.box_hits_solid(world.player.position, HALF_SIZE));
         assert!(world.player.position.x < start_x);
         assert_eq!(world.player.health, world.player.max_health);
         assert_eq!(world.room_version, version + 1);
@@ -1304,6 +1438,7 @@ mod tests {
         use crate::sim::dialogue::{INTRO, PlayerEvent};
         let mut world = hub();
         world.load(&Save::new_game(world.player.max_health));
+        world.wake_in_hub();
         // `HubRespawn`: the intro, 1.5 seconds in.
         for _ in 0..90 {
             world.step(&Input::default());

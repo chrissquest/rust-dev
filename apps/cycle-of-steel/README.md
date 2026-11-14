@@ -6,8 +6,8 @@ reference for behaviour while the port catches up.
 
 ## State of the port
 
-Steps 1 to 6 of the port are in (foundation, real rooms, combat, enemies, the
-dungeon, lighting and audio), and step 7 (the full loop) is under way:
+Steps 1 to 7 of the port are in (foundation, real rooms, combat, enemies, the
+dungeon, lighting and audio, the full loop); step 8, parity, is next:
 
 - **Foundation.** A fixed 60 Hz simulation, the player walking with their run
   animations, collision, a camera that follows inside the room, keyboard, mouse
@@ -159,8 +159,7 @@ where you spawn and interact. Interact again on the spot inside to leave.
   the hub, and if all but two of the floor's rooms were cleared the floor is
   replaced by a new one and enemies get harder (difficulty 2: they push harder
   and fire faster). Dying wakes the player in the hub, healed, with a new floor,
-  holding only the guns of the last save; Unity's 5 second death screen waits
-  for the menus.
+  holding only the guns of the last save, after the death screen.
   The boss room shuts the player in with the Priest, closing the way they came
   with its wall layers, and opens once the Priest dies; in Unity it never
   reopened. `--room dungeon` starts a run inside the spawn room.
@@ -241,9 +240,19 @@ where you spawn and interact. Interact again on the spot inside to leave.
   pedestal, the way out), the gun room's two (`DebugRoom`, `DebugRoomExit`) are
   said once per save; the exit room's (`ExitRoomDialogue`) once per floor.
 
+- **Menus.** The game opens on the start menu (`MainMenu`): Play, Controls,
+  Delete Save (chosen twice, where Unity deleted at once) and Exit. Escape, a
+  pad's Start or the II button pauses (`PauseMenu`: Resume, Menu, which saves
+  without the guns and goes back to the start menu, and Quit). Dying stands
+  the game still under "You Died" counting 4 to 0 (`DeathMenu`), then wakes the
+  player in the hub, or at once with Respawn. Waking (`HubRespawn`) holds the
+  player on the rack as it slides out for 1.5 seconds, then says the intro.
+  Unity's touch-controls switch is left out: the sticks appear wherever a
+  finger lands. Exit and Quit are left off on Android, where apps are closed
+  by the system. `--room` other than the hub skips the start menu.
+
 Not in yet:
-the start, pause and death menus, waking in the hub's rack (`HubRespawn`'s
-animation), a volume setting, guns' own lights. The HUD and menus are plain placeholders.
+a volume setting, guns' own lights. The HUD and menus are plain placeholders.
 
 ![The hub, drawn from its converted room file](docs/step2-hub.png)
 
@@ -262,9 +271,10 @@ cargo test -p cycle-of-steel                # simulation and input tests, no GPU
 | Pick up, use | Space or Enter | A or X | the round button that appears |
 | Choose a slot | 1 to 4, Q and E, or the wheel | shoulder buttons | tap the slot |
 | Map | Tab | Select | the MAP button |
+| Pause | Escape | Start | the II button |
 | In a menu | W S or arrows, Space or Enter, Escape | d-pad, A, B | tap a row |
 
-F11 toggles fullscreen. Escape leaves a menu, and otherwise quits.
+F11 toggles fullscreen. Escape pauses, or leaves the menu that is open.
 
 `--screenshot` runs the game with no window, steps the simulation, draws one frame
 off-screen and saves it. It needs a GPU or a software rasteriser but no display:

@@ -119,6 +119,8 @@ const HUD_TEXT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 /// Over the game while a menu is open, and a row that cannot be chosen yet.
 const MENU_SHADE_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.5];
 const MENU_ROW_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
+/// Behind the start menu, which in Unity was a scene of its own.
+const MENU_OPAQUE_COLOR: [f32; 4] = [0.02, 0.02, 0.03, 1.0];
 const MENU_DISABLED_TEXT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.4];
 
 const CLEAR_COLOR: [f32; 4] = [0.012, 0.012, 0.016, 1.0];
@@ -1059,6 +1061,15 @@ impl View {
             push_text(&mut self.overlay, &self.font, name, baseline, 0.0, hud.text_size, HUD_TEXT_COLOR);
         }
 
+        // The pause button (Unity's "P" on touch screens).
+        self.overlay.sprite(self.white, rect(hud.pause_button, HUD_SLOT_COLOR));
+        {
+            let label = hud.pause_button.size().y * 0.6;
+            let width = text_width(&self.font, "II", label);
+            let top = flip(Vec2::new(hud.pause_button.center().x - width * 0.5, hud.pause_button.min.y + label * 0.35)).truncate();
+            push_text(&mut self.overlay, &self.font, "II", top - Vec2::new(0.0, FONT_ASCENT * label), 0.0, label, HUD_TEXT_COLOR);
+        }
+
         // The minimap (`MapMenu`): a button for it, and the map itself while open,
         // one picture per room it shows, laid out as the rooms are, the room the
         // player is in framed.
@@ -1175,9 +1186,16 @@ impl View {
             let layout = MenuLayout::new(screen, menu.rows.len());
             let size = layout.text_size;
             let text_at = |top_left: Vec2| flip(top_left).truncate() - Vec2::new(0.0, FONT_ASCENT * size);
-            self.overlay.sprite(self.white, rect(Rect { min: Vec2::ZERO, max: screen }, MENU_SHADE_COLOR));
+            let shade = if menu.opaque { MENU_OPAQUE_COLOR } else { MENU_SHADE_COLOR };
+            self.overlay.sprite(self.white, rect(Rect { min: Vec2::ZERO, max: screen }, shade));
             self.overlay.sprite(self.white, rect(layout.panel, HUD_MAP_BACK_COLOR));
             push_text(&mut self.overlay, &self.font, menu.title, text_at(layout.title), 0.0, size, HUD_TEXT_COLOR);
+            // A count beside the title, on the panel's right (the death screen's).
+            if let Some(note) = &menu.note {
+                let width = text_width(&self.font, note, size);
+                let right = Vec2::new(layout.panel.max.x - (layout.title.x - layout.panel.min.x) - width, layout.title.y);
+                push_text(&mut self.overlay, &self.font, note, text_at(right), 0.0, size, HUD_TEXT_COLOR);
+            }
             for (index, row) in menu.rows.iter().enumerate() {
                 let area = layout.row(index);
                 if index == menu.selected {

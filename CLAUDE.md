@@ -21,8 +21,8 @@ Phase 2, Android). Update its Status section when a step lands.
 ### Where the port stands
 
 Phase 1 steps: 1 foundation (done), 2 asset conversion (rooms and guns done), 3
-combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio (done), 7 full loop (hub,
-upgrades, save, menus), 8 parity. Android steps 1-4 are done and confirmed on the
+combat (done), 4 enemies (done), 5 dungeon (done), 6 lighting and audio (done), 7 full loop (done),
+8 parity. Android steps 1-4 are done and confirmed on the
 owner's phone.
 
 Step 3 is done: guns picked up into a four-slot inventory, single and spray guns
@@ -89,8 +89,7 @@ sim asks with `Event::Sound`; `audio.rs` plays clips from `assets/audio` with
 Not yet: guns' own lights, freeform lights' soft edges, depth cues (after
 parity), a volume setting (step 7).
 
-Step 7 (the full loop) is in pieces: 1 saves and upgrades (done), 2 dialogue
-(done), 3 menus (start, pause, death screen). Saves: `sim/save.rs` (`Save`, Unity's
+Step 7 (the full loop) is done: saves and upgrades, dialogue, menus. Saves: `sim/save.rs` (`Save`, Unity's
 `PlayerSaveData` as JSON with a version, guns by name), `World::load`/`save`
 (on `ExitHub`, `ExitDungeon` and death, which reloads the saved guns),
 `World::saves` counted for the app to write (`storage.rs`, `--save`). Upgrades:
@@ -102,8 +101,14 @@ Dialogue: `sim/dialogue.rs` (`PlayerEvent` as Unity's, `Dialogue` queue,
 `DialogueTrigger` boxes in `Combat::dialogues` from markers' `lists`), said
 events kept in the save; a showing line holds the player and interact reads on.
 
-**Next: step 7 piece 3, menus** (start menu with delete save, pause menu with
-Menu/Quit and touch toggle, the 5 second death screen, `HubRespawn`'s wake-up).
+Menus (`menu.rs`, `MenuKind`): start (the default launch opens on it; Play
+builds a fresh world from the save, `app::new_game`), controls, pause (Escape,
+pad Start, the II button), upgrades, death (`Event::Died`, `World::dead` stops
+stepping; the app counts 5 real seconds, then `World::respawn`). Waking:
+`World::wake_in_hub` slides the player with `Rack.anim`, then the intro.
+`--menu <name>` draws one in a screenshot.
+
+**Next: step 8, parity and measurement.** Read the Port plan tab first.
 
 ### How to work here
 

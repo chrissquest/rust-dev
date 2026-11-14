@@ -51,6 +51,11 @@ const CLEARED_DIFFICULTY: f32 = 2.0;
 /// seals, in units.
 const ROOM_ENTRY_STEP: f32 = 0.75;
 
+/// `HubRespawn`'s `Rack.anim`: the rack carries the waking player 0.416 to
+/// the right over 1.5 seconds, easing in and out (its keys have flat tangents).
+const WAKE_SECONDS: f64 = 1.5;
+const RACK_SLIDE: f32 = 4.092 - 3.676;
+
 /// How many guns the player can carry.
 pub const INVENTORY_SLOTS: usize = 4;
 
@@ -90,6 +95,9 @@ pub enum Event {
     Sound(Sound),
     /// The upgrade bench was used: the app shows its menu (`UpgradeBench`).
     OpenUpgrades,
+    /// The player died: the world stands still until [`World::respawn`]
+    /// (`PlayerData.Die`; the app shows the death screen).
+    Died,
 }
 
 /// A sound the world asks for. What each sounds like is in the definitions.
@@ -137,8 +145,11 @@ pub struct World {
     pub upgrades: Upgrades,
     /// The player's lines, showing and to come.
     pub dialogue: Dialogue,
-    /// When the intro is said (`HubRespawn`), in world seconds.
-    intro_at: Option<f64>,
+    /// When the player started waking on the hub's rack (`HubRespawn`), in
+    /// world seconds; the intro follows.
+    waking_since: Option<f64>,
+    /// Dead, and waiting for [`World::respawn`].
+    pub dead: bool,
     /// The last save made or loaded, and how many saves have been made, for
     /// the app to notice a new one and write it out.
     pub saved: Option<Save>,
@@ -181,7 +192,8 @@ impl World {
             room_version: 0,
             upgrades: Upgrades::default(),
             dialogue: Dialogue::default(),
-            intro_at: None,
+            waking_since: None,
+            dead: false,
             saved: None,
             saves: 0,
             laser_sounding: None,
@@ -203,7 +215,6 @@ impl World {
         world.floor = Some(built.floor);
         world.mark_rooms();
         world.run = Some(assets);
-        world.intro_at = Some(dialogue::INTRO_DELAY);
         Ok(world)
     }
 
@@ -269,8 +280,48 @@ impl World {
         self.last_block = enemy::block_of(position);
     }
 
+    /// `HubRespawn.StartAnim`: the player rides the rack out of the wall, then
+    /// says the intro if it has not been said.
+    pub fn wake_in_hub(&mut self) {
+        let spawn = self.room.spawn;
+        self.teleport(spawn);
+        self.waking_since = Some(self.time());
+    }
+
+    pub fn is_waking(&self) -> bool {
+        self.waking_since.is_some()
+    }
+
+    /// `PlayerData.Respawn`: healed, saved without the guns and reloaded, so
+    /// what was picked up since the last save is lost; woken in the hub with
+    /// a new floor. A world that is one room simply starts it again.
+    pub fn respawn(&mut self) {
+        if !self.dead {
+            return;
+        }
+        self.dead = false;
+        self.player.health = self.player.max_health;
+        self.save(false);
+        if let Some(saved) = self.saved.clone() {
+            self.load(&saved);
+        }
+        if self.run.is_some() {
+            self.wake_in_hub();
+        } else {
+            let spawn = self.room.spawn;
+            self.teleport(spawn);
+        }
+        self.new_floor();
+    }
+
+    /// `PauseMenu.Menu`: saved without the guns, on the way to the start menu.
+    pub fn save_progress(&mut self) {
+        self.save(false);
+    }
+
     /// `ExitHub` then `Player.TeleportDungeon`: into the floor's spawn room.
     pub fn enter_dungeon(&mut self) {
+        self.waking_since = None;
         if let Some(entry) = self.floor.as_ref().map(|floor| floor.entry) {
             let entry = self.room.nearest_open_point(entry);
             self.teleport(entry);
@@ -404,19 +455,36 @@ impl World {
 
     /// Advances the world by [`DT`].
     pub fn step(&mut self, input: &Input) {
+        // `PauseMenu.Pause` from `Die`: nothing moves until the respawn.
+        if self.dead {
+            return;
+        }
         let now = self.time();
 
         // `PlayerInput`: while a line shows, interact moves the dialogue on
-        // and the player neither moves nor shoots.
+        // and the player neither moves nor shoots; nor while on the rack.
         let talking = self.dialogue.is_showing();
         if talking && input.interact {
             self.dialogue.advance();
         }
         let held = *input;
-        let input = &if talking { Input { movement: Vec2::ZERO, aim: None, interact: false, ..held } } else { held };
+        let held_still = talking || self.waking_since.is_some();
+        let input = &if held_still { Input { movement: Vec2::ZERO, aim: None, interact: false, ..held } } else { held };
 
         self.player.step(input, &self.room, self.combat.solids());
-        self.say_what_is_due(now);
+        if let Some(since) = self.waking_since {
+            let t = ((now - since) / WAKE_SECONDS).min(1.0) as f32;
+            let eased = t * t * (3.0 - 2.0 * t);
+            self.player.position = self.room.spawn + Vec2::new(RACK_SLIDE * eased, 0.0);
+            self.player.velocity = Vec2::ZERO;
+            if t >= 1.0 {
+                // `HubRespawn.FinishAnim`.
+                self.waking_since = None;
+                self.last_block = enemy::block_of(self.player.position);
+                self.dialogue.event(PlayerEvent::Intro, dialogue::lines(&dialogue::INTRO));
+            }
+        }
+        self.say_what_is_due();
         if self.combat.entrances.iter().any(|&(center, half)| combat::boxes_overlap(self.player.position, player::HALF_SIZE, center, half)) {
             // `ExitHub`: saved, guns and all, on the way in.
             self.save(true);
@@ -528,21 +596,10 @@ impl World {
             // `PlayerData.DamagePlayer` plays it when a blow lands.
             self.events.push(Event::Sound(Sound::Hurt));
         }
-        if self.player.health <= 0.0 {
-            // `PlayerData.Die` and `Respawn`: healed, saved without the guns and
-            // reloaded, so what was picked up since the last save is lost; back
-            // in the hub with a new floor. Unity's 5 second death screen waits
-            // for the menus. A world that is one room simply starts it again.
-            self.player.health = self.player.max_health;
-            self.save(false);
-            if let Some(saved) = self.saved.clone() {
-                self.load(&saved);
-            }
-            // `HubRespawn.StartAnim`: waking in the hub, then the intro if unsaid.
-            self.intro_at = self.run.is_some().then_some(now + dialogue::INTRO_DELAY);
-            let spawn = self.room.spawn;
-            self.teleport(spawn);
-            self.new_floor();
+        if self.player.health <= 0.0 && !self.dead {
+            // `PlayerData.Die`: the death screen, then `respawn`.
+            self.dead = true;
+            self.events.push(Event::Died);
         }
 
         let (player, data_cells, events) = (&mut self.player, &mut self.data_cells, &mut self.events);
@@ -566,13 +623,9 @@ impl World {
         self.tick += 1;
     }
 
-    /// Says the intro once its time comes, and what the boxes the player
-    /// stands in have to say (`DialogueEvent`, `ExitRoomDialogue`).
-    fn say_what_is_due(&mut self, now: f64) {
-        if self.intro_at.is_some_and(|at| now >= at) {
-            self.intro_at = None;
-            self.dialogue.event(PlayerEvent::Intro, dialogue::lines(&dialogue::INTRO));
-        }
+    /// Says what the boxes the player stands in have to say (`DialogueEvent`,
+    /// `ExitRoomDialogue`).
+    fn say_what_is_due(&mut self) {
         let (position, dialogue) = (self.player.position, &mut self.dialogue);
         for trigger in self.combat.dialogues.iter_mut().filter(|trigger| !trigger.said) {
             if combat::boxes_overlap(position, player::HALF_SIZE, trigger.center, trigger.half) {

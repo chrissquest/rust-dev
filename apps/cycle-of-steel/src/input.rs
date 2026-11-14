@@ -40,7 +40,8 @@ pub enum Action {
     ToggleFullscreen,
     /// Show or hide the minimap.
     ToggleMap,
-    Quit,
+    /// Open the pause menu, or leave the menu that is open (Escape).
+    Pause,
 }
 
 impl Action {
@@ -52,7 +53,7 @@ impl Action {
 
     /// Actions the window itself carries out, once per press.
     pub fn is_window_command(self) -> bool {
-        matches!(self, Action::ToggleFullscreen | Action::ToggleMap | Action::Quit)
+        matches!(self, Action::ToggleFullscreen | Action::ToggleMap | Action::Pause)
     }
 }
 
@@ -87,7 +88,8 @@ impl Default for Bindings {
                 (KeyCode::F11, Action::ToggleFullscreen),
                 // Unity's map key; the hub's floor says "Map (tab)".
                 (KeyCode::Tab, Action::ToggleMap),
-                (KeyCode::Escape, Action::Quit),
+                // Unity's pause key ("ESC: pause menu").
+                (KeyCode::Escape, Action::Pause),
             ],
         }
     }
@@ -118,6 +120,8 @@ pub struct InputState {
     down: Vec<KeyCode>,
     /// The minimap was asked for: the window acts on it, not the simulation.
     map_requested: bool,
+    /// The pause menu was asked for, from a pad or a tap.
+    pause_requested: bool,
 
     /// The gamepad's sticks, already dead-zoned.
     pad_movement: Vec2,
@@ -213,6 +217,16 @@ impl InputState {
     /// Asks for the minimap to be shown or hidden, from a key, a button or a tap.
     pub fn request_map(&mut self) {
         self.map_requested = true;
+    }
+
+    /// Asks for the pause menu, from a pad's Start or the pause button.
+    pub fn request_pause(&mut self) {
+        self.pause_requested = true;
+    }
+
+    /// Whether the pause menu was asked for since the last call.
+    pub fn take_pause_request(&mut self) -> bool {
+        std::mem::take(&mut self.pause_requested)
     }
 
     /// Whether the minimap was asked for since the last call.
@@ -447,6 +461,10 @@ impl TouchControls {
                 state.request_map();
                 return;
             }
+            if hud.pause_button.contains(position) {
+                state.request_pause();
+                return;
+            }
             if can_interact && hud.interact_contains(position) {
                 state.press(Action::Interact);
                 return;
@@ -509,6 +527,7 @@ impl Gamepads {
                     Button::DPadUp => state.press(Action::MoveUp),
                     Button::DPadDown => state.press(Action::MoveDown),
                     Button::East => state.press_back(),
+                    Button::Start => state.request_pause(),
                     _ => {}
                 }
             }
@@ -643,7 +662,7 @@ mod tests {
     #[test]
     fn window_commands_fire_once_per_press() {
         let mut state = InputState::default();
-        assert_eq!(press(&mut state, KeyCode::Escape), Some(Action::Quit));
+        assert_eq!(press(&mut state, KeyCode::Escape), Some(Action::Pause));
         assert_eq!(press(&mut state, KeyCode::Escape), None, "held key repeating");
         assert_eq!(press(&mut state, KeyCode::Space), None, "the game's own actions are not the window's");
     }

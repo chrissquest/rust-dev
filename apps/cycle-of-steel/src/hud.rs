@@ -50,6 +50,8 @@ pub struct HudLayout {
     /// The button that shows the minimap, top right, and where the map is drawn.
     pub map_button: Rect,
     pub map_area: Rect,
+    /// The button that pauses, left of the map's (Unity's "P").
+    pub pause_button: Rect,
     /// The player's line, along the bottom over the boss bar (`PlayerUI.dialogueUI`).
     pub dialogue: Rect,
     /// The round "pick up" button on the right, shown when something is in reach.
@@ -94,6 +96,10 @@ impl HudLayout {
             map_button: Rect {
                 min: Vec2::new(screen.x - margin - unit * 0.13, margin),
                 max: Vec2::new(screen.x - margin, margin + unit * 0.065),
+            },
+            pause_button: Rect {
+                min: Vec2::new(screen.x - margin * 2.0 - unit * 0.2, margin),
+                max: Vec2::new(screen.x - margin * 2.0 - unit * 0.13, margin + unit * 0.065),
             },
             map_area: Rect {
                 min: Vec2::new(screen.x * 0.5 - unit * 0.6, unit * 0.15),

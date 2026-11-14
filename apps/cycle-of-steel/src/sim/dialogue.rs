@@ -69,8 +69,6 @@ pub const SECRET2: [&str; 1] = ["Farewell, you seem well equipped now."];
 /// `ExitRoomDialogue`.
 pub const EXIT_ROOM: [&str; 2] = ["The Core AI is close...", "[Go down the stairs to exit or continue forth for a challege.]"];
 
-/// `HubRespawn`: the intro waits for the 1.5 second wake-up animation.
-pub const INTRO_DELAY: f64 = 1.5;
 
 /// A box that says something the first time the player walks into it
 /// (`DialogueEvent`, `ExitRoomDialogue`).

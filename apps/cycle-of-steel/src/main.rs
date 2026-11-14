@@ -29,7 +29,8 @@ OPTIONS:
     --give <gun[,gun]>      start with these guns: names from assets/guns.json
     --save <file|none>      keep the save here, or play without one (default: the
                             user's data folder, e.g. %APPDATA%/CycleOfSteel)
-    --menu upgrades         draw the upgrade bench's menu in the screenshot
+    --menu <name>           draw a menu in the screenshot: start, controls, pause,
+                            upgrades or death
     --whole-room            frame the whole room in the screenshot instead of
                             following the player
     --touch <x0,y0,x1,y1>   a finger held during those steps: down at x0,y0 and
@@ -43,7 +44,7 @@ KEYS:
     W S / arrows            move through a menu (gamepad: d-pad; B leaves it)
     1 2 3 4 / Q E / wheel   choose an inventory slot (gamepad: shoulder buttons)
     F11                     toggle fullscreen
-    Escape                  leave a menu, or quit
+    Escape                  pause, or leave a menu (gamepad: Start; B leaves)
 ";
 
 fn main() -> Result<()> {
@@ -73,7 +74,7 @@ fn main() -> Result<()> {
             give: options.give,
             touch: options.touch,
             whole_room: options.whole_room,
-            upgrades_menu: options.upgrades_menu,
+            menu: options.menu,
         }),
         None => app::run(
             Launch {
@@ -103,7 +104,7 @@ struct Options {
     touch: Option<(Vec2, Vec2)>,
     whole_room: bool,
     save: Option<PathBuf>,
-    upgrades_menu: bool,
+    menu: Option<cycle_of_steel::menu::Menu>,
 }
 
 fn parse_args() -> Result<Option<Options>> {
@@ -121,7 +122,7 @@ fn parse_args() -> Result<Option<Options>> {
         touch: None,
         whole_room: false,
         save: cycle_of_steel::storage::default_save_path(),
-        upgrades_menu: false,
+        menu: None,
     };
 
     let mut args = std::env::args().skip(1);
@@ -147,10 +148,13 @@ fn parse_args() -> Result<Option<Options>> {
                 let path = value("a file, or none")?;
                 options.save = (path != "none").then(|| PathBuf::from(path));
             }
-            "--menu" => match value("a menu name")?.as_str() {
-                "upgrades" => options.upgrades_menu = true,
-                other => bail!("unknown menu `{other}`: the only one is `upgrades`"),
-            },
+            "--menu" => {
+                let name = value("a menu name")?;
+                options.menu = Some(
+                    cycle_of_steel::menu::Menu::named(&name)
+                        .with_context(|| format!("unknown menu `{name}`: start, controls, pause, upgrades or death"))?,
+                );
+            }
             "--touch" => options.touch = Some(parse_touch(&value("x0,y0,x1,y1")?)?),
             other => bail!("unknown option `{other}`\n\n{USAGE}"),
         }
