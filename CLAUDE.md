@@ -151,7 +151,8 @@ The Unity build's figures need the owner: there is no Unity build here.
   `chunks_exact` in older code; those warnings predate step 3's last piece.
 - **Re-running the converter:** `cargo run -p cos-convert -- ../CycleOfSteel apps/cycle-of-steel/assets`.
   It overwrites `rooms/`, `guns.json`, `loot.json`, `enemies.json`, `dungeon.json`, `font.json`,
-  `sounds.json`, `sprites.json`, `sprites/` and `audio/`.
+  `sounds.json`, `sprites.json`, `sprites/` and `audio/` (clips encoded to Ogg with
+  ffmpeg, which the owner's machine has on its path).
   On the owner's Windows machine the Unity project is at `../../Unity/CycleOfSteel`
   (relative to this repo), and a run there changes a few room rotations in the last
   digit; revert those rather than commit them.

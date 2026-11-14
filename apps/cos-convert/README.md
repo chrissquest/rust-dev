@@ -102,8 +102,11 @@ Sounds are written as `{clip, volume, loop}` from Unity's `AudioSource`s: a
 gun's `sound`, an effect's `sound` (`ExplosionScript.explosion`), an enemy's
 `death_sound` (its body's `RandomBodyScript.deathSound`). `sounds.json` holds
 the player's (`PlayerData` hurt, heal, pickup; `PlayerAnimations` walk) and the
-music the Dungeon scene plays on awake. Every clip they name is copied to
-`audio/` under its own file name.
+music the Dungeon scene plays on awake. Every clip they name goes to `audio/`
+under its own name as Ogg Vorbis: WAVs are encoded with ffmpeg at quality 4
+(about 128 kbit/s; set `FFMPEG` if it is not on the path), Oggs are copied.
+Without ffmpeg the WAVs are copied as they are, with a warning. `audio/` is
+emptied first.
 
 `font.json` is the pixel font, Thaleah Fat, from the project's 16-pixel bitmap
 atlas (`ThaleahFat.fontsettings` and its PNG). `glyphs` maps a character to its

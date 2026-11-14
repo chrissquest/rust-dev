@@ -1,9 +1,14 @@
 //! Playing the sounds the world asks for, and the music.
 //!
 //! The simulation only says what happened ([`Sound`] events); this plays them
-//! through the default output device with `rodio`. Clips are read from
-//! `audio/` and decoded the first time they are played, then kept. A machine
-//! with no sound device simply plays nothing.
+//! through the default output device with `rodio`. Clips are Ogg Vorbis
+//! (or WAV) files in `audio/`, read the first time they are needed. Short
+//! sounds are decoded once and kept; looping ones (the music, the laser, the
+//! footsteps) are decoded as they play, since decoded they would take tens of
+//! megabytes. A machine with no sound device simply plays nothing.
+//!
+//! Ogg goes through rodio's `lewton` decoder: its `symphonia` one gives no
+//! samples at all for short Vorbis files such as the gunshot.
 //!
 //! As Unity's `AudioSource`s do: a one-off sound starts afresh each time and
 //! overlaps the last; the laser's and the footsteps' sounds start over on
@@ -11,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::sync::Arc;
 
 use rodio::source::Buffered;
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink, Source};
@@ -20,13 +26,22 @@ use crate::data::{SoundFile, SoundsFile};
 use crate::sim::Sound;
 use crate::sim::defs::Defs;
 
-type Clip = Buffered<Decoder<Cursor<Vec<u8>>>>;
+/// A clip's file, shared by everything playing it.
+type Bytes = Cursor<Arc<[u8]>>;
+/// A short clip, decoded.
+type Clip = Buffered<Decoder<Bytes>>;
+
+/// A clip as read: its file, and once played as a one-off, its samples.
+struct Loaded {
+    bytes: Arc<[u8]>,
+    decoded: Option<Clip>,
+}
 
 pub struct Audio {
     stream: OutputStream,
     assets: AssetSource,
     /// Clips by stem. `None` for one that would not load, so it is tried once.
-    clips: HashMap<String, Option<Clip>>,
+    clips: HashMap<String, Option<Loaded>>,
     sounds: SoundsFile,
     laser: Sink,
     walk: Sink,
@@ -58,8 +73,8 @@ impl Audio {
         let music = Sink::connect_new(stream.mixer());
         let mut audio = Self { stream, assets: assets.clone(), clips: HashMap::new(), sounds, laser, walk, _music: music, paused: None };
         if let Some(file) = audio.sounds.music.clone() {
-            let clip = audio.clip(&file.clip);
-            start(&audio._music, clip, &file);
+            let bytes = audio.bytes(&file.clip);
+            start(&audio._music, bytes, &file);
         }
         Some(audio)
     }
@@ -75,9 +90,9 @@ impl Audio {
             Sound::Pickup => self.sounds.player.pickup.as_ref(),
             Sound::LaserStart(gun) => {
                 if let Some(file) = defs.gun(gun).sound.clone() {
-                    let clip = self.clip(&file.clip);
+                    let bytes = self.bytes(&file.clip);
                     self.laser = Sink::connect_new(self.stream.mixer());
-                    start(&self.laser, clip, &file);
+                    start(&self.laser, bytes, &file);
                 }
                 return;
             }
@@ -87,9 +102,9 @@ impl Audio {
             }
             Sound::WalkStart => {
                 if let Some(file) = self.sounds.player.walk.clone() {
-                    let clip = self.clip(&file.clip);
+                    let bytes = self.bytes(&file.clip);
                     self.walk = Sink::connect_new(self.stream.mixer());
-                    start(&self.walk, clip, &file);
+                    start(&self.walk, bytes, &file);
                 }
                 return;
             }
@@ -100,7 +115,7 @@ impl Audio {
         }
         .cloned();
         if let Some(file) = one_off
-            && let Some(clip) = self.clip(&file.clip)
+            && let Some(clip) = self.decoded(&file.clip)
         {
             self.stream.mixer().add(clip.amplify(file.volume));
         }
@@ -129,39 +144,71 @@ impl Audio {
         }
     }
 
-    /// A clip by stem, read and decoded the first time.
-    fn clip(&mut self, stem: &str) -> Option<Clip> {
-        if let Some(clip) = self.clips.get(stem) {
-            return clip.clone();
-        }
-        let clip = ["wav", "ogg"].iter().find_map(|extension| {
-            let bytes = self.assets.read(&format!("audio/{stem}.{extension}")).ok()?;
-            match Decoder::new(Cursor::new(bytes)) {
-                Ok(decoder) => Some(decoder.buffered()),
-                Err(error) => {
-                    log::warn!("could not decode audio/{stem}.{extension}: {error}");
-                    None
-                }
+    /// A clip's file by stem, `.ogg` or `.wav`, read the first time.
+    fn bytes(&mut self, stem: &str) -> Option<Arc<[u8]>> {
+        self.loaded(stem).map(|loaded| loaded.bytes.clone())
+    }
+
+    /// A short clip's samples, decoded the first time.
+    fn decoded(&mut self, stem: &str) -> Option<Clip> {
+        let loaded = self.loaded(stem)?;
+        if loaded.decoded.is_none() {
+            match Decoder::new(Cursor::new(loaded.bytes.clone())) {
+                Ok(decoder) => loaded.decoded = Some(decoder.buffered()),
+                Err(error) => log::warn!("could not decode audio/{stem}: {error}"),
             }
-        });
-        if clip.is_none() {
-            log::warn!("no clip audio/{stem}");
         }
-        self.clips.insert(stem.to_string(), clip.clone());
-        clip
+        loaded.decoded.clone()
+    }
+
+    fn loaded(&mut self, stem: &str) -> Option<&mut Loaded> {
+        if !self.clips.contains_key(stem) {
+            let bytes = ["ogg", "wav"].iter().find_map(|extension| self.assets.read(&format!("audio/{stem}.{extension}")).ok());
+            if bytes.is_none() {
+                log::warn!("no clip audio/{stem}");
+            }
+            let loaded = bytes.map(|bytes| Loaded { bytes: bytes.into(), decoded: None });
+            self.clips.insert(stem.to_string(), loaded);
+        }
+        self.clips.get_mut(stem)?.as_mut()
     }
 }
 
-/// Starts `clip` on `sink` at `file`'s volume, looping if it loops.
-fn start(sink: &Sink, clip: Option<Clip>, file: &SoundFile) {
-    let Some(clip) = clip else {
+/// Starts a clip on `sink` at `file`'s volume, decoding as it plays, looping
+/// if it loops.
+fn start(sink: &Sink, bytes: Option<Arc<[u8]>>, file: &SoundFile) {
+    let Some(bytes) = bytes else {
         return;
     };
     sink.set_volume(file.volume);
-    if file.looping {
-        sink.append(clip.repeat_infinite());
+    let appended = if file.looping {
+        Decoder::new_looped(Cursor::new(bytes)).map(|decoder| sink.append(decoder))
     } else {
-        sink.append(clip);
+        Decoder::new(Cursor::new(bytes)).map(|decoder| sink.append(decoder))
+    };
+    match appended {
+        Ok(()) => sink.play(),
+        Err(error) => log::warn!("could not decode audio/{}: {error}", file.clip),
     }
-    sink.play();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every clip gives sound, not just a header: rodio's symphonia decoder
+    /// opened the short gunshot Ogg and gave no samples from it.
+    #[test]
+    fn every_clip_decodes_to_sound() {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio");
+        for entry in std::fs::read_dir(folder).unwrap() {
+            let path = entry.unwrap().path();
+            let bytes = std::fs::read(&path).unwrap();
+            let decoder = Decoder::new(Cursor::new(bytes));
+            assert!(decoder.is_ok(), "{} does not decode: {:?}", path.display(), decoder.err());
+            let decoder = decoder.unwrap();
+            let loudest = decoder.fold(0.0f32, |high, sample| high.max(sample.abs()));
+            assert!(loudest > 0.01, "{} is silent", path.display());
+        }
+    }
 }

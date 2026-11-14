@@ -218,9 +218,12 @@ where you spawn and interact. Interact again on the spot inside to leave.
   go), explosions, an enemy's body as it dies, the player hurt, healed and
   picking up a data cell, the footsteps while moving, and the Dungeon scene's
   music, looping. The simulation asks for them (`Event::Sound`); `audio.rs`
-  plays them with `rodio` (cpal: WASAPI on Windows, AAudio on Android). A
-  machine with no sound device plays nothing. There is no volume setting yet
-  (menus, step 7).
+  plays them with `rodio` (cpal: WASAPI on Windows, AAudio on Android). The
+  clips are Ogg Vorbis, 1.2 MB in all against 23.5 MB as WAV; short ones are
+  decoded once and kept, looping ones (music, laser, footsteps) decoded as they
+  play. Ogg is read with rodio's `lewton` decoder: its `symphonia` one gave no
+  samples for short clips, which left most guns silent. A machine with no
+  sound device plays nothing. There is no volume setting yet.
 
 - **Saves and upgrades.** As Unity's `PlayerSaveData`: stats, upgrade levels,
   data cells, difficulty and guns are saved on entering the dungeon, on taking
@@ -312,7 +315,7 @@ cargo run --release -p cycle-of-steel -- --room dungeon --save none --measure --
 On an RTX 3080 under Windows (release, Vulkan, 240 Hz display) that gives
 frames at the display's 4.2 ms with 0.4 ms of work, 0.012 ms per simulation
 step, 0.5 s to the first frame, and about 160 MB resident. The game's own share
-is about 40 MB (16 of it the music, decoded); the rest is the graphics driver,
+is about 30 MB (5 of it sound, the music decoded as it plays); the rest is the graphics driver,
 which takes 140 MB the moment the GPU is opened, about the same on DX12 and a
 little less on GL. Memory is reported on Windows, Linux and Android.
 

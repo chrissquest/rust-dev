@@ -4,8 +4,11 @@
 //! gun's fire, an explosion's bang, an enemy body's death noise. Those are
 //! written beside the thing (in `guns.json`, `enemies.json`). The player's
 //! sounds and the dungeon's music have no such home, so they go in
-//! `sounds.json`. The clips themselves are copied to `audio/` under their own
-//! file names; a sound names its clip by the file's stem.
+//! `sounds.json`. The clips themselves go to `audio/` under their own names
+//! as Ogg Vorbis, about a tenth of WAV's size: WAVs are encoded with ffmpeg
+//! (`FFMPEG` names it if it is not on the path), Oggs are copied. Without
+//! ffmpeg the WAVs are copied as they are, which the game also plays. A sound
+//! names its clip by the file's stem.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -70,8 +73,11 @@ pub fn convert(project: &Project) -> Result<Json> {
     Ok(json!({ "player": player, "music": music }))
 }
 
-/// Copies every clip a written file names (any `clip` in it) from the project's
-/// audio into `audio/`, and returns how many.
+/// Vorbis quality for encoded clips: ffmpeg's `-q:a`, about 128 kbit/s.
+const VORBIS_QUALITY: &str = "4";
+
+/// Writes every clip a written file names (any `clip` in it) from the project's
+/// audio into `audio/`, emptied first, and returns how many.
 pub fn copy_clips(project: &Project, output: &Path, written: &[&Json]) -> Result<usize> {
     let mut stems = BTreeSet::new();
     for json in written {
@@ -80,12 +86,38 @@ pub fn copy_clips(project: &Project, output: &Path, written: &[&Json]) -> Result
     let mut files: Vec<PathBuf> = Vec::new();
     find_audio(&project.assets_dir().join("Audio"), &mut files)?;
     let folder = output.join("audio");
+    if folder.exists() {
+        std::fs::remove_dir_all(&folder).with_context(|| format!("could not empty {}", folder.display()))?;
+    }
     std::fs::create_dir_all(&folder).with_context(|| format!("could not create {}", folder.display()))?;
+    let ffmpeg = std::env::var_os("FFMPEG").unwrap_or_else(|| "ffmpeg".into());
+    let mut have_ffmpeg = true;
     let mut copied = 0;
     for stem in &stems {
         let Some(file) = files.iter().find(|file| file.file_stem().is_some_and(|name| name.to_string_lossy() == *stem)) else {
             continue;
         };
+        let is_ogg = file.extension().is_some_and(|extension| extension == "ogg");
+        if !is_ogg && have_ffmpeg {
+            let target = folder.join(format!("{stem}.ogg"));
+            let run = std::process::Command::new(&ffmpeg)
+                .args(["-v", "error", "-y", "-i"])
+                .arg(file)
+                .args(["-c:a", "libvorbis", "-q:a", VORBIS_QUALITY])
+                .arg(&target)
+                .status();
+            match run {
+                Ok(status) if status.success() => {
+                    copied += 1;
+                    continue;
+                }
+                Ok(status) => anyhow::bail!("ffmpeg could not encode {} ({status})", file.display()),
+                Err(error) => {
+                    println!("    warning: ffmpeg not found ({error}); copying WAVs as they are");
+                    have_ffmpeg = false;
+                }
+            }
+        }
         let name = file.file_name().expect("a file");
         crate::copy_writable(file, &folder.join(name))
             .with_context(|| format!("could not copy {}", file.display()))?;
