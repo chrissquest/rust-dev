@@ -38,8 +38,16 @@ cargo run -p cycle-of-steel-2 -- --backend vulkan --screenshot target/cos2.png -
 
 The package is `com.chrissquest.cycleofsteel2`, so it installs beside Cycle of Steel 1, and it
 uses the same committed test key. Check that it compiles with
-`cargo check -p cycle-of-steel-2 --lib --target aarch64-linux-android`. No CI workflow builds
-its APK yet.
+`cargo check -p cycle-of-steel-2 --lib --target aarch64-linux-android`.
+
+## Builds
+
+As for Cycle of Steel 1, builds run only on request, with their own tags and releases:
+
+- Android: `.github/workflows/cos2-android.yml`, `[cos2-android]` in a commit message or
+  "Run workflow" in the Actions tab. It replaces the `cos2-android-latest` pre-release.
+- Windows and Linux: `.github/workflows/cos2-desktop.yml`, `[cos2-desktop]`. It replaces
+  `cos2-desktop-latest`.
 
 ## Assets
 

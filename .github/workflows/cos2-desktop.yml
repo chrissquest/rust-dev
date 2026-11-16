@@ -1,0 +1,80 @@
+# Builds Cycle of Steel 2 for Windows and Linux, only when asked.
+#
+# The same as desktop.yml (Cycle of Steel 1), for the other game. Run it from the
+# Actions tab ("Cycle of Steel 2 desktop builds" -> "Run workflow"), or push a
+# commit whose message contains `[cos2-desktop]`. Every run replaces the
+# `cos2-cos2-desktop-latest` pre-release: a zip for Windows and a tarball for Linux,
+# with the `assets` folder beside the game once it has one.
+name: Cycle of Steel 2 desktop builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "claude/**"]
+
+permissions:
+  # Needed to create the release and its tag.
+  contents: write
+
+concurrency:
+  group: cos2-desktop-builds
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[cos2-desktop]')
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            package: cycle-of-steel-2-windows.zip
+          - os: ubuntu-latest
+            package: cycle-of-steel-2-linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build -p cycle-of-steel-2 --release
+
+      - name: Package with its assets
+        shell: bash
+        run: |
+          mkdir -p package/cycle-of-steel-2
+          if [ -d apps/cycle-of-steel-2/assets ]; then cp -r apps/cycle-of-steel-2/assets package/cycle-of-steel-2/assets; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp target/release/cycle-of-steel-2.exe package/cycle-of-steel-2/
+            (cd package && 7z a "../${{ matrix.package }}" cycle-of-steel-2 > /dev/null)
+          else
+            cp target/release/cycle-of-steel-2 package/cycle-of-steel-2/
+            tar -czf "${{ matrix.package }}" -C package cycle-of-steel-2
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: ${{ matrix.package }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - name: Publish as the cos2-desktop-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete cos2-desktop-latest --yes --cleanup-tag || true
+          gh release create cos2-desktop-latest packages/* \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Cycle of Steel 2 desktop test build" \
+            --notes "Test build of Cycle of Steel 2 from \`${GITHUB_REF_NAME}\` at ${GITHUB_SHA::7}. Unpack and run \`cycle-of-steel-2\` (\`.exe\` on Windows); keep the \`assets\` folder beside it."

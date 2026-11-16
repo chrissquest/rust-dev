@@ -20,6 +20,9 @@ before changing it.
 - Engine changes must keep Cycle of Steel 1's tests passing.
 - Shared platform code (assets, storage, audio, input devices, the frame loop) is
   planned to move into a `crates/crystal-app` crate, pending the owner's approval.
+- Builds on request only: `[cos2-android]` / `[cos2-desktop]` in a commit message
+  (releases `cos2-android-latest`, `cos2-desktop-latest`). The plain `[android]` and
+  `[desktop]` tags build Cycle of Steel 1.
 - Roadmap: 1 foundation (done), 2 feel prototype (next), 3 parts prototype, 4 core
   loop, 5 themes and content, 6 art pass and polish.
 
