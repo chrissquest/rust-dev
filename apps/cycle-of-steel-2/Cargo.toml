@@ -1,0 +1,53 @@
+[package]
+name = "cycle-of-steel-2"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Cycle of Steel 2: Parts Collector, a top-down shooter about building weapons from parts"
+publish = false
+
+[lib]
+# `cdylib` is what Android loads; `rlib` is what the desktop binary and tests link.
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+anyhow = "1"
+crystal-engine = { path = "../../crates/crystal-engine" }
+log = "0.4"
+png = "0.17"
+pollster = "1"
+wgpu = "30"
+winit = "0.30"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+env_logger = "0.11"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Routes `log` to logcat, under the tag `cycle-of-steel-2`.
+android_logger = "0.15"
+winit = { version = "0.30", features = ["android-native-activity"] }
+
+# Android packaging, as Cycle of Steel 1's (see its README, "Android"). A package
+# name of its own, so both games install side by side on one phone.
+[package.metadata.android]
+package = "com.chrissquest.cycleofsteel2"
+apk_name = "cycle-of-steel-2"
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 33
+
+[package.metadata.android.application]
+label = "Cycle of Steel 2"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+
+[package.metadata.android.application.activity]
+orientation = "sensorLandscape"
+config_changes = "orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation"
+
+# The same committed test key as Cycle of Steel 1: it protects nothing and must
+# never sign a store release.
+[package.metadata.android.signing.release]
+path = "../cycle-of-steel/android/test-signing.keystore"
+keystore_password = "android"

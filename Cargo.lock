@@ -1194,6 +1194,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cycle-of-steel-2"
+version = "0.1.0"
+dependencies = [
+ "android_logger",
+ "anyhow",
+ "crystal-engine",
+ "env_logger",
+ "log",
+ "png 0.17.16",
+ "pollster 1.0.1",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

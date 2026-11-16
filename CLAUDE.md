@@ -5,6 +5,24 @@ top-down roguelike shooter) to Rust. Read `apps/cycle-of-steel/README.md` and
 `apps/cos-convert/README.md` before changing either; they describe the layout and
 formats and are kept current.
 
+## Cycle of Steel 2: Parts Collector
+
+A new game, not a port: `apps/cycle-of-steel-2`, sharing `crystal-engine`, developed
+on branch `claude/cycle-of-steel-2-setup-wdr5h7`. Nothing in it has to match Unity.
+The design doc holds the vision, decisions log, open questions and roadmap:
+https://claude.ai/artifact/LeeojA3ET6neKbz8HJwr1R. Log decisions there and tick
+open questions as the owner answers them. Read `apps/cycle-of-steel-2/README.md`
+before changing it.
+
+- The core is building weapons from parts and finding overpowered combos. Feel
+  (damage numbers, sound, hit effects) is a core feature, not polish.
+- The sim, test, no-allocation and screenshot rules below apply here too.
+- Engine changes must keep Cycle of Steel 1's tests passing.
+- Shared platform code (assets, storage, audio, input devices, the frame loop) is
+  planned to move into a `crates/crystal-app` crate, pending the owner's approval.
+- Roadmap: 1 foundation (done), 2 feel prototype (next), 3 parts prototype, 4 core
+  loop, 5 themes and content, 6 art pass and polish.
+
 ## The Cycle of Steel port
 
 | Where | What |
