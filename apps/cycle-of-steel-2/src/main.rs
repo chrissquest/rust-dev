@@ -16,6 +16,8 @@ cycle-of-steel-2 [options]
   --size <w>x<h>        screenshot size (default 1280x720)
   --ticks <n>           steps to run before the screenshot (default 0)
   --move <x>,<y>        movement held during those steps
+  --aim <x>,<y>         aim held during those steps
+  --fire                hold the trigger during those steps
 ";
 
 fn main() -> Result<()> {
@@ -26,6 +28,8 @@ fn main() -> Result<()> {
     let (mut width, mut height) = (1280, 720);
     let mut ticks = 0;
     let mut movement = Vec2::ZERO;
+    let mut aim = Vec2::ZERO;
+    let mut fire = false;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -39,11 +43,9 @@ fn main() -> Result<()> {
                 (width, height) = (w.parse()?, h.parse()?);
             }
             "--ticks" => ticks = value()?.parse()?,
-            "--move" => {
-                let pair = value()?;
-                let (x, y) = pair.split_once(',').context("--move is <x>,<y>")?;
-                movement = Vec2::new(x.parse()?, y.parse()?);
-            }
+            "--move" => movement = parse_pair(&value()?)?,
+            "--aim" => aim = parse_pair(&value()?)?,
+            "--fire" => fire = true,
             "--help" | "-h" => {
                 print!("{HELP}");
                 return Ok(());
@@ -60,9 +62,16 @@ fn main() -> Result<()> {
             height,
             ticks,
             movement,
+            aim,
+            fire,
         }),
         None => app::run(backends, EventLoop::new()?),
     }
+}
+
+fn parse_pair(pair: &str) -> Result<Vec2> {
+    let (x, y) = pair.split_once(',').context("expected <x>,<y>")?;
+    Ok(Vec2::new(x.parse()?, y.parse()?))
 }
 
 fn parse_backend(name: &str) -> Result<wgpu::Backends> {

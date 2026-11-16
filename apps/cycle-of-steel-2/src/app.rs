@@ -16,7 +16,7 @@ use crystal_engine::render2d::{self, Offscreen, Renderer2d, Target};
 use crystal_engine::surface::WindowSurface;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, KeyEvent, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
@@ -35,27 +35,51 @@ struct Graphics {
     view: View,
 }
 
-/// Movement keys held down: left, right, down, up.
+/// Keys and mouse buttons held, and where the cursor is.
+///
+/// WASD moves. The mouse aims from the middle of the window (the camera
+/// follows the player) and the left button or Space fires. The arrow keys aim
+/// and fire at once, for playing on a keyboard alone.
 #[derive(Default)]
 struct Keys {
-    held: [bool; 4],
+    /// Left, right, down, up, for movement and for the arrow keys.
+    movement: [bool; 4],
+    arrows: [bool; 4],
+    space: bool,
+    mouse_button: bool,
+    /// Cursor relative to the window's centre, y up; `None` until it moves.
+    cursor: Option<Vec2>,
+}
+
+fn axes(held: [bool; 4]) -> Vec2 {
+    let axis = |negative: bool, positive: bool| f32::from(u8::from(positive)) - f32::from(u8::from(negative));
+    Vec2::new(axis(held[0], held[1]), axis(held[2], held[3])).normalize_or_zero()
 }
 
 impl Keys {
     fn set(&mut self, code: KeyCode, down: bool) {
-        let slot = match code {
-            KeyCode::KeyA | KeyCode::ArrowLeft => 0,
-            KeyCode::KeyD | KeyCode::ArrowRight => 1,
-            KeyCode::KeyS | KeyCode::ArrowDown => 2,
-            KeyCode::KeyW | KeyCode::ArrowUp => 3,
-            _ => return,
-        };
-        self.held[slot] = down;
+        match code {
+            KeyCode::KeyA => self.movement[0] = down,
+            KeyCode::KeyD => self.movement[1] = down,
+            KeyCode::KeyS => self.movement[2] = down,
+            KeyCode::KeyW => self.movement[3] = down,
+            KeyCode::ArrowLeft => self.arrows[0] = down,
+            KeyCode::ArrowRight => self.arrows[1] = down,
+            KeyCode::ArrowDown => self.arrows[2] = down,
+            KeyCode::ArrowUp => self.arrows[3] = down,
+            KeyCode::Space => self.space = down,
+            _ => {}
+        }
     }
 
-    fn movement(&self) -> Vec2 {
-        let axis = |negative: bool, positive: bool| f32::from(u8::from(positive)) - f32::from(u8::from(negative));
-        Vec2::new(axis(self.held[0], self.held[1]), axis(self.held[2], self.held[3])).normalize_or_zero()
+    fn input(&self) -> Input {
+        let arrows = axes(self.arrows);
+        let aim = if arrows != Vec2::ZERO { arrows } else { self.cursor.unwrap_or(Vec2::ZERO) };
+        Input {
+            movement: axes(self.movement),
+            aim,
+            fire: self.space || self.mouse_button || arrows != Vec2::ZERO,
+        }
     }
 }
 
@@ -110,9 +134,7 @@ impl App {
         let elapsed = self.last_frame.map_or(0.0, |last| (now - last).as_secs_f32());
         self.last_frame = Some(now);
         self.accumulator = (self.accumulator + elapsed).min(MAX_CATCH_UP);
-        let input = Input {
-            movement: self.keys.movement(),
-        };
+        let input = self.keys.input();
         while self.accumulator >= sim::DT {
             self.world.step(&input);
             self.accumulator -= sim::DT;
@@ -187,6 +209,30 @@ impl ApplicationHandler for App {
                 }
                 self.keys.set(code, state == ElementState::Pressed);
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                if let Some(graphics) = &self.graphics {
+                    let size = graphics.window.inner_size();
+                    let center = Vec2::new(size.width as f32, size.height as f32) * 0.5;
+                    self.keys.cursor = Some(Vec2::new(position.x as f32 - center.x, center.y - position.y as f32));
+                }
+            }
+            // Touch, for phones until there are proper sticks: hold to aim at
+            // the finger and fire.
+            WindowEvent::Touch(touch) => {
+                if let Some(graphics) = &self.graphics {
+                    let size = graphics.window.inner_size();
+                    let center = Vec2::new(size.width as f32, size.height as f32) * 0.5;
+                    let at = Vec2::new(touch.location.x as f32 - center.x, center.y - touch.location.y as f32);
+                    let down = matches!(touch.phase, TouchPhase::Started | TouchPhase::Moved);
+                    self.keys.cursor = Some(at);
+                    self.keys.mouse_button = down;
+                }
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => self.keys.mouse_button = state == ElementState::Pressed,
             // Released keys stop counting when the window loses focus.
             WindowEvent::Focused(false) => self.keys = Keys::default(),
             WindowEvent::RedrawRequested => self.frame(),
@@ -210,6 +256,9 @@ pub struct Screenshot {
     pub ticks: u32,
     /// The movement held during those steps.
     pub movement: Vec2,
+    /// The aim held during those steps, and whether the trigger is.
+    pub aim: Vec2,
+    pub fire: bool,
 }
 
 /// Steps the world with no window, draws one frame off-screen and saves it as
@@ -218,6 +267,8 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
     let mut world = World::new(1);
     let input = Input {
         movement: options.movement,
+        aim: options.aim,
+        fire: options.fire,
     };
     for _ in 0..options.ticks {
         world.step(&input);
@@ -235,13 +286,15 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
     save_png(&options.path, options.width, options.height, &pixels)?;
     let position = world.player.position;
     println!(
-        "wrote {} ({}x{}), tick {}, player at ({:.3}, {:.3})",
+        "wrote {} ({}x{}), tick {}, player at ({:.3}, {:.3}), {} bullets, {} numbers",
         options.path.display(),
         options.width,
         options.height,
         world.tick,
         position.x,
-        position.y
+        position.y,
+        world.bullets.len(),
+        world.feedback.numbers.len()
     );
     Ok(())
 }
@@ -262,14 +315,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opposite_keys_cancel_and_diagonals_are_unit_length() {
+    fn opposite_keys_cancel_and_arrows_aim_and_fire() {
         let mut keys = Keys::default();
         keys.set(KeyCode::KeyA, true);
         keys.set(KeyCode::KeyD, true);
-        assert_eq!(keys.movement(), Vec2::ZERO);
-        keys.set(KeyCode::KeyA, false);
-        keys.set(KeyCode::ArrowUp, true);
-        assert!((keys.movement().length() - 1.0).abs() < 1e-6);
-        assert!(keys.movement().x > 0.0 && keys.movement().y > 0.0);
+        assert_eq!(keys.input().movement, Vec2::ZERO);
+        assert!(!keys.input().fire);
+        keys.cursor = Some(Vec2::new(0.0, 50.0));
+        assert_eq!(keys.input().aim, Vec2::new(0.0, 50.0));
+        keys.set(KeyCode::ArrowLeft, true);
+        let input = keys.input();
+        assert!(input.fire);
+        assert_eq!(input.aim, Vec2::new(-1.0, 0.0));
     }
 }
