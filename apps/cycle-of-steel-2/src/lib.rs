@@ -8,6 +8,7 @@
 //!   about winit, wgpu or wall-clock time, so tests can step it directly.
 //! - `view` turns world state into sprites and owns the camera; `art` is the
 //!   placeholder pixel art it draws with.
+//! - `touch` is the phone's twin sticks.
 //! - `app` is the window, the frame loop and the screenshot mode.
 //!
 //! On desktop `main.rs` starts the game. On Android the system loads this
@@ -16,6 +17,7 @@
 pub mod app;
 pub mod art;
 pub mod sim;
+pub mod touch;
 pub mod view;
 
 /// Android's entry point, called on the app's main thread once the library loads.

@@ -22,6 +22,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 use crate::sim::{self, Input, World};
+use crate::touch::TouchSticks;
 use crate::view::View;
 
 /// The most simulated time one frame may catch up on: after a long stall the
@@ -87,6 +88,7 @@ struct App {
     backends: wgpu::Backends,
     world: World,
     keys: Keys,
+    touch: TouchSticks,
     graphics: Option<Graphics>,
     last_frame: Option<Instant>,
     accumulator: f32,
@@ -100,6 +102,7 @@ pub fn run(backends: wgpu::Backends, event_loop: EventLoop<()>) -> Result<()> {
         backends,
         world: World::new(1),
         keys: Keys::default(),
+        touch: TouchSticks::default(),
         graphics: None,
         last_frame: None,
         accumulator: 0.0,
@@ -134,7 +137,7 @@ impl App {
         let elapsed = self.last_frame.map_or(0.0, |last| (now - last).as_secs_f32());
         self.last_frame = Some(now);
         self.accumulator = (self.accumulator + elapsed).min(MAX_CATCH_UP);
-        let input = self.keys.input();
+        let input = merge_touch(self.keys.input(), &self.touch);
         while self.accumulator >= sim::DT {
             self.world.step(&input);
             self.accumulator -= sim::DT;
@@ -156,9 +159,23 @@ impl App {
             width: frame.width,
             height: frame.height,
         };
-        graphics.view.draw(&mut graphics.renderer, &mut encoder, target, &self.world, blend);
+        let sticks = self.touch.visuals();
+        graphics.view.draw(&mut graphics.renderer, &mut encoder, target, &self.world, blend, &sticks);
         graphics.surface.present(frame, encoder);
     }
+}
+
+/// Touch overrides the keys and mouse while a stick is held.
+fn merge_touch(mut input: Input, touch: &TouchSticks) -> Input {
+    let movement = touch.movement();
+    if movement != Vec2::ZERO {
+        input.movement = movement;
+    }
+    if let Some(aim) = touch.firing_aim() {
+        input.aim = aim;
+        input.fire = true;
+    }
+    input
 }
 
 impl ApplicationHandler for App {
@@ -168,6 +185,9 @@ impl ApplicationHandler for App {
         }
         match self.create_graphics(event_loop) {
             Ok(graphics) => {
+                // Set here as well as on resize: Android may not send a first resize.
+                let size = graphics.window.inner_size();
+                self.touch.screen = Vec2::new(size.width as f32, size.height as f32);
                 self.graphics = Some(graphics);
                 // Time spent away is not game time.
                 self.last_frame = None;
@@ -184,6 +204,7 @@ impl ApplicationHandler for App {
         // The surface is about to become invalid: drop everything built on it.
         self.graphics = None;
         self.keys = Keys::default();
+        self.touch.release();
         event_loop.set_control_flow(ControlFlow::Wait);
     }
 
@@ -194,6 +215,7 @@ impl ApplicationHandler for App {
                 if let Some(graphics) = self.graphics.as_mut() {
                     graphics.surface.resize(size);
                 }
+                self.touch.screen = Vec2::new(size.width as f32, size.height as f32);
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -216,16 +238,12 @@ impl ApplicationHandler for App {
                     self.keys.cursor = Some(Vec2::new(position.x as f32 - center.x, center.y - position.y as f32));
                 }
             }
-            // Touch, for phones until there are proper sticks: hold to aim at
-            // the finger and fire.
             WindowEvent::Touch(touch) => {
-                if let Some(graphics) = &self.graphics {
-                    let size = graphics.window.inner_size();
-                    let center = Vec2::new(size.width as f32, size.height as f32) * 0.5;
-                    let at = Vec2::new(touch.location.x as f32 - center.x, center.y - touch.location.y as f32);
-                    let down = matches!(touch.phase, TouchPhase::Started | TouchPhase::Moved);
-                    self.keys.cursor = Some(at);
-                    self.keys.mouse_button = down;
+                let at = Vec2::new(touch.location.x as f32, touch.location.y as f32);
+                match touch.phase {
+                    TouchPhase::Started => self.touch.start(touch.id, at),
+                    TouchPhase::Moved => self.touch.moved(touch.id, at),
+                    TouchPhase::Ended | TouchPhase::Cancelled => self.touch.end(touch.id),
                 }
             }
             WindowEvent::MouseInput {
@@ -259,6 +277,8 @@ pub struct Screenshot {
     /// The aim held during those steps, and whether the trigger is.
     pub aim: Vec2,
     pub fire: bool,
+    /// Draw both touch sticks held, pushed along `movement` and `aim`.
+    pub sticks: bool,
 }
 
 /// Steps the world with no window, draws one frame off-screen and saves it as
@@ -279,7 +299,17 @@ pub fn screenshot(options: Screenshot) -> Result<()> {
     let mut view = View::new(&mut renderer)?;
     let offscreen = Offscreen::new(&device, options.width, options.height);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("screenshot") });
-    view.draw(&mut renderer, &mut encoder, offscreen.target(), &world, 1.0);
+    let mut touch = TouchSticks { screen: Vec2::new(options.width as f32, options.height as f32), ..TouchSticks::default() };
+    if options.sticks {
+        let reach = touch.radius();
+        let (left, right) = (Vec2::new(options.width as f32 * 0.2, options.height as f32 * 0.7), Vec2::new(options.width as f32 * 0.8, options.height as f32 * 0.65));
+        let screen_down = |v: Vec2| Vec2::new(v.x, -v.y).normalize_or_zero() * reach * 0.8;
+        touch.start(0, left);
+        touch.moved(0, left + screen_down(options.movement));
+        touch.start(1, right);
+        touch.moved(1, right + screen_down(options.aim));
+    }
+    view.draw(&mut renderer, &mut encoder, offscreen.target(), &world, 1.0, &touch.visuals());
     queue.submit(std::iter::once(encoder.finish()));
 
     let pixels = offscreen.read_rgba(&device, &queue)?;

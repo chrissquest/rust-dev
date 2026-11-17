@@ -18,6 +18,7 @@ cycle-of-steel-2 [options]
   --move <x>,<y>        movement held during those steps
   --aim <x>,<y>         aim held during those steps
   --fire                hold the trigger during those steps
+  --sticks              draw the touch sticks, held along --move and --aim
 ";
 
 fn main() -> Result<()> {
@@ -30,6 +31,7 @@ fn main() -> Result<()> {
     let mut movement = Vec2::ZERO;
     let mut aim = Vec2::ZERO;
     let mut fire = false;
+    let mut sticks = false;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -46,6 +48,7 @@ fn main() -> Result<()> {
             "--move" => movement = parse_pair(&value()?)?,
             "--aim" => aim = parse_pair(&value()?)?,
             "--fire" => fire = true,
+            "--sticks" => sticks = true,
             "--help" | "-h" => {
                 print!("{HELP}");
                 return Ok(());
@@ -64,6 +67,7 @@ fn main() -> Result<()> {
             movement,
             aim,
             fire,
+            sticks,
         }),
         None => app::run(backends, EventLoop::new()?),
     }

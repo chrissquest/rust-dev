@@ -24,8 +24,8 @@ before changing it.
   (releases `cos2-android-latest`, `cos2-desktop-latest`). The plain `[android]` and
   `[desktop]` tags build Cycle of Steel 1.
 - Roadmap: 1 foundation (done), 2 feel prototype (in progress: shooting, dummies,
-  damage numbers, sparks, shake and hit-stop done; sound and a gamepad/touch
-  sticks next), 3 parts prototype, 4 core
+  damage numbers, sparks, shake, hit-stop and twin touch sticks done; sound and
+  gamepads next), 3 parts prototype, 4 core
   loop, 5 themes and content, 6 art pass and polish.
 
 ## The Cycle of Steel port

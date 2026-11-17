@@ -16,6 +16,7 @@ https://claude.ai/artifact/LeeojA3ET6neKbz8HJwr1R
 | `src/sim/target.rs` | Training dummies on springs, with a running total per burst. |
 | `src/sim/feedback.rs` | Damage numbers, sparks, screen shake and hit-stop, in fixed pools. |
 | `src/view.rs` | World to sprites, and the camera (follows the player, leads the aim, carries the shake). |
+| `src/touch.rs` | Floating twin touch sticks: left half moves, right half aims and fires past a dead zone. |
 | `src/art.rs` | Placeholder pixel art drawn in code, packed into one atlas with white silhouettes for hit flashes, and a 3x5 digit font. |
 | `src/app.rs` | Window, fixed-step frame loop, Android suspend and resume, `--screenshot`. |
 | `src/main.rs` | Desktop command line (`--help`). |
@@ -28,7 +29,8 @@ Cycle of Steel 1's tests passing.
 
 ```sh
 cargo run -p cycle-of-steel-2   # WASD move, mouse aims, left button or Space fires,
-                                # arrow keys aim and fire, Escape quits; on a phone, hold to aim and fire
+                                # arrow keys aim and fire, Escape quits. On a phone: left thumb moves,
+                                # right thumb aims and fires (floating twin sticks, `src/touch.rs`)
 cargo test -p cycle-of-steel-2
 ```
 

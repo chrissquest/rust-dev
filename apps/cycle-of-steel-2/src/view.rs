@@ -15,6 +15,7 @@ use crystal_engine::sprite::Sprite;
 use crate::art::{Art, Atlas, DIGIT_SIZE, PIXELS_PER_TILE, Region};
 use crate::sim::feedback::{NUMBER_LIFE, NumberKind, SparkKind};
 use crate::sim::{World, gun, target};
+use crate::touch::StickVisual;
 
 /// Tiles from the bottom of the screen to the top.
 const VIEW_HEIGHT: f32 = 12.0;
@@ -61,6 +62,7 @@ pub struct View {
     texture: TextureId,
     atlas: Atlas,
     list: DrawList,
+    overlay: DrawList,
 }
 
 impl View {
@@ -77,6 +79,7 @@ impl View {
             texture,
             atlas,
             list: DrawList::new(),
+            overlay: DrawList::new(),
         })
     }
 
@@ -88,6 +91,7 @@ impl View {
         target: Target<'_>,
         world: &World,
         blend: f32,
+        sticks: &[Option<StickVisual>; 2],
     ) {
         let player = &world.player;
         let position = player.previous.lerp(player.position, blend);
@@ -109,7 +113,40 @@ impl View {
             clear: Some(color(BACKGROUND)),
             viewport: None,
         };
+        let (width, height) = (target.width, target.height);
         renderer.draw(encoder, target, &pass, &self.list);
+
+        // Touch sticks on top, in window pixels.
+        self.overlay.clear();
+        for stick in sticks.iter().flatten() {
+            self.draw_stick(stick, height as f32);
+        }
+        if self.overlay.sprite_count() > 0 {
+            let pass = Pass {
+                view_projection: Camera2d::pixels(width as f32, height as f32).view_projection(),
+                clear: None,
+                viewport: None,
+            };
+            renderer.draw(encoder, target, &pass, &self.overlay);
+        }
+    }
+
+    /// A ring of dots for the base and a diamond for the knob. Window y runs
+    /// down; the pixel camera's runs up.
+    fn draw_stick(&mut self, stick: &StickVisual, height: f32) {
+        let flip = |v: Vec2| Vec2::new(v.x, height - v.y);
+        let white = self.atlas.region(Art::White);
+        let (ring, knob) = if stick.held { (0.55, 0.85) } else { (0.25, 0.35) };
+        let dot = (stick.radius * 0.07).max(3.0);
+        for i in 0..24 {
+            let at = flip(stick.base) + Vec2::from_angle(i as f32 / 24.0 * std::f32::consts::TAU) * stick.radius;
+            let sprite = Sprite::new(at.extend(0.0), [dot, dot], white.uv).with_color(faded(0xffffff, ring));
+            self.overlay.sprite(self.texture, sprite);
+        }
+        let size = stick.radius * 0.5;
+        let mut sprite = Sprite::new(flip(stick.knob).extend(0.1), [size, size], white.uv).with_color(faded(0xffffff, knob));
+        sprite.rotation = std::f32::consts::FRAC_PI_4;
+        self.overlay.sprite(self.texture, sprite);
     }
 
     fn put(&mut self, region: Region, center: Vec2, z: f32, scale: [f32; 2], rotation: f32, color: [f32; 4]) {
