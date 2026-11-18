@@ -30,8 +30,6 @@ const NUMBER_GOLD: u32 = 0xffc533;
 const COMBO_TOTAL: u32 = 0xbfe3ff;
 const CRIT_BULLET: u32 = 0xffa060;
 const OUTLINE: u32 = 0x05060a;
-/// Tiles the camera leads the player by, along the aim.
-const LOOK_AHEAD: f32 = 1.5;
 
 /// An sRGB colour as linear RGBA, opaque.
 fn color(hex: u32) -> [f32; 4] {
@@ -95,7 +93,8 @@ impl View {
     ) {
         let player = &world.player;
         let position = player.previous.lerp(player.position, blend);
-        let focus = position + player.aim * LOOK_AHEAD + world.feedback.shake_offset(world.tick);
+        let lead = player.previous_lead.lerp(player.lead, blend);
+        let focus = position + lead + world.feedback.shake_offset(world.tick);
         let camera = Camera2d::new(focus, VIEW_HEIGHT);
         let aspect = target.width as f32 / target.height.max(1) as f32;
 

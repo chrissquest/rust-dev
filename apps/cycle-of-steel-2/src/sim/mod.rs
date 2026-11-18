@@ -46,6 +46,11 @@ pub struct Player {
     pub velocity: Vec2,
     /// Unit vector the gun points along.
     pub aim: Vec2,
+    /// Where the camera leads the player, tiles. It glides towards the aim
+    /// rather than snapping, so flicking the aim from side to side sweeps the
+    /// view across instead of jumping. Kept here so replays frame the same.
+    pub lead: Vec2,
+    pub previous_lead: Vec2,
 }
 
 impl Player {
@@ -57,6 +62,11 @@ impl Player {
     pub const RESPONSE: f32 = 20.0;
     /// Half the player's width and height, in tiles.
     pub const HALF_SIZE: f32 = 0.35;
+    /// How far the camera leads along the aim, tiles.
+    pub const LOOK_AHEAD: f32 = 1.5;
+    /// How fast the lead closes on the aim, per second: about 0.4 s to settle
+    /// most of the way. Lower is lazier.
+    pub const LEAD_RESPONSE: f32 = 2.5;
 }
 
 #[derive(Clone, Debug)]
@@ -85,6 +95,8 @@ impl World {
                 previous: Vec2::new(-4.0, 0.0),
                 velocity: Vec2::ZERO,
                 aim: Vec2::X,
+                lead: Vec2::X * Player::LOOK_AHEAD,
+                previous_lead: Vec2::X * Player::LOOK_AHEAD,
             },
             gun: Gun::default(),
             bullets: Vec::with_capacity(gun::MAX_BULLETS),
@@ -108,6 +120,9 @@ impl World {
         if input.aim.length_squared() > 1e-6 {
             player.aim = input.aim.normalize();
         }
+        player.previous_lead = player.lead;
+        let wanted_lead = player.aim * Player::LOOK_AHEAD;
+        player.lead = wanted_lead + (player.lead - wanted_lead) * (-Player::LEAD_RESPONSE * DT).exp();
         let wanted = input.movement.clamp_length_max(1.0) * Player::SPEED;
         // Exponential approach: the same feel at any step rate.
         let kept = (-Player::RESPONSE * DT).exp();
@@ -162,6 +177,7 @@ impl World {
 
     fn hold_still(&mut self) {
         self.player.previous = self.player.position;
+        self.player.previous_lead = self.player.lead;
         for bullet in &mut self.bullets {
             bullet.previous = bullet.position;
         }
@@ -232,6 +248,18 @@ mod tests {
         assert_eq!(world.player.position, before);
         world.step(&Input { movement: Vec2::X, ..Input::default() });
         assert!(world.player.position.x > before.x);
+    }
+
+    #[test]
+    fn the_camera_lead_glides_across_a_flicked_aim() {
+        let mut world = World::new(1);
+        run(&mut world, Input { aim: Vec2::X, ..Input::default() }, RATE);
+        world.step(&Input { aim: -Vec2::X, ..Input::default() });
+        // One step after flicking to the other side the lead has barely moved...
+        assert!(world.player.lead.x > Player::LOOK_AHEAD * 0.9);
+        run(&mut world, Input { aim: -Vec2::X, ..Input::default() }, RATE * 2);
+        // ...and two seconds later it has arrived.
+        assert!((world.player.lead.x + Player::LOOK_AHEAD).abs() < 0.05);
     }
 
     #[test]

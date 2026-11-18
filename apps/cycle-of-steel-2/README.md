@@ -67,4 +67,5 @@ repository's code licence.
 The numbers to tune by playing are constants with comments: `sim/gun.rs` (fire rate,
 spread, damage, crit chance and multiplier, recoil), `sim/feedback.rs` (number life,
 shake per hit and per crit, hit-stop steps), `sim/target.rs` (knockback spring, burst
-window) and `view.rs` (number sizes and pop, camera lead).
+window) `sim/mod.rs` (player speed, camera lead and how fast it follows the aim) and `view.rs`
+(number sizes and pop).
